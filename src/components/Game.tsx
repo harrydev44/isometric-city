@@ -118,7 +118,7 @@ const Sidebar = React.memo(function Sidebar() {
     'ZONES': ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone'] as Tool[],
     'SERVICES': ['police_station', 'fire_station', 'hospital', 'school', 'university', 'park'] as Tool[],
     'UTILITIES': ['power_plant', 'water_tower'] as Tool[],
-    'SPECIAL': ['stadium', 'airport'] as Tool[],
+    'SPECIAL': ['stadium', 'airport', 'space_program'] as Tool[],
   }), []);
   
   return (
@@ -1087,6 +1087,20 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     const viewRight = viewWidth - offset.x / zoom + TILE_WIDTH;
     const viewBottom = viewHeight - offset.y / zoom + TILE_HEIGHT * 2;
     
+    type BuildingDraw = {
+      screenX: number;
+      screenY: number;
+      tile: Tile;
+      depth: number;
+    };
+    type OverlayDraw = {
+      screenX: number;
+      screenY: number;
+      tile: Tile;
+    };
+    const buildingQueue: BuildingDraw[] = [];
+    const overlayQueue: OverlayDraw[] = [];
+    
     // Draw tiles in isometric order (back to front)
     for (let sum = 0; sum < gridSize * 2 - 1; sum++) {
       for (let x = Math.max(0, sum - gridSize + 1); x <= Math.min(sum, gridSize - 1); x++) {
@@ -1115,25 +1129,43 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         // Draw base tile
         drawIsometricTile(ctx, screenX, screenY, tile, !!(isHovered || isSelected || isInDragRect));
         
-        // Draw building if present
-        if (tile.building.type !== 'grass' && tile.building.type !== 'empty') {
-          drawBuilding(ctx, screenX, screenY, tile);
+        const isBuilding = tile.building.type !== 'grass' && tile.building.type !== 'empty';
+        if (isBuilding) {
+          const size = getBuildingSize(tile.building.type);
+          const depth = x + y + size.width + size.height - 2;
+          buildingQueue.push({ screenX, screenY, tile, depth });
         }
         
-        // Draw overlay
-        if (overlayMode !== 'none' && tile.building.type !== 'grass' && tile.building.type !== 'water' && tile.building.type !== 'road') {
-          const hasService = overlayMode === 'power' ? tile.building.powered : tile.building.watered;
-          ctx.fillStyle = hasService ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
-          ctx.beginPath();
-          ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
-          ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
-          ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
-          ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
-          ctx.closePath();
-          ctx.fill();
+        const showOverlay =
+          overlayMode !== 'none' &&
+          tile.building.type !== 'grass' &&
+          tile.building.type !== 'water' &&
+          tile.building.type !== 'road';
+        if (showOverlay) {
+          overlayQueue.push({ screenX, screenY, tile });
         }
       }
     }
+    
+    // Draw buildings sorted by depth so multi-tile sprites sit above adjacent tiles
+    buildingQueue
+      .sort((a, b) => a.depth - b.depth)
+      .forEach(({ tile, screenX, screenY }) => {
+        drawBuilding(ctx, screenX, screenY, tile);
+      });
+    
+    // Draw overlays last so they remain visible on top of buildings
+    overlayQueue.forEach(({ tile, screenX, screenY }) => {
+      const hasService = overlayMode === 'power' ? tile.building.powered : tile.building.watered;
+      ctx.fillStyle = hasService ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
+      ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+      ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+      ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
+      ctx.closePath();
+      ctx.fill();
+    });
     
     ctx.restore();
   }, [grid, gridSize, offset, zoom, hoveredTile, selectedTile, overlayMode, imagesLoaded, canvasSize, dragStartTile, dragEndTile]);

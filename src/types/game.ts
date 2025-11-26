@@ -35,7 +35,8 @@ export type BuildingType =
   | 'water_tower'
   // Special
   | 'stadium'
-  | 'airport';
+  | 'airport'
+  | 'space_program';
 
 export type ZoneType = 'none' | 'residential' | 'commercial' | 'industrial';
 
@@ -85,6 +86,7 @@ export const TOOL_INFO: Record<Tool, ToolInfo> = {
   water_tower: { name: 'Water Tower', cost: 1000, description: 'Provide water', size: 1 },
   stadium: { name: 'Stadium', cost: 5000, description: 'Major entertainment (3x3)', size: 3 },
   airport: { name: 'Airport', cost: 10000, description: 'Connect to the world (4x4)', size: 4 },
+  space_program: { name: 'Space Program', cost: 15000, description: 'Reach for the stars (3x3)', size: 3 },
 };
 
 export interface Building {
@@ -244,4 +246,5 @@ export const BUILDING_STATS: Record<BuildingType, { maxPop: number; maxJobs: num
   water_tower: { maxPop: 0, maxJobs: 5, pollution: 0, landValue: 5 },
   stadium: { maxPop: 0, maxJobs: 50, pollution: 5, landValue: 40 },
   airport: { maxPop: 0, maxJobs: 200, pollution: 20, landValue: 50 },
+  space_program: { maxPop: 0, maxJobs: 150, pollution: 5, landValue: 80 },
 };
