@@ -201,6 +201,11 @@ interface MobileToolbarProps {
   onOpenPanel: (panel: 'budget' | 'statistics' | 'advisors' | 'achievements' | 'settings') => void;
 }
 
+type ToolSelectOptions = {
+  closeMenu?: boolean;
+  allowToggle?: boolean;
+};
+
 export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
   const { state, setTool } = useGame();
   const { selectedTool, stats } = state;
@@ -215,8 +220,12 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
     }
   };
 
-  const handleToolSelect = (tool: Tool, closeMenu: boolean = false) => {
-    setTool(tool);
+  const handleToolSelect = (tool: Tool, options: ToolSelectOptions = {}) => {
+    const { closeMenu = false, allowToggle = false } = options;
+    const shouldToggleOff = allowToggle && selectedTool === tool && tool !== 'select';
+    const nextTool = shouldToggleOff ? 'select' : tool;
+
+    setTool(nextTool);
     setExpandedCategory(null);
     if (closeMenu) {
       setShowMenu(false);
@@ -234,7 +243,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'select' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11"
-              onClick={() => handleToolSelect('select')}
+              onClick={() => handleToolSelect('select', { allowToggle: true })}
             >
               {QuickToolIcons.select}
             </Button>
@@ -243,7 +252,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'bulldoze' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11 text-red-400"
-              onClick={() => handleToolSelect('bulldoze')}
+              onClick={() => handleToolSelect('bulldoze', { allowToggle: true })}
             >
               {QuickToolIcons.bulldoze}
             </Button>
@@ -252,7 +261,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'road' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11"
-              onClick={() => handleToolSelect('road')}
+              onClick={() => handleToolSelect('road', { allowToggle: true })}
             >
               {QuickToolIcons.road}
             </Button>
@@ -262,7 +271,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'zone_residential' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11"
-              onClick={() => handleToolSelect('zone_residential')}
+              onClick={() => handleToolSelect('zone_residential', { allowToggle: true })}
             >
               {QuickToolIcons.zone_residential}
             </Button>
@@ -271,7 +280,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'zone_commercial' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11"
-              onClick={() => handleToolSelect('zone_commercial')}
+              onClick={() => handleToolSelect('zone_commercial', { allowToggle: true })}
             >
               {QuickToolIcons.zone_commercial}
             </Button>
@@ -280,7 +289,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
               variant={selectedTool === 'zone_industrial' ? 'default' : 'ghost'}
               size="icon"
               className="h-11 w-11"
-              onClick={() => handleToolSelect('zone_industrial')}
+              onClick={() => handleToolSelect('zone_industrial', { allowToggle: true })}
             >
               {QuickToolIcons.zone_industrial}
             </Button>
@@ -369,7 +378,7 @@ export function MobileToolbar({ onOpenPanel }: MobileToolbarProps) {
                               variant={selectedTool === tool ? 'default' : 'ghost'}
                               className="w-full justify-start gap-3 h-11"
                               disabled={!canAfford && info.cost > 0}
-                              onClick={() => handleToolSelect(tool, true)}
+                              onClick={() => handleToolSelect(tool, { closeMenu: true })}
                             >
                               <span className="text-muted-foreground">
                                 {QuickToolIcons[tool] || <div className="w-5 h-5" />}
