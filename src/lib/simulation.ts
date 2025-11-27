@@ -211,7 +211,7 @@ function generateLakes(grid: Tile[][], size: number, seed: number): WaterBody[] 
     // Apply lake tiles to grid
     for (const tile of lakeTiles) {
       grid[tile.y][tile.x].building = createBuilding('water');
-      grid[tile.y][tile.x].landValue = 60; // Water increases nearby land value
+      // Land value will be calculated dynamically
     }
     
     // Calculate center for labeling
@@ -298,7 +298,7 @@ function generateOceans(grid: Tile[][], size: number, seed: number): WaterBody[]
         
         if (x >= 0 && x < size && y >= 0 && y < size && grid[y][x].building.type !== 'water') {
           grid[y][x].building = createBuilding('water');
-          grid[y][x].landValue = 60;
+          // Land value will be calculated dynamically
           tiles.push({ x, y });
         }
       }
@@ -543,7 +543,7 @@ function createTile(x: number, y: number, buildingType: BuildingType = 'grass'):
     y,
     zone: 'none',
     building: createBuilding(buildingType),
-    landValue: 50,
+    landValue: 30, // Base value, will be recalculated dynamically
     pollution: 0,
     crime: 0,
     traffic: 0,
@@ -638,6 +638,16 @@ function createAchievements(): Achievement[] {
 export function createInitialGameState(size: number = 60, cityName: string = 'New City'): GameState {
   const { grid, waterBodies } = generateTerrain(size);
   const adjacentCities = generateAdjacentCities();
+  
+  // Calculate initial service coverage
+  const services = calculateServiceCoverage(grid, size);
+  
+  // Calculate initial land values for all tiles
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      grid[y][x].landValue = calculateLandValue(grid, x, y, size, services);
+    }
+  }
 
   return {
     grid,
@@ -654,7 +664,7 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     effectiveTaxRate: 9, // Start matching taxRate
     stats: createInitialStats(),
     budget: createInitialBudget(),
-    services: createServiceCoverage(size),
+    services,
     notifications: [],
     achievements: createAchievements(),
     advisorMessages: [],
@@ -1470,6 +1480,216 @@ function checkAchievements(achievements: Achievement[], stats: Stats, grid: Tile
   return { achievements: newAchievements, newUnlocks };
 }
 
+// Calculate dynamic land value for a tile based on surrounding factors
+function calculateLandValue(
+  grid: Tile[][],
+  x: number,
+  y: number,
+  size: number,
+  services: ServiceCoverage
+): number {
+  const tile = grid[y][x];
+  let value = 30; // Base land value
+
+  // Water tiles have fixed value
+  if (tile.building.type === 'water') {
+    return 60;
+  }
+
+  // Road tiles have minimal value
+  if (tile.building.type === 'road') {
+    return 5;
+  }
+
+  // Scan surrounding area (up to 12 tiles away for performance)
+  const scanRadius = 12;
+  let waterBonus = 0;
+  let parkBonus = 0;
+  let serviceBonus = 0;
+  let pollutionPenalty = 0;
+  let industrialPenalty = 0;
+  let commercialBonus = 0;
+  let residentialBonus = 0;
+  let crimePenalty = 0;
+  let subwayBonus = 0;
+  let buildingValueBonus = 0;
+
+  // Use Manhattan distance for faster calculation, then convert to Euclidean for decay
+  for (let dy = -scanRadius; dy <= scanRadius; dy++) {
+    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+      
+      // Quick distance check using Manhattan distance first
+      const manhattanDist = Math.abs(dx) + Math.abs(dy);
+      if (manhattanDist === 0 || manhattanDist > scanRadius * 1.5) continue;
+      
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > scanRadius) continue;
+      
+      const neighbor = grid[ny][nx];
+      const neighborBuilding = neighbor.building.type;
+      const distanceFactor = 1 / (1 + distance * 0.35); // Decay with distance
+      
+      // Water proximity bonus (strongest effect)
+      if (neighborBuilding === 'water') {
+        waterBonus += distanceFactor * 25;
+      }
+      
+      // Park proximity bonus
+      if (neighborBuilding === 'park' || neighborBuilding === 'park_large' || 
+          neighborBuilding === 'tennis' || neighborBuilding === 'playground_small' ||
+          neighborBuilding === 'playground_large' || neighborBuilding === 'baseball_field_small' ||
+          neighborBuilding === 'soccer_field_small' || neighborBuilding === 'football_field' ||
+          neighborBuilding === 'baseball_stadium' || neighborBuilding === 'swimming_pool' ||
+          neighborBuilding === 'skate_park' || neighborBuilding === 'mini_golf_course' ||
+          neighborBuilding === 'bleachers_field' || neighborBuilding === 'amphitheater' ||
+          neighborBuilding === 'greenhouse_garden' || neighborBuilding === 'campground' ||
+          neighborBuilding === 'community_garden' || neighborBuilding === 'pond_park' ||
+          neighborBuilding === 'mountain_trailhead') {
+        const parkSize = neighborBuilding === 'park_large' || neighborBuilding === 'baseball_stadium' ? 1.5 : 1;
+        parkBonus += distanceFactor * 8 * parkSize;
+      }
+      
+      // Service proximity bonus
+      if (neighborBuilding === 'police_station') {
+        serviceBonus += distanceFactor * 3;
+      } else if (neighborBuilding === 'fire_station') {
+        serviceBonus += distanceFactor * 2;
+      } else if (neighborBuilding === 'hospital') {
+        serviceBonus += distanceFactor * 4;
+      } else if (neighborBuilding === 'school') {
+        serviceBonus += distanceFactor * 2.5;
+      } else if (neighborBuilding === 'university') {
+        serviceBonus += distanceFactor * 5;
+      } else if (neighborBuilding === 'museum') {
+        serviceBonus += distanceFactor * 4;
+      } else if (neighborBuilding === 'stadium' || neighborBuilding === 'amusement_park') {
+        serviceBonus += distanceFactor * 3;
+      } else if (neighborBuilding === 'airport') {
+        serviceBonus += distanceFactor * 2;
+      } else if (neighborBuilding === 'space_program') {
+        serviceBonus += distanceFactor * 6;
+      } else if (neighborBuilding === 'city_hall') {
+        serviceBonus += distanceFactor * 3;
+      }
+      
+      // Pollution penalty (from industrial buildings and power plants)
+      if (neighborBuilding === 'factory_small' || neighborBuilding === 'factory_medium' ||
+          neighborBuilding === 'factory_large' || neighborBuilding === 'warehouse' ||
+          neighborBuilding === 'power_plant') {
+        const pollutionLevel = neighborBuilding === 'power_plant' ? 1.5 :
+                              neighborBuilding === 'factory_large' ? 1.2 :
+                              neighborBuilding === 'factory_medium' ? 1.0 : 0.8;
+        pollutionPenalty += distanceFactor * 12 * pollutionLevel;
+      }
+      
+      // Pollution from tile pollution value
+      pollutionPenalty += neighbor.pollution * distanceFactor * 0.1;
+      
+      // Industrial proximity penalty (for residential/commercial)
+      if (tile.zone === 'residential' || tile.zone === 'commercial') {
+        if (neighborBuilding === 'factory_small' || neighborBuilding === 'factory_medium' ||
+            neighborBuilding === 'factory_large' || neighborBuilding === 'warehouse') {
+          industrialPenalty += distanceFactor * 8;
+        }
+      }
+      
+      // Commercial proximity bonus (for residential)
+      if (tile.zone === 'residential') {
+        if (neighborBuilding === 'shop_small' || neighborBuilding === 'shop_medium' ||
+            neighborBuilding === 'office_low' || neighborBuilding === 'office_high' ||
+            neighborBuilding === 'mall') {
+          commercialBonus += distanceFactor * 4;
+        }
+      }
+      
+      // Residential proximity bonus (for commercial)
+      if (tile.zone === 'commercial') {
+        if (neighborBuilding === 'house_small' || neighborBuilding === 'house_medium' ||
+            neighborBuilding === 'mansion' || neighborBuilding === 'apartment_low' ||
+            neighborBuilding === 'apartment_high' || neighborBuilding === 'cabin_house') {
+          residentialBonus += distanceFactor * 3;
+        }
+      }
+      
+      // Crime penalty
+      crimePenalty += neighbor.crime * distanceFactor * 0.5;
+      
+      // Subway access bonus
+      if (neighbor.hasSubway) {
+        subwayBonus += distanceFactor * 2;
+      }
+      
+      // Building value contribution (from BUILDING_STATS)
+      const buildingStats = BUILDING_STATS[neighborBuilding];
+      if (buildingStats && buildingStats.landValue !== 0) {
+        buildingValueBonus += buildingStats.landValue * distanceFactor * 0.3;
+      }
+    }
+  }
+  
+  // Service coverage bonus (from service coverage grids)
+  const policeCoverage = services.police[y][x];
+  const fireCoverage = services.fire[y][x];
+  const healthCoverage = services.health[y][x];
+  const educationCoverage = services.education[y][x];
+  
+  serviceBonus += (policeCoverage + fireCoverage + healthCoverage + educationCoverage) * 0.15;
+  
+  // Subway access bonus (direct)
+  if (tile.hasSubway) {
+    subwayBonus += 8;
+  }
+  
+  // Power and water access bonus
+  if (tile.building.powered) {
+    value += 3;
+  }
+  if (tile.building.watered) {
+    value += 2;
+  }
+  
+  // Zone-specific pollution penalty adjustments (apply before adding to value)
+  let adjustedPollutionPenalty = pollutionPenalty;
+  if (tile.zone === 'residential') {
+    // Residential more sensitive to pollution
+    adjustedPollutionPenalty *= 1.3;
+  } else if (tile.zone === 'industrial') {
+    // Industrial less sensitive to pollution
+    adjustedPollutionPenalty *= 0.5;
+  }
+  
+  // Calculate final value
+  value += waterBonus;
+  value += parkBonus;
+  value += serviceBonus;
+  value -= adjustedPollutionPenalty;
+  value -= industrialPenalty;
+  value += commercialBonus;
+  value += residentialBonus;
+  value -= crimePenalty;
+  value += subwayBonus;
+  value += buildingValueBonus;
+  
+  // Zone-specific base adjustments
+  if (tile.zone === 'residential') {
+    // Residential prefers quieter, cleaner areas
+    value += 5;
+  } else if (tile.zone === 'commercial') {
+    // Commercial benefits from activity
+    value += 8;
+  } else if (tile.zone === 'industrial') {
+    // Industrial areas have lower base value
+    value -= 10;
+  }
+  
+  // Ensure minimum value
+  return Math.max(5, Math.min(200, Math.round(value)));
+}
+
 // Main simulation tick
 export function simulateTick(state: GameState): GameState {
   const newGrid = state.grid.map(row => row.map(tile => ({ ...tile, building: { ...tile.building } })));
@@ -1477,6 +1697,13 @@ export function simulateTick(state: GameState): GameState {
 
   // Update service coverage
   const services = calculateServiceCoverage(newGrid, size);
+  
+  // Calculate dynamic land values for all tiles
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      newGrid[y][x].landValue = calculateLandValue(newGrid, x, y, size, services);
+    }
+  }
 
   // Evolve buildings
   for (let y = 0; y < size; y++) {
