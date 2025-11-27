@@ -28,6 +28,9 @@ export interface SpritePack {
   // Per-sprite horizontal offset adjustments (positive = right, negative = left)
   // Values are multiplied by tile width for consistent scaling
   horizontalOffsets: Record<string, number>;
+  // Per-sprite vertical offset adjustments for CONSTRUCTION sprites only
+  // These override verticalOffsets when rendering buildings under construction
+  constructionVerticalOffsets?: Record<string, number>;
   // Maps building types to sprite keys in spriteOrder
   buildingToSprite: Record<string, string>;
   // Optional global scale multiplier for all sprites in this pack
@@ -94,8 +97,10 @@ const SPRITE_PACK_RED: SpritePack = {
     university: -0.3,
     space_program: -0.15,
     industrial: 0.5, // Shift factories down about half a tile
+    factory_small: 0.25, // Shift factory_small down 1/4 tile
     factory_large: -0.25, // Shift factory_large up 0.75 tiles (0.5 - 0.75 = -0.25)
     house_medium: 0.25, // Shift down 1/4 tile
+    shop_medium: 0.15, // Shift down a tiny bit
   },
   horizontalOffsets: {
     university: 0.3,
@@ -115,8 +120,8 @@ const SPRITE_PACK_RED: SpritePack = {
     office_high: 'commercial',
     mall: 'commercial',
     // Industrial buildings
-    factory_small: 'industrial',
-    factory_medium: 'industrial',
+    factory_small: 'factory_small',
+    factory_medium: 'factory_medium',
     factory_large: 'factory_large',
     warehouse: 'warehouse',
     // Service buildings
@@ -200,12 +205,14 @@ const SPRITE_PACK_SPRITES4: SpritePack = {
     residential: -0.4,
     commercial: -0.4,
     industrial: -0.5, // Shift factories down about half a tile from previous
+    factory_small: -0.25, // Shift factory_small down 1/4 tile (relative to others)
+    factory_medium: -0.5, // Same as industrial
     factory_large: -0.75, // Shift factory_large up slightly
     water_tower: -0.5,
     house_medium: -0.3,
     mansion: -0.35,
     house_small: -0.3,
-    shop_medium: -0.3,
+    shop_medium: -0.15, // Shift down a tiny bit (less up than before)
     shop_small: -0.3,
     warehouse: -0.4,
     airport: -1.5, // Shift up a tiny bit more
@@ -229,6 +236,9 @@ const SPRITE_PACK_SPRITES4: SpritePack = {
     university: 0.0, // Shift right a tiny tiny bit more
     city_hall: 0.1, // Shift right about 0.2 tiles
   },
+  constructionVerticalOffsets: {
+    water_tower: 0.0, // Construction water tower shifted down 0.5 tiles from normal (-0.5 + 0.5 = 0.0)
+  },
   buildingToSprite: {
     house_small: 'house_small',
     house_medium: 'house_medium',
@@ -240,8 +250,8 @@ const SPRITE_PACK_SPRITES4: SpritePack = {
     office_low: 'commercial',
     office_high: 'commercial',
     mall: 'commercial',
-    factory_small: 'industrial',
-    factory_medium: 'industrial',
+    factory_small: 'factory_small',
+    factory_medium: 'factory_medium',
     factory_large: 'factory_large',
     warehouse: 'warehouse',
     police_station: 'police_station',

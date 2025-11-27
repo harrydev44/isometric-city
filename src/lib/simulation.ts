@@ -1453,8 +1453,7 @@ const BUILDING_SIZES: Partial<Record<BuildingType, { width: number; height: numb
   office_low: { width: 2, height: 2 },
   office_high: { width: 2, height: 2 },
   mall: { width: 3, height: 3 },
-  // Industrial buildings use multi-tile footprints
-  factory_small: { width: 2, height: 2 },
+  // Industrial buildings - small is 1x1, medium is 2x2, large is 3x3
   factory_medium: { width: 2, height: 2 },
   factory_large: { width: 3, height: 3 },
   warehouse: { width: 2, height: 2 },
@@ -1841,4 +1840,109 @@ export function removeSubway(state: GameState, x: number, y: number): GameState 
   newGrid[y][x].hasSubway = false;
 
   return { ...state, grid: newGrid };
+}
+
+// Diagnostic function to explain why a zoned tile isn't developing a building
+export interface DevelopmentBlocker {
+  reason: string;
+  details: string;
+}
+
+export function getDevelopmentBlockers(
+  state: GameState,
+  x: number,
+  y: number
+): DevelopmentBlocker[] {
+  const blockers: DevelopmentBlocker[] = [];
+  const tile = state.grid[y]?.[x];
+  
+  if (!tile) {
+    blockers.push({ reason: 'Invalid tile', details: `Tile at (${x}, ${y}) does not exist` });
+    return blockers;
+  }
+  
+  // Only analyze zoned tiles
+  if (tile.zone === 'none') {
+    blockers.push({ reason: 'Not zoned', details: 'Tile has no zone assigned' });
+    return blockers;
+  }
+  
+  // If it already has a building, no blockers
+  if (tile.building.type !== 'grass' && tile.building.type !== 'tree') {
+    // It's already developed or is a placeholder for a multi-tile building
+    return blockers;
+  }
+  
+  // Check road access
+  const roadAccess = hasRoadAccess(state.grid, x, y, state.gridSize);
+  if (!roadAccess) {
+    blockers.push({
+      reason: 'No road access',
+      details: 'Tile must be within 8 tiles of a road (through same-zone tiles)'
+    });
+  }
+  
+  // Check power
+  const hasPower = state.services.power[y][x];
+  if (!hasPower) {
+    blockers.push({
+      reason: 'No power',
+      details: 'Build a power plant nearby to provide electricity'
+    });
+  }
+  
+  // Check water
+  const hasWater = state.services.water[y][x];
+  if (!hasWater) {
+    blockers.push({
+      reason: 'No water',
+      details: 'Build a water tower nearby to provide water'
+    });
+  }
+  
+  // Check if multi-tile building can spawn here
+  const buildingList = tile.zone === 'residential' ? RESIDENTIAL_BUILDINGS :
+    tile.zone === 'commercial' ? COMMERCIAL_BUILDINGS : INDUSTRIAL_BUILDINGS;
+  const candidate = buildingList[0];
+  const candidateSize = getBuildingSize(candidate);
+  
+  if (candidateSize.width > 1 || candidateSize.height > 1) {
+    // Check if the footprint is available
+    if (!canSpawnMultiTileBuilding(state.grid, x, y, candidateSize.width, candidateSize.height, tile.zone, state.gridSize)) {
+      // Find out specifically why
+      const footprintBlockers: string[] = [];
+      
+      if (x + candidateSize.width > state.gridSize || y + candidateSize.height > state.gridSize) {
+        footprintBlockers.push('Too close to map edge');
+      }
+      
+      for (let dy = 0; dy < candidateSize.height && footprintBlockers.length < 3; dy++) {
+        for (let dx = 0; dx < candidateSize.width && footprintBlockers.length < 3; dx++) {
+          const checkTile = state.grid[y + dy]?.[x + dx];
+          if (!checkTile) {
+            footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) is out of bounds`);
+          } else if (checkTile.zone !== tile.zone) {
+            footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) has different zone: ${checkTile.zone}`);
+          } else if (checkTile.building.type !== 'grass' && checkTile.building.type !== 'tree') {
+            footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) has ${checkTile.building.type}`);
+          }
+        }
+      }
+      
+      blockers.push({
+        reason: 'Footprint blocked',
+        details: `${candidate} needs ${candidateSize.width}x${candidateSize.height} tiles. Issues: ${footprintBlockers.join('; ')}`
+      });
+    }
+  }
+  
+  // If no blockers found, it's just waiting for RNG
+  if (blockers.length === 0 && roadAccess && hasPower && hasWater) {
+    blockers.push({
+      reason: 'Waiting for development',
+      details: 'All conditions met! Building will spawn soon (5% chance per tick)'
+    });
+  }
+  
+  return blockers;
 }

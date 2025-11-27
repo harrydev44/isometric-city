@@ -4329,7 +4329,15 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
                 // Single-tile sprites also need push (sprites have transparent bottom padding)
                 verticalPush = destHeight * 0.15;
               }
-              const extraOffset = (spriteKey && SPRITE_VERTICAL_OFFSETS[spriteKey]) ? SPRITE_VERTICAL_OFFSETS[spriteKey] * h : 0;
+              // Use construction-specific offset if building is under construction and one is defined
+              let extraOffset = 0;
+              if (spriteKey) {
+                if (isUnderConstruction && activePack.constructionVerticalOffsets && spriteKey in activePack.constructionVerticalOffsets) {
+                  extraOffset = activePack.constructionVerticalOffsets[spriteKey] * h;
+                } else if (SPRITE_VERTICAL_OFFSETS[spriteKey]) {
+                  extraOffset = SPRITE_VERTICAL_OFFSETS[spriteKey] * h;
+                }
+              }
               verticalPush += extraOffset;
               
               drawY = drawPosY + h - destHeight + verticalPush;
