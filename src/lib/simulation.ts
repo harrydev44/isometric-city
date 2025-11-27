@@ -421,11 +421,36 @@ function generateTerrain(size: number): { grid: Tile[][]; waterBodies: WaterBody
   
   // Combine all water bodies
   const waterBodies = [...lakeBodies, ...oceanBodies];
-  
-  // Fourth pass: add scattered trees (avoiding water)
+
+  // Fourth pass: add hilly terrain (before trees so hills stay clear)
+  const baseHillNoise = (x: number, y: number) => perlinNoise(x * 0.08, y * 0.08, seed + 320, 5);
+  const detailHillNoise = (x: number, y: number) => perlinNoise(x * 0.22, y * 0.22, seed + 640, 3);
+  const ridgeNoise = (x: number, y: number) => perlinNoise(x * 0.45, y * 0.45, seed + 880, 2);
+  const hillThreshold = 0.74;
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      if (grid[y][x].building.type === 'water') continue; // Don't place trees on water
+      if (grid[y][x].building.type === 'water') continue;
+
+      const broad = baseHillNoise(x, y);
+      const detail = detailHillNoise(x, y);
+      const ridge = ridgeNoise(x, y);
+      const elevation = broad * 0.6 + detail * 0.25 + ridge * 0.15;
+
+      if (elevation > hillThreshold) {
+        grid[y][x].building = createBuilding('hill');
+        // Slightly boost land value for scenic terrain
+        const hillBonus = Math.min(15, Math.floor((elevation - hillThreshold) * 80));
+        grid[y][x].landValue = Math.max(grid[y][x].landValue, 55 + hillBonus);
+        grid[y][x].flagged = false;
+      }
+    }
+  }
+  
+  // Fifth pass: add scattered trees (avoiding water and steep hills)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (grid[y][x].building.type === 'water' || grid[y][x].building.type === 'hill') continue; // Don't place trees on water or peaks
       
       const treeNoise = perlinNoise(x * 2, y * 2, seed + 500, 2);
       const isTree = treeNoise > 0.72 && Math.random() > 0.65;
@@ -548,11 +573,12 @@ function createTile(x: number, y: number, buildingType: BuildingType = 'grass'):
     crime: 0,
     traffic: 0,
     hasSubway: false,
+    flagged: false,
   };
 }
 
 // Building types that don't require construction (already complete when placed)
-const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'empty', 'water', 'road', 'tree'];
+const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'hill', 'empty', 'water', 'road', 'tree'];
 
 function createBuilding(type: BuildingType): Building {
   // Buildings that don't require construction start at 100% complete
@@ -560,7 +586,7 @@ function createBuilding(type: BuildingType): Building {
   
   return {
     type,
-    level: type === 'grass' || type === 'empty' || type === 'water' ? 0 : 1,
+    level: type === 'grass' || type === 'hill' || type === 'empty' || type === 'water' ? 0 : 1,
     population: 0,
     jobs: 0,
     powered: false,
@@ -777,9 +803,13 @@ function canSpawnMultiTileBuilding(
       if (!tile) return false;
       // Must be in the same zone
       if (tile.zone !== zone) return false;
-      // Can only spawn on grass or trees
+      // Can only spawn on grass, hills, or trees
       // NOT 'empty' - those are placeholders for existing multi-tile buildings
-      if (tile.building.type !== 'grass' && tile.building.type !== 'tree') {
+      if (
+        tile.building.type !== 'grass' &&
+        tile.building.type !== 'hill' &&
+        tile.building.type !== 'tree'
+      ) {
         return false;
       }
     }
@@ -847,7 +877,13 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
   const zone = tile.zone;
 
   // Only evolve zoned tiles with real buildings
-  if (zone === 'none' || building.type === 'grass' || building.type === 'water' || building.type === 'road') {
+  if (
+    zone === 'none' ||
+    building.type === 'grass' ||
+    building.type === 'hill' ||
+    building.type === 'water' ||
+    building.type === 'road'
+  ) {
     return building;
   }
 
@@ -920,6 +956,7 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
                 clearedBuilding.powered = services.power[y + dy]?.[x + dx] ?? false;
                 clearedBuilding.watered = services.water[y + dy]?.[x + dx] ?? false;
                 clearTile.building = clearedBuilding;
+                clearTile.flagged = false;
               }
             }
           }
@@ -928,6 +965,7 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
         const clearedBuilding = createBuilding('grass');
         clearedBuilding.powered = building.powered;
         clearedBuilding.watered = building.watered;
+        tile.flagged = false;
         return clearedBuilding;
       }
     }
@@ -1107,15 +1145,17 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
       totalPollution += tile.pollution;
       totalLandValue += tile.landValue;
 
+      const isDevelopedTile = building.type !== 'grass' && building.type !== 'hill' && building.type !== 'empty';
+
       if (tile.zone === 'residential') {
         residentialZones++;
-        if (building.type !== 'grass' && building.type !== 'empty') developedResidential++;
+        if (isDevelopedTile) developedResidential++;
       } else if (tile.zone === 'commercial') {
         commercialZones++;
-        if (building.type !== 'grass' && building.type !== 'empty') developedCommercial++;
+        if (isDevelopedTile) developedCommercial++;
       } else if (tile.zone === 'industrial') {
         industrialZones++;
-        if (building.type !== 'grass' && building.type !== 'empty') developedIndustrial++;
+        if (isDevelopedTile) developedIndustrial++;
       }
 
       if (building.type === 'tree') treeCount++;
@@ -1269,7 +1309,12 @@ function generateAdvisorMessages(stats: Stats, services: ServiceCoverage, grid: 
   let unpoweredBuildings = 0;
   for (const row of grid) {
     for (const tile of row) {
-      if (tile.zone !== 'none' && tile.building.type !== 'grass' && !tile.building.powered) {
+      if (
+        tile.zone !== 'none' &&
+        tile.building.type !== 'grass' &&
+        tile.building.type !== 'hill' &&
+        !tile.building.powered
+      ) {
         unpoweredBuildings++;
       }
     }
@@ -1287,7 +1332,12 @@ function generateAdvisorMessages(stats: Stats, services: ServiceCoverage, grid: 
   let unwateredBuildings = 0;
   for (const row of grid) {
     for (const tile of row) {
-      if (tile.zone !== 'none' && tile.building.type !== 'grass' && !tile.building.watered) {
+      if (
+        tile.zone !== 'none' &&
+        tile.building.type !== 'grass' &&
+        tile.building.type !== 'hill' &&
+        !tile.building.watered
+      ) {
         unwateredBuildings++;
       }
     }
@@ -1516,11 +1566,12 @@ export function simulateTick(state: GameState): GameState {
           tile.building = createBuilding('grass');
           tile.building.powered = services.power[y][x];
           tile.building.watered = services.water[y][x];
+          tile.flagged = false;
         }
       }
 
       // Check for road access and grow buildings in zones
-      if (tile.zone !== 'none' && tile.building.type === 'grass') {
+      if (tile.zone !== 'none' && (tile.building.type === 'grass' || tile.building.type === 'hill')) {
         const roadAccess = hasRoadAccess(newGrid, x, y, size);
         const hasPower = services.power[y][x];
         const hasWater = services.water[y][x];
@@ -1536,7 +1587,7 @@ export function simulateTick(state: GameState): GameState {
             applyBuildingFootprint(newGrid, x, y, candidate, tile.zone, 1, services);
           }
         }
-      } else if (tile.zone !== 'none' && tile.building.type !== 'grass') {
+      } else if (tile.zone !== 'none' && tile.building.type !== 'grass' && tile.building.type !== 'hill') {
         // Evolve existing building, passing current demand to influence consolidation
         newGrid[y][x].building = evolveBuilding(newGrid, x, y, services, state.stats.demand);
       }
@@ -1560,13 +1611,14 @@ export function simulateTick(state: GameState): GameState {
             // Building destroyed
             tile.building = createBuilding('grass');
             tile.zone = 'none';
+            tile.flagged = false;
           }
         }
       }
 
       // Random fire start
       if (state.disastersEnabled && !tile.building.onFire && 
-          tile.building.type !== 'grass' && tile.building.type !== 'water' && 
+          tile.building.type !== 'grass' && tile.building.type !== 'hill' && tile.building.type !== 'water' && 
           tile.building.type !== 'road' && tile.building.type !== 'tree' &&
           tile.building.type !== 'empty' &&
           Math.random() < 0.00003) {
@@ -1750,15 +1802,19 @@ function canPlaceMultiTileBuilding(
     return false;
   }
 
-  // Check all tiles are available (grass or tree only - not water, roads, or existing buildings)
+  // Check all tiles are available (grass, hill, or tree only - not water, roads, or existing buildings)
   // NOTE: 'empty' tiles are placeholders from multi-tile buildings, so we can't build on them
   // without first bulldozing the entire parent building
   for (let dy = 0; dy < height; dy++) {
     for (let dx = 0; dx < width; dx++) {
       const tile = grid[y + dy]?.[x + dx];
       if (!tile) return false;
-      // Can only build on grass or trees - roads must be bulldozed first
-      if (tile.building.type !== 'grass' && tile.building.type !== 'tree') {
+      // Can only build on grass, hills, or trees - roads must be bulldozed first
+      if (
+        tile.building.type !== 'grass' &&
+        tile.building.type !== 'hill' &&
+        tile.building.type !== 'tree'
+      ) {
         return false;
       }
     }
@@ -1771,7 +1827,7 @@ function canPlaceMultiTileBuilding(
 // IMPORTANT: Only allow consolidation of truly empty land (grass, tree).
 // Do NOT include 'empty' tiles - those are placeholders for existing multi-tile buildings!
 // Including 'empty' would allow buildings to overlap with each other during evolution.
-const MERGEABLE_TILE_TYPES = new Set<BuildingType>(['grass', 'tree']);
+const MERGEABLE_TILE_TYPES = new Set<BuildingType>(['grass', 'hill', 'tree']);
 
 // Small buildings that can be consolidated into larger ones when demand is high
 const CONSOLIDATABLE_BUILDINGS: Record<ZoneType, Set<BuildingType>> = {
@@ -1909,6 +1965,21 @@ function applyBuildingFootprint(
   const size = getBuildingSize(buildingType);
   const stats = BUILDING_STATS[buildingType] || { maxPop: 0, maxJobs: 0, pollution: 0, landValue: 0 };
 
+  // Determine if any tile in the footprint was hilly or already flagged
+  let shouldFlagFootprint = false;
+  for (let dy = 0; dy < size.height; dy++) {
+    for (let dx = 0; dx < size.width; dx++) {
+      const cell = grid[originY + dy][originX + dx];
+      if (!cell) continue;
+      if (cell.building.type === 'hill' || cell.flagged) {
+        shouldFlagFootprint = true;
+      }
+    }
+  }
+
+  const nonFlaggableTypes: BuildingType[] = ['grass', 'hill', 'water', 'road', 'tree'];
+  const shouldApplyFlag = shouldFlagFootprint && !nonFlaggableTypes.includes(buildingType);
+
   for (let dy = 0; dy < size.height; dy++) {
     for (let dx = 0; dx < size.width; dx++) {
       const cell = grid[originY + dy][originX + dx];
@@ -1926,6 +1997,7 @@ function applyBuildingFootprint(
       }
       cell.zone = zone;
       cell.pollution = dx === 0 && dy === 0 ? stats.pollution : 0;
+      cell.flagged = shouldApplyFlag;
     }
   }
 
@@ -1949,7 +2021,7 @@ export function placeBuilding(
   // Can't place roads on existing buildings (only allow on grass, tree, or existing roads)
   // Note: 'empty' tiles are part of multi-tile building footprints, so roads can't be placed there either
   if (buildingType === 'road') {
-    const allowedTypes: BuildingType[] = ['grass', 'tree', 'road'];
+    const allowedTypes: BuildingType[] = ['grass', 'hill', 'tree', 'road'];
     if (!allowedTypes.includes(tile.building.type)) {
       return state; // Can't place road on existing building
     }
@@ -1979,6 +2051,7 @@ export function placeBuilding(
             if (clearX < state.gridSize && clearY < state.gridSize) {
               newGrid[clearY][clearX].building = createBuilding('grass');
               newGrid[clearY][clearX].zone = 'none';
+              newGrid[clearY][clearX].flagged = false;
             }
           }
         }
@@ -1990,11 +2063,12 @@ export function placeBuilding(
         // De-zoning resets to grass
         newGrid[y][x].zone = 'none';
         newGrid[y][x].building = createBuilding('grass');
+        newGrid[y][x].flagged = false;
       }
     } else {
       // Can't zone over existing buildings (only allow zoning on grass, tree, or road)
       // NOTE: 'empty' tiles are part of multi-tile buildings, so we can't zone them either
-      const allowedTypesForZoning: BuildingType[] = ['grass', 'tree', 'road'];
+      const allowedTypesForZoning: BuildingType[] = ['grass', 'hill', 'tree', 'road'];
       if (!allowedTypesForZoning.includes(tile.building.type)) {
         return state; // Can't zone over existing building or part of multi-tile building
       }
@@ -2025,19 +2099,14 @@ export function placeBuilding(
         newGrid[y][x].building.flipped = true;
       }
     } else {
-      // Single tile building - check if tile is available
-      // Can't place on water, existing buildings, or 'empty' tiles (part of multi-tile buildings)
-      // Note: 'road' is included here so roads can extend over existing roads,
-      // but non-road buildings are already blocked from roads by the check above
-      const allowedTypes: BuildingType[] = ['grass', 'tree', 'road'];
+      // Single tile building - reuse footprint helper for consistent behavior
+      const allowedTypes: BuildingType[] = ['grass', 'hill', 'tree', 'road'];
       if (!allowedTypes.includes(tile.building.type)) {
         return state; // Can't place on existing building or part of multi-tile building
       }
-      newGrid[y][x].building = createBuilding(buildingType);
-      newGrid[y][x].zone = 'none';
-      // Set flip for waterfront buildings to face the water
+      const anchorBuilding = applyBuildingFootprint(newGrid, x, y, buildingType, 'none', 1);
       if (shouldFlip) {
-        newGrid[y][x].building.flipped = true;
+        anchorBuilding.flipped = true;
       }
     }
   }
@@ -2058,6 +2127,7 @@ function findBuildingOrigin(
   
   // If this tile has an actual building (not empty), check if it's multi-tile
   if (tile.building.type !== 'empty' && tile.building.type !== 'grass' && 
+      tile.building.type !== 'hill' &&
       tile.building.type !== 'water' && tile.building.type !== 'road' && 
       tile.building.type !== 'tree') {
     const size = getBuildingSize(tile.building.type);
@@ -2080,6 +2150,7 @@ function findBuildingOrigin(
           const checkTile = grid[checkY][checkX];
           if (checkTile.building.type !== 'empty' && 
               checkTile.building.type !== 'grass' &&
+              checkTile.building.type !== 'hill' &&
               checkTile.building.type !== 'water' &&
               checkTile.building.type !== 'road' &&
               checkTile.building.type !== 'tree') {
@@ -2119,6 +2190,7 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
         if (clearX < state.gridSize && clearY < state.gridSize) {
           newGrid[clearY][clearX].building = createBuilding('grass');
           newGrid[clearY][clearX].zone = 'none';
+          newGrid[clearY][clearX].flagged = false;
           // Don't remove subway when bulldozing surface buildings
         }
       }
@@ -2127,6 +2199,7 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
     // Single tile bulldoze
     newGrid[y][x].building = createBuilding('grass');
     newGrid[y][x].zone = 'none';
+    newGrid[y][x].flagged = false;
     // Don't remove subway when bulldozing surface buildings
   }
 
@@ -2190,7 +2263,11 @@ export function getDevelopmentBlockers(
   }
   
   // If it already has a building, no blockers
-  if (tile.building.type !== 'grass' && tile.building.type !== 'tree') {
+  if (
+    tile.building.type !== 'grass' &&
+    tile.building.type !== 'hill' &&
+    tile.building.type !== 'tree'
+  ) {
     // It's already developed or is a placeholder for a multi-tile building
     return blockers;
   }
@@ -2245,7 +2322,11 @@ export function getDevelopmentBlockers(
             footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) is out of bounds`);
           } else if (checkTile.zone !== tile.zone) {
             footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) has different zone: ${checkTile.zone}`);
-          } else if (checkTile.building.type !== 'grass' && checkTile.building.type !== 'tree') {
+          } else if (
+            checkTile.building.type !== 'grass' &&
+            checkTile.building.type !== 'hill' &&
+            checkTile.building.type !== 'tree'
+          ) {
             footprintBlockers.push(`Tile (${x + dx}, ${y + dy}) has ${checkTile.building.type}`);
           }
         }

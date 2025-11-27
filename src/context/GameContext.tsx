@@ -137,6 +137,9 @@ function loadGameState(): GameState | null {
               if (parsed.grid[y][x]?.building?.type === 'park_medium') {
                 parsed.grid[y][x].building.type = 'park_large';
               }
+              if (parsed.grid[y][x] && parsed.grid[y][x].flagged === undefined) {
+                parsed.grid[y][x].flagged = false;
+              }
             }
           }
         }
@@ -425,7 +428,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (cost > 0 && prev.stats.money < cost) return prev;
 
       // Prevent wasted spend if nothing would change
-      if (tool === 'bulldoze' && tile.building.type === 'grass' && tile.zone === 'none') {
+      if (tool === 'bulldoze' && (tile.building.type === 'grass' || tile.building.type === 'hill') && tile.zone === 'none') {
         return prev;
       }
 

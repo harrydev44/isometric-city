@@ -3,6 +3,7 @@
 export type BuildingType =
   | 'empty'
   | 'grass'
+  | 'hill'
   | 'water'
   | 'road'
   | 'tree'
@@ -220,6 +221,7 @@ export interface Tile {
   crime: number;
   traffic: number;
   hasSubway: boolean;
+  flagged: boolean;
 }
 
 export interface Stats {
@@ -349,6 +351,7 @@ export const INDUSTRIAL_BUILDINGS: BuildingType[] = ['factory_small', 'factory_m
 export const BUILDING_STATS: Record<BuildingType, { maxPop: number; maxJobs: number; pollution: number; landValue: number }> = {
   empty: { maxPop: 0, maxJobs: 0, pollution: 0, landValue: 0 },
   grass: { maxPop: 0, maxJobs: 0, pollution: 0, landValue: 0 },
+  hill: { maxPop: 0, maxJobs: 0, pollution: 0, landValue: 5 },
   water: { maxPop: 0, maxJobs: 0, pollution: 0, landValue: 5 },
   road: { maxPop: 0, maxJobs: 0, pollution: 2, landValue: 0 },
   tree: { maxPop: 0, maxJobs: 0, pollution: -5, landValue: 2 },

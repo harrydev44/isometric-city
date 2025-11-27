@@ -1052,11 +1052,12 @@ const MiniMap = React.memo(function MiniMap({ onNavigate, viewport }: {
         if (tile.building.type === 'water') color = '#0ea5e9';
         else if (tile.building.type === 'road') color = '#6b7280';
         else if (tile.building.type === 'tree') color = '#166534';
-        else if (tile.zone === 'residential' && tile.building.type !== 'grass') color = '#22c55e';
+        else if (tile.building.type === 'hill') color = '#6b7280';
+        else if (tile.zone === 'residential' && tile.building.type !== 'grass' && tile.building.type !== 'hill') color = '#22c55e';
         else if (tile.zone === 'residential') color = '#14532d';
-        else if (tile.zone === 'commercial' && tile.building.type !== 'grass') color = '#38bdf8';
+        else if (tile.zone === 'commercial' && tile.building.type !== 'grass' && tile.building.type !== 'hill') color = '#38bdf8';
         else if (tile.zone === 'commercial') color = '#1d4ed8';
-        else if (tile.zone === 'industrial' && tile.building.type !== 'grass') color = '#f59e0b';
+        else if (tile.zone === 'industrial' && tile.building.type !== 'grass' && tile.building.type !== 'hill') color = '#f59e0b';
         else if (tile.zone === 'industrial') color = '#b45309';
         else if (['police_station', 'fire_station', 'hospital', 'school', 'university'].includes(tile.building.type)) {
           color = '#c084fc';
@@ -1996,10 +1997,24 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
     ]);
   }, [currentSpritePack]);
   
+  const availableTabs = [
+    { id: 'main', label: 'Main', available: !!spriteSheets.main },
+    { id: 'construction', label: 'Construction', available: !!spriteSheets.construction },
+    { id: 'abandoned', label: 'Abandoned', available: !!spriteSheets.abandoned },
+    { id: 'dense', label: 'High Density', available: !!spriteSheets.dense },
+    { id: 'parks', label: 'Parks', available: !!spriteSheets.parks },
+    { id: 'parksConstruction', label: 'Parks Construction', available: !!spriteSheets.parksConstruction },
+  ].filter(tab => tab.available);
+
+  const safeActiveTab = useMemo(() => {
+    if (availableTabs.length === 0) return activeTab;
+    return availableTabs.some(tab => tab.id === activeTab) ? activeTab : availableTabs[0].id;
+  }, [activeTab, availableTabs]);
+
   // Draw sprite test grid
   useEffect(() => {
     const canvas = canvasRef.current;
-    const spriteSheet = spriteSheets[activeTab];
+    const spriteSheet = spriteSheets[safeActiveTab];
     if (!canvas || !spriteSheet) return;
     
     const ctx = canvas.getContext('2d', { 
@@ -2027,7 +2042,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
     let sheetCols = currentSpritePack.cols;
     let sheetRows = currentSpritePack.rows;
     
-    if (activeTab === 'main') {
+    if (safeActiveTab === 'main') {
       // Main sprite sheet - use spriteOrder
       currentSpritePack.spriteOrder.forEach((spriteKey, index) => {
         const buildingType = Object.entries(currentSpritePack.buildingToSprite).find(
@@ -2038,7 +2053,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           itemsToRender.push({ label: spriteKey, coords, index });
         }
       });
-    } else if (activeTab === 'construction' && currentSpritePack.constructionSrc) {
+    } else if (safeActiveTab === 'construction' && currentSpritePack.constructionSrc) {
       // Construction sprite sheet - same layout as main
       currentSpritePack.spriteOrder.forEach((spriteKey, index) => {
         const buildingType = Object.entries(currentSpritePack.buildingToSprite).find(
@@ -2049,7 +2064,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           itemsToRender.push({ label: `${spriteKey} (construction)`, coords, index });
         }
       });
-    } else if (activeTab === 'abandoned' && currentSpritePack.abandonedSrc) {
+    } else if (safeActiveTab === 'abandoned' && currentSpritePack.abandonedSrc) {
       // Abandoned sprite sheet - same layout as main
       currentSpritePack.spriteOrder.forEach((spriteKey, index) => {
         const buildingType = Object.entries(currentSpritePack.buildingToSprite).find(
@@ -2060,7 +2075,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           itemsToRender.push({ label: `${spriteKey} (abandoned)`, coords, index });
         }
       });
-    } else if (activeTab === 'dense' && currentSpritePack.denseSrc && currentSpritePack.denseVariants) {
+    } else if (safeActiveTab === 'dense' && currentSpritePack.denseSrc && currentSpritePack.denseVariants) {
       // Dense sprite sheet - use denseVariants mapping
       sheetCols = currentSpritePack.cols;
       sheetRows = currentSpritePack.rows;
@@ -2077,7 +2092,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           });
         });
       });
-    } else if (activeTab === 'parks' && currentSpritePack.parksSrc && currentSpritePack.parksBuildings) {
+    } else if (safeActiveTab === 'parks' && currentSpritePack.parksSrc && currentSpritePack.parksBuildings) {
       // Parks sprite sheet - use parksBuildings mapping
       sheetCols = currentSpritePack.parksCols || currentSpritePack.cols;
       sheetRows = currentSpritePack.parksRows || currentSpritePack.rows;
@@ -2092,7 +2107,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           coords: { sx, sy, sw: tileWidth, sh: tileHeight },
         });
       });
-    } else if (activeTab === 'parksConstruction' && currentSpritePack.parksConstructionSrc && currentSpritePack.parksBuildings) {
+    } else if (safeActiveTab === 'parksConstruction' && currentSpritePack.parksConstructionSrc && currentSpritePack.parksBuildings) {
       // Parks construction sprite sheet - same layout as parks
       sheetCols = currentSpritePack.parksCols || currentSpritePack.cols;
       sheetRows = currentSpritePack.parksRows || currentSpritePack.rows;
@@ -2162,11 +2177,11 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
       const drawY = baseY + tileH / 2 - destHeight + destHeight * 0.15;
       
       // Draw sprite (using filtered version if available)
-      const sheetSrc = activeTab === 'main' ? currentSpritePack.src :
-                       activeTab === 'construction' ? currentSpritePack.constructionSrc :
-                       activeTab === 'abandoned' ? currentSpritePack.abandonedSrc :
-                       activeTab === 'dense' ? currentSpritePack.denseSrc :
-                       activeTab === 'parksConstruction' ? currentSpritePack.parksConstructionSrc :
+      const sheetSrc = safeActiveTab === 'main' ? currentSpritePack.src :
+                       safeActiveTab === 'construction' ? currentSpritePack.constructionSrc :
+                       safeActiveTab === 'abandoned' ? currentSpritePack.abandonedSrc :
+                       safeActiveTab === 'dense' ? currentSpritePack.denseSrc :
+                       safeActiveTab === 'parksConstruction' ? currentSpritePack.parksConstructionSrc :
                        currentSpritePack.parksSrc;
       const filteredSpriteSheet = sheetSrc ? (imageCache.get(`${sheetSrc}_filtered`) || spriteSheet) : spriteSheet;
       
@@ -2193,32 +2208,16 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
         ctx.fillText(`[${item.index}]`, baseX, baseY + tileH + 26 + labelLines.length * 10);
       }
     });
-  }, [spriteSheets, activeTab, currentSpritePack]);
+  }, [spriteSheets, safeActiveTab, currentSpritePack]);
   
-  const availableTabs = [
-    { id: 'main', label: 'Main', available: !!spriteSheets.main },
-    { id: 'construction', label: 'Construction', available: !!spriteSheets.construction },
-    { id: 'abandoned', label: 'Abandoned', available: !!spriteSheets.abandoned },
-    { id: 'dense', label: 'High Density', available: !!spriteSheets.dense },
-    { id: 'parks', label: 'Parks', available: !!spriteSheets.parks },
-    { id: 'parksConstruction', label: 'Parks Construction', available: !!spriteSheets.parksConstruction },
-  ].filter(tab => tab.available);
-  
-  // Set first available tab if current tab is not available
-  useEffect(() => {
-    if (availableTabs.length > 0 && !availableTabs.find(t => t.id === activeTab)) {
-      setActiveTab(availableTabs[0].id);
-    }
-  }, [availableTabs, activeTab]);
-  
-  const currentSheetInfo = activeTab === 'main' ? currentSpritePack.src :
-                          activeTab === 'construction' ? currentSpritePack.constructionSrc :
-                          activeTab === 'abandoned' ? currentSpritePack.abandonedSrc :
-                          activeTab === 'dense' ? currentSpritePack.denseSrc :
-                          activeTab === 'parksConstruction' ? currentSpritePack.parksConstructionSrc :
+  const currentSheetInfo = safeActiveTab === 'main' ? currentSpritePack.src :
+                          safeActiveTab === 'construction' ? currentSpritePack.constructionSrc :
+                          safeActiveTab === 'abandoned' ? currentSpritePack.abandonedSrc :
+                          safeActiveTab === 'dense' ? currentSpritePack.denseSrc :
+                          safeActiveTab === 'parksConstruction' ? currentSpritePack.parksConstructionSrc :
                           currentSpritePack.parksSrc;
   
-  const gridInfo = (activeTab === 'parks' || activeTab === 'parksConstruction') && currentSpritePack.parksCols && currentSpritePack.parksRows
+  const gridInfo = (safeActiveTab === 'parks' || safeActiveTab === 'parksConstruction') && currentSpritePack.parksCols && currentSpritePack.parksRows
     ? `${currentSpritePack.parksCols}x${currentSpritePack.parksRows}`
     : `${currentSpritePack.cols}x${currentSpritePack.rows}`;
   
@@ -2232,7 +2231,7 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
           </DialogDescription>
         </DialogHeader>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={safeActiveTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${availableTabs.length}, 1fr)` }}>
             {availableTabs.map(tab => (
               <TabsTrigger key={tab.id} value={tab.id} className="text-xs">
@@ -2743,6 +2742,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         // Only consider populated buildings (residential/commercial/industrial)
         // FIX: Proper parentheses for operator precedence
         const isBuilding = tile.building.type !== 'grass' && 
+            tile.building.type !== 'hill' &&
             tile.building.type !== 'water' && 
             tile.building.type !== 'road' && 
             tile.building.type !== 'tree' &&
@@ -4658,6 +4658,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     // If this tile has a real building (not empty), check if it's multi-tile
     if (tile.building.type !== 'empty' && 
         tile.building.type !== 'grass' && 
+        tile.building.type !== 'hill' && 
         tile.building.type !== 'water' && 
         tile.building.type !== 'road' && 
         tile.building.type !== 'tree') {
@@ -4680,6 +4681,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
             
             if (originTile.building.type !== 'empty' && 
                 originTile.building.type !== 'grass' &&
+                originTile.building.type !== 'hill' &&
                 originTile.building.type !== 'water' &&
                 originTile.building.type !== 'road' &&
                 originTile.building.type !== 'tree') {
@@ -4814,6 +4816,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     const baseTileQueue: BuildingDraw[] = [];
     const greenBaseTileQueue: BuildingDraw[] = [];
     const overlayQueue: OverlayDraw[] = [];
+    type FlagDraw = {
+      screenX: number;
+      screenY: number;
+      tile: Tile;
+    };
+    const flagQueue: FlagDraw[] = [];
     
     // Helper function to check if a tile is adjacent to water
     function isAdjacentToWater(gridX: number, gridY: number): boolean {
@@ -5236,6 +5244,102 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       ctx.lineCap = 'butt';
     }
     
+    const tileRandom = (tileX: number, tileY: number) => {
+      const seedValue = Math.sin(tileX * 157.31 + tileY * 789.221 + tileX * tileY * 0.031) * 43758.5453;
+      return seedValue - Math.floor(seedValue);
+    };
+
+    function drawHillPeaks(ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile) {
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+      const random = tileRandom(tile.x, tile.y);
+      const peakHeight = h * (0.5 + random * 0.25);
+      const peakSkew = (random - 0.5) * w * 0.12;
+
+      const topX = x + w / 2 + peakSkew;
+      const topY = y + h * 0.15 - peakHeight * 0.4;
+      const centerBaseX = x + w / 2;
+      const centerBaseY = y + h * 0.78;
+      const leftBaseX = x + w * 0.22;
+      const leftBaseY = y + h * 0.58;
+      const rightBaseX = x + w * 0.78;
+      const rightBaseY = y + h * 0.6;
+
+      // Left (shadow) face
+      ctx.fillStyle = '#565a63';
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.lineTo(leftBaseX, leftBaseY);
+      ctx.lineTo(centerBaseX, centerBaseY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Right (lit) face
+      ctx.fillStyle = '#7a7f8a';
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.lineTo(centerBaseX, centerBaseY);
+      ctx.lineTo(rightBaseX, rightBaseY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Snow cap / highlight
+      ctx.fillStyle = 'rgba(252, 252, 255, 0.75)';
+      ctx.beginPath();
+      ctx.moveTo(topX, topY + h * 0.02);
+      ctx.lineTo(topX - w * 0.05, topY + h * 0.13);
+      ctx.lineTo(topX + w * 0.07, topY + h * 0.1);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.lineTo(centerBaseX, centerBaseY);
+      ctx.stroke();
+
+      // Scatter a couple of boulders near the base for texture
+      const rockCount = 2 + Math.floor(random * 3);
+      for (let i = 0; i < rockCount; i++) {
+        const offset = (i - (rockCount - 1) / 2) * w * 0.12;
+        const rockX = centerBaseX + offset;
+        const rockY = centerBaseY + h * 0.06 + Math.sin(offset) * h * 0.02;
+        ctx.fillStyle = 'rgba(73, 76, 84, 0.8)';
+        ctx.beginPath();
+        ctx.ellipse(rockX, rockY, w * 0.035, h * 0.05, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawFlagIcon(ctx: CanvasRenderingContext2D, x: number, y: number) {
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+      const poleX = x + w * 0.68;
+      const poleY = y + h * 0.34;
+      const poleHeight = h * 0.9;
+
+      ctx.strokeStyle = '#fef3c7';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(poleX, poleY);
+      ctx.lineTo(poleX, poleY - poleHeight * 0.6);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(poleX, poleY - poleHeight * 0.6);
+      ctx.lineTo(poleX + w * 0.16, poleY - poleHeight * 0.55);
+      ctx.lineTo(poleX, poleY - poleHeight * 0.48);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(poleX, poleY + h * 0.015, w * 0.045, h * 0.06, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Draw isometric tile base
     function drawIsometricTile(ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile, highlight: boolean, currentZoom: number, skipGreyBase: boolean = false, skipGreenBase: boolean = false) {
       const w = TILE_WIDTH;
@@ -5260,6 +5364,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       // Also check if it's part of a multi-tile building footprint
       const isDirectBuilding = !isPark &&
         tile.building.type !== 'grass' &&
+        tile.building.type !== 'hill' &&
         tile.building.type !== 'empty' &&
         tile.building.type !== 'water' &&
         tile.building.type !== 'road' &&
@@ -5285,6 +5390,11 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         leftColor = '#3d6634';
         rightColor = '#5a8f4f';
         strokeColor = '#2d4a26';
+      } else if (tile.building.type === 'hill') {
+        topColor = '#666a72';
+        leftColor = '#51545c';
+        rightColor = '#7d818b';
+        strokeColor = '#2f3238';
       } else if (hasGreyBase && !skipGreyBase) {
         // Grey/concrete base tiles for ALL buildings (except parks)
         // Skip if skipGreyBase is true (will be drawn later after water)
@@ -5293,7 +5403,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         rightColor = '#9ca3af';
         strokeColor = '#374151';
       } else if (tile.zone === 'residential') {
-        if (tile.building.type !== 'grass' && tile.building.type !== 'empty') {
+        if (tile.building.type !== 'grass' && tile.building.type !== 'hill' && tile.building.type !== 'empty') {
           topColor = '#3d7c3f';
           leftColor = '#2d6634';
           rightColor = '#4d8f4f';
@@ -5304,7 +5414,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         }
         strokeColor = '#22c55e';
       } else if (tile.zone === 'commercial') {
-        if (tile.building.type !== 'grass' && tile.building.type !== 'empty') {
+        if (tile.building.type !== 'grass' && tile.building.type !== 'hill' && tile.building.type !== 'empty') {
           topColor = '#3a5c7c';
           leftColor = '#2a4c6c';
           rightColor = '#4a6c8c';
@@ -5315,7 +5425,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         }
         strokeColor = '#3b82f6';
       } else if (tile.zone === 'industrial') {
-        if (tile.building.type !== 'grass' && tile.building.type !== 'empty') {
+        if (tile.building.type !== 'grass' && tile.building.type !== 'hill' && tile.building.type !== 'empty') {
           topColor = '#7c5c3a';
           leftColor = '#6c4c2a';
           rightColor = '#8c6c4a';
@@ -5351,13 +5461,17 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         // Draw zone border with dashed line (hide when zoomed out, only on grass/empty tiles - not on roads or buildings)
         if (tile.zone !== 'none' && 
             currentZoom >= 0.95 &&
-            (tile.building.type === 'grass' || tile.building.type === 'empty')) {
+            (tile.building.type === 'grass' || tile.building.type === 'hill' || tile.building.type === 'empty')) {
           ctx.strokeStyle = tile.zone === 'residential' ? '#22c55e' : 
                             tile.zone === 'commercial' ? '#3b82f6' : '#f59e0b';
           ctx.lineWidth = 1.5;
           ctx.setLineDash([4, 2]);
           ctx.stroke();
           ctx.setLineDash([]);
+        }
+
+        if (tile.building.type === 'hill') {
+          drawHillPeaks(ctx, x, y, tile);
         }
       }
       
@@ -6086,6 +6200,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
                        (tile.building.type === 'empty' && isPartOfParkBuilding(x, y));
         const isDirectBuilding = !isPark &&
           tile.building.type !== 'grass' &&
+          tile.building.type !== 'hill' &&
           tile.building.type !== 'empty' &&
           tile.building.type !== 'water' &&
           tile.building.type !== 'road' &&
@@ -6102,39 +6217,39 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
                                       (tile.building.type === 'empty' && isPartOfParkBuilding(x, y));
         
         // Draw base tile for all tiles (including water), but skip gray bases for buildings and green bases for grass/empty adjacent to water or parks
-        drawIsometricTile(ctx, screenX, screenY, tile, !!(isHovered || isSelected || isInDragRect), zoom, true, needsGreenBaseOverWater || needsGreenBaseForPark);
+        drawIsometricTile(ctx, screenX, screenY, renderTile, !!(isHovered || isSelected || isInDragRect), zoom, true, needsGreenBaseOverWater || needsGreenBaseForPark);
         
         if (needsGreyBase) {
-          baseTileQueue.push({ screenX, screenY, tile, depth: x + y });
+          baseTileQueue.push({ screenX, screenY, tile: renderTile, depth: x + y });
         }
         
         if (needsGreenBaseOverWater || needsGreenBaseForPark) {
-          greenBaseTileQueue.push({ screenX, screenY, tile, depth: x + y });
+          greenBaseTileQueue.push({ screenX, screenY, tile: renderTile, depth: x + y });
         }
         
         // Separate water tiles into their own queue (drawn after base tiles, below other buildings)
         if (tile.building.type === 'water') {
           const size = getBuildingSize(tile.building.type);
           const depth = x + y + size.width + size.height - 2;
-          waterQueue.push({ screenX, screenY, tile, depth });
+          waterQueue.push({ screenX, screenY, tile: renderTile, depth });
         }
         // Roads go to their own queue (drawn above water)
         else if (tile.building.type === 'road') {
           const depth = x + y;
-          roadQueue.push({ screenX, screenY, tile, depth });
+          roadQueue.push({ screenX, screenY, tile: renderTile, depth });
         }
         // Check for beach tiles (grass/empty tiles adjacent to water)
         else if ((tile.building.type === 'grass' || tile.building.type === 'empty') &&
                  isAdjacentToWater(x, y)) {
-          beachQueue.push({ screenX, screenY, tile, depth: x + y });
+          beachQueue.push({ screenX, screenY, tile: renderTile, depth: x + y });
         }
         // Other buildings go to regular building queue
         else {
-          const isBuilding = tile.building.type !== 'grass' && tile.building.type !== 'empty';
+          const isBuilding = tile.building.type !== 'grass' && tile.building.type !== 'hill' && tile.building.type !== 'empty';
           if (isBuilding) {
             const size = getBuildingSize(tile.building.type);
             const depth = x + y + size.width + size.height - 2;
-            buildingQueue.push({ screenX, screenY, tile, depth });
+            buildingQueue.push({ screenX, screenY, tile: renderTile, depth });
           }
         }
         
@@ -6145,10 +6260,15 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
           (overlayMode === 'subway' 
             ? tile.building.type !== 'water'  // For subway mode, show all non-water tiles
             : (tile.building.type !== 'grass' &&
+               tile.building.type !== 'hill' &&
                tile.building.type !== 'water' &&
                tile.building.type !== 'road'));
         if (showOverlay) {
-          overlayQueue.push({ screenX, screenY, tile });
+          overlayQueue.push({ screenX, screenY, tile: renderTile });
+        }
+
+        if (tile.flagged) {
+          flagQueue.push({ screenX, screenY, tile: renderTile });
         }
       }
     }
@@ -6284,6 +6404,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
       ctx.closePath();
       ctx.fill();
+    });
+
+    flagQueue.forEach(({ screenX, screenY }) => {
+      drawFlagIcon(ctx, screenX, screenY);
     });
     
     // Draw water body names (after everything else so they're on top)
@@ -6478,6 +6602,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         // Building windows glow at night - cut through darkness
         const isBuilding = 
           buildingType !== 'grass' && 
+          buildingType !== 'hill' && 
           buildingType !== 'empty' && 
           buildingType !== 'water' && 
           buildingType !== 'road' && 
@@ -7459,6 +7584,7 @@ export default function Game() {
             const checkTile = grid[checkY][checkX];
             if (checkTile.building.type !== 'empty' &&
                 checkTile.building.type !== 'grass' &&
+                checkTile.building.type !== 'hill' &&
                 checkTile.building.type !== 'water' &&
                 checkTile.building.type !== 'road' &&
                 checkTile.building.type !== 'tree') {
