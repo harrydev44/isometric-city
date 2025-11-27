@@ -665,7 +665,7 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 // Canvas-based Minimap - Memoized
-const MiniMap = React.memo(function MiniMap() {
+const MiniMap = React.memo(function MiniMap({ offset, zoom, canvasSize }: { offset: { x: number; y: number }; zoom: number; canvasSize: { width: number; height: number } }) {
   const { state } = useGame();
   const { grid, gridSize } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -679,10 +679,13 @@ const MiniMap = React.memo(function MiniMap() {
     
     const size = 140;
     const scale = size / gridSize;
+    const dpr = window.devicePixelRatio || 1;
     
+    // Clear canvas
     ctx.fillStyle = '#0b1723';
     ctx.fillRect(0, 0, size, size);
     
+    // Draw grid tiles
     for (let y = 0; y < gridSize; y++) {
       for (let x = 0; x < gridSize; x++) {
         const tile = grid[y][x];
@@ -708,7 +711,55 @@ const MiniMap = React.memo(function MiniMap() {
         ctx.fillRect(x * scale, y * scale, Math.ceil(scale), Math.ceil(scale));
       }
     }
-  }, [grid, gridSize]);
+    
+    // Calculate viewport bounds in world coordinates (before transform)
+    const worldLeft = -offset.x / zoom - TILE_WIDTH;
+    const worldTop = -offset.y / zoom - TILE_HEIGHT * 2;
+    const worldRight = (canvasSize.width / (dpr * zoom)) - offset.x / zoom + TILE_WIDTH;
+    const worldBottom = (canvasSize.height / (dpr * zoom)) - offset.y / zoom + TILE_HEIGHT * 2;
+    
+    // Convert to screen pixel coordinates (accounting for zoom but not the translate)
+    // The translate happens in the transformed space, so we need to convert back
+    // For screenToGrid, we pass coordinates as if they were mouse coordinates
+    // Mouse coordinates are: (e.clientX - rect.left) / zoom
+    // So we need world coordinates divided by zoom
+    const screenLeft = worldLeft / zoom;
+    const screenTop = worldTop / zoom;
+    const screenRight = worldRight / zoom;
+    const screenBottom = worldBottom / zoom;
+    
+    // Convert viewport corners to grid coordinates
+    // screenToGrid expects: screen pixel coords / zoom, and offset.x/zoom, offset.y/zoom
+    const topLeft = screenToGrid(screenLeft, screenTop, offset.x / zoom, offset.y / zoom);
+    const topRight = screenToGrid(screenRight, screenTop, offset.x / zoom, offset.y / zoom);
+    const bottomLeft = screenToGrid(screenLeft, screenBottom, offset.x / zoom, offset.y / zoom);
+    const bottomRight = screenToGrid(screenRight, screenBottom, offset.x / zoom, offset.y / zoom);
+    
+    // Also sample center and midpoints for better coverage
+    const centerX = (screenLeft + screenRight) / 2;
+    const centerY = (screenTop + screenBottom) / 2;
+    const center = screenToGrid(centerX, centerY, offset.x / zoom, offset.y / zoom);
+    
+    // Find bounding box in grid coordinates
+    const allGridX = [topLeft.gridX, topRight.gridX, bottomLeft.gridX, bottomRight.gridX, center.gridX];
+    const allGridY = [topLeft.gridY, topRight.gridY, bottomLeft.gridY, bottomRight.gridY, center.gridY];
+    const minGridX = Math.max(0, Math.min(...allGridX));
+    const maxGridX = Math.min(gridSize - 1, Math.max(...allGridX));
+    const minGridY = Math.max(0, Math.min(...allGridY));
+    const maxGridY = Math.min(gridSize - 1, Math.max(...allGridY));
+    
+    // Draw white rectangle overlay for viewport
+    if (minGridX <= maxGridX && minGridY <= maxGridY) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        minGridX * scale,
+        minGridY * scale,
+        (maxGridX - minGridX + 1) * scale,
+        (maxGridY - minGridY + 1) * scale
+      );
+    }
+  }, [grid, gridSize, offset, zoom, canvasSize]);
   
   return (
     <Card className="absolute bottom-6 right-8 p-3 shadow-lg bg-card/90 border-border/70">
@@ -5646,7 +5697,7 @@ export default function Game() {
           <div className="flex-1 relative overflow-visible">
             <CanvasIsometricGrid overlayMode={overlayMode} selectedTile={selectedTile} setSelectedTile={setSelectedTile} />
             <OverlayModeToggle overlayMode={overlayMode} setOverlayMode={setOverlayMode} />
-            <MiniMap />
+            <MiniMap offset={offset} zoom={zoom} canvasSize={canvasSize} />
           </div>
         </div>
         
