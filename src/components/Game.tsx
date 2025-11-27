@@ -444,6 +444,69 @@ const ADVISOR_ICON_MAP: Record<string, React.ReactNode> = {
   jobs: <JobsIcon size={18} />,
 };
 
+// Submenu Component for hover-based submenus
+const SubmenuItem = React.memo(function SubmenuItem({ 
+  category, 
+  tools, 
+  selectedTool, 
+  stats, 
+  setTool 
+}: { 
+  category: string; 
+  tools: Tool[]; 
+  selectedTool: Tool | null; 
+  stats: any; 
+  setTool: (tool: Tool) => void;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+  
+  return (
+    <div 
+      className="relative mb-1"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground cursor-pointer hover:text-sidebar-foreground transition-colors">
+        {category} →
+      </div>
+      {isHovered && (
+        <div 
+          className="absolute left-full top-0 ml-1 z-50 bg-sidebar border border-sidebar-border rounded-md shadow-lg min-w-[200px] py-1"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <div className="flex flex-col gap-0.5">
+            {tools.map(tool => {
+              const info = TOOL_INFO[tool];
+              if (!info) return null;
+              const isSelected = selectedTool === tool;
+              const canAfford = stats.money >= info.cost;
+              
+              return (
+                <Button
+                  key={tool}
+                  onClick={() => setTool(tool)}
+                  disabled={!canAfford && info.cost > 0}
+                  variant={isSelected ? 'default' : 'ghost'}
+                  className={`w-full justify-start gap-3 px-3 py-2 h-auto text-sm ${
+                    isSelected ? 'bg-primary text-primary-foreground' : ''
+                  }`}
+                  title={`${info.description}${info.cost > 0 ? ` - Cost: $${info.cost}` : ''}`}
+                >
+                  <span className="flex-1 text-left truncate">{info.name}</span>
+                  {info.cost > 0 && (
+                    <span className="text-xs opacity-60">${info.cost}</span>
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // Memoized Sidebar Component
 const Sidebar = React.memo(function Sidebar() {
   const { state, setTool, setActivePanel } = useGame();
@@ -458,6 +521,8 @@ const Sidebar = React.memo(function Sidebar() {
     'SPECIAL': ['stadium', 'museum', 'airport', 'space_program', 'city_hall', 'amusement_park'] as Tool[],
   }), []);
   
+  const categoriesWithSubmenus = ['SERVICES', 'PARKS', 'UTILITIES', 'SPECIAL'];
+  
   return (
     <div className="w-56 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
       <div className="px-4 py-4 border-b border-sidebar-border">
@@ -467,39 +532,56 @@ const Sidebar = React.memo(function Sidebar() {
       </div>
       
       <ScrollArea className="flex-1 py-2">
-        {Object.entries(toolCategories).map(([category, tools]) => (
-          <div key={category} className="mb-1">
-            <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground">
-              {category}
+        {Object.entries(toolCategories).map(([category, tools]) => {
+          // Use submenu for SERVICES, PARKS, UTILITIES, and SPECIAL
+          if (categoriesWithSubmenus.includes(category)) {
+            return (
+              <SubmenuItem
+                key={category}
+                category={category}
+                tools={tools}
+                selectedTool={selectedTool}
+                stats={stats}
+                setTool={setTool}
+              />
+            );
+          }
+          
+          // Direct list for TOOLS and ZONES
+          return (
+            <div key={category} className="mb-1">
+              <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground">
+                {category}
+              </div>
+              <div className="px-2 flex flex-col gap-0.5">
+                {tools.map(tool => {
+                  const info = TOOL_INFO[tool];
+                  if (!info) return null; // Skip if tool info not found
+                  const isSelected = selectedTool === tool;
+                  const canAfford = stats.money >= info.cost;
+                  
+                  return (
+                    <Button
+                      key={tool}
+                      onClick={() => setTool(tool)}
+                      disabled={!canAfford && info.cost > 0}
+                      variant={isSelected ? 'default' : 'ghost'}
+                      className={`w-full justify-start gap-3 px-3 py-2 h-auto text-sm ${
+                        isSelected ? 'bg-primary text-primary-foreground' : ''
+                      }`}
+                      title={`${info.description}${info.cost > 0 ? ` - Cost: $${info.cost}` : ''}`}
+                    >
+                      <span className="flex-1 text-left truncate">{info.name}</span>
+                      {info.cost > 0 && (
+                        <span className="text-xs opacity-60">${info.cost}</span>
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="px-2 flex flex-col gap-0.5">
-              {tools.map(tool => {
-                const info = TOOL_INFO[tool];
-                if (!info) return null; // Skip if tool info not found
-                const isSelected = selectedTool === tool;
-                const canAfford = stats.money >= info.cost;
-                
-                return (
-                  <Button
-                    key={tool}
-                    onClick={() => setTool(tool)}
-                    disabled={!canAfford && info.cost > 0}
-                    variant={isSelected ? 'default' : 'ghost'}
-                    className={`w-full justify-start gap-3 px-3 py-2 h-auto text-sm ${
-                      isSelected ? 'bg-primary text-primary-foreground' : ''
-                    }`}
-                    title={`${info.description}${info.cost > 0 ? ` - Cost: $${info.cost}` : ''}`}
-                  >
-                    <span className="flex-1 text-left truncate">{info.name}</span>
-                    {info.cost > 0 && (
-                      <span className="text-xs opacity-60">${info.cost}</span>
-                    )}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </ScrollArea>
       
       <div className="border-t border-sidebar-border p-2">
