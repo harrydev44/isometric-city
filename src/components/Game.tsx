@@ -665,10 +665,20 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 // Canvas-based Minimap - Memoized
-const MiniMap = React.memo(function MiniMap() {
+const MiniMap = React.memo(function MiniMap({ viewportStateRef }: { viewportStateRef: React.MutableRefObject<{ offset: { x: number; y: number }, zoom: number, canvasSize: { width: number; height: number } }> }) {
   const { state } = useGame();
   const { grid, gridSize } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [viewportState, setViewportState] = useState(viewportStateRef.current);
+  
+  // Subscribe to viewport state changes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setViewportState({ ...viewportStateRef.current });
+    }, 100); // Update every 100ms for smooth viewport tracking
+    
+    return () => clearInterval(interval);
+  }, [viewportStateRef]);
   
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -679,10 +689,13 @@ const MiniMap = React.memo(function MiniMap() {
     
     const size = 140;
     const scale = size / gridSize;
+    const dpr = window.devicePixelRatio || 1;
+    const { offset, zoom, canvasSize } = viewportState;
     
     ctx.fillStyle = '#0b1723';
     ctx.fillRect(0, 0, size, size);
     
+    // Draw grid tiles
     for (let y = 0; y < gridSize; y++) {
       for (let x = 0; x < gridSize; x++) {
         const tile = grid[y][x];
@@ -708,7 +721,60 @@ const MiniMap = React.memo(function MiniMap() {
         ctx.fillRect(x * scale, y * scale, Math.ceil(scale), Math.ceil(scale));
       }
     }
-  }, [grid, gridSize]);
+    
+    // Calculate viewport bounds in transformed coordinate space
+    // This matches the calculation used in the main canvas rendering
+    const viewWidth = canvasSize.width / (dpr * zoom);
+    const viewHeight = canvasSize.height / (dpr * zoom);
+    const viewLeft = -offset.x / zoom - TILE_WIDTH;
+    const viewTop = -offset.y / zoom - TILE_HEIGHT * 2;
+    const viewRight = viewWidth - offset.x / zoom + TILE_WIDTH;
+    const viewBottom = viewHeight - offset.y / zoom + TILE_HEIGHT * 2;
+    
+    // Convert viewport corners from isometric screen coordinates to grid coordinates
+    // The gridToScreen function is: 
+    //   screenX = (gx - gy) * TILE_WIDTH / 2
+    //   screenY = (gx + gy) * TILE_HEIGHT / 2
+    // Inverse conversion:
+    //   gx = (screenX / (TILE_WIDTH/2) + screenY / (TILE_HEIGHT/2)) / 2
+    //   gy = (screenY / (TILE_HEIGHT/2) - screenX / (TILE_WIDTH/2)) / 2
+    
+    const corners = [
+      { x: viewLeft, y: viewTop },
+      { x: viewRight, y: viewTop },
+      { x: viewRight, y: viewBottom },
+      { x: viewLeft, y: viewBottom },
+    ];
+    
+    const gridCorners = corners.map(corner => {
+      const screenX = corner.x;
+      const screenY = corner.y;
+      
+      // Convert from isometric screen coordinates to grid coordinates
+      const gridX = (screenX / (TILE_WIDTH / 2) + screenY / (TILE_HEIGHT / 2)) / 2;
+      const gridY = (screenY / (TILE_HEIGHT / 2) - screenX / (TILE_WIDTH / 2)) / 2;
+      
+      return { x: gridX, y: gridY };
+    });
+    
+    // Find bounding box in grid coordinates
+    const minGridX = Math.max(0, Math.min(...gridCorners.map(c => c.x)));
+    const maxGridX = Math.min(gridSize - 1, Math.max(...gridCorners.map(c => c.x)));
+    const minGridY = Math.max(0, Math.min(...gridCorners.map(c => c.y)));
+    const maxGridY = Math.min(gridSize - 1, Math.max(...gridCorners.map(c => c.y)));
+    
+    // Draw viewport rectangle as a white border
+    if (minGridX <= maxGridX && minGridY <= maxGridY) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        minGridX * scale,
+        minGridY * scale,
+        (maxGridX - minGridX + 1) * scale,
+        (maxGridY - minGridY + 1) * scale
+      );
+    }
+  }, [grid, gridSize, viewportState]);
   
   return (
     <Card className="absolute bottom-6 right-8 p-3 shadow-lg bg-card/90 border-border/70">
@@ -1738,10 +1804,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
-function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: { 
+function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, viewportStateRef }: { 
   overlayMode: OverlayMode; 
   selectedTile: { x: number; y: number } | null; 
   setSelectedTile: (tile: { x: number; y: number } | null) => void;
+  viewportStateRef: React.MutableRefObject<{ offset: { x: number; y: number }, zoom: number, canvasSize: { width: number; height: number } }>;
 }) {
   const { state, placeAtTile, connectToCity, currentSpritePack } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, hour } = state;
@@ -1802,11 +1869,15 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
 
   useEffect(() => {
     worldStateRef.current.offset = offset;
-  }, [offset]);
+    // Update viewport state ref for MiniMap
+    viewportStateRef.current.offset = offset;
+  }, [offset, viewportStateRef]);
 
   useEffect(() => {
     worldStateRef.current.zoom = zoom;
-  }, [zoom]);
+    // Update viewport state ref for MiniMap
+    viewportStateRef.current.zoom = zoom;
+  }, [zoom, viewportStateRef]);
 
   useEffect(() => {
     worldStateRef.current.speed = speed;
@@ -1814,7 +1885,9 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
 
   useEffect(() => {
     worldStateRef.current.canvasSize = canvasSize;
-  }, [canvasSize]);
+    // Update viewport state ref for MiniMap
+    viewportStateRef.current.canvasSize = canvasSize;
+  }, [canvasSize, viewportStateRef]);
 
   // Keyboard panning (WASD / arrow keys)
   useEffect(() => {
@@ -5479,6 +5552,13 @@ export default function Game() {
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const isInitialMount = useRef(true);
   
+  // Ref to share viewport state with MiniMap
+  const viewportStateRef = useRef<{ offset: { x: number; y: number }, zoom: number, canvasSize: { width: number; height: number } }>({
+    offset: { x: 620, y: 160 },
+    zoom: 1,
+    canvasSize: { width: 1200, height: 800 },
+  });
+  
   // Cheat code system
   const {
     triggeredCheat,
@@ -5644,9 +5724,9 @@ export default function Game() {
           <TopBar />
           <StatsPanel />
           <div className="flex-1 relative overflow-visible">
-            <CanvasIsometricGrid overlayMode={overlayMode} selectedTile={selectedTile} setSelectedTile={setSelectedTile} />
+            <CanvasIsometricGrid overlayMode={overlayMode} selectedTile={selectedTile} setSelectedTile={setSelectedTile} viewportStateRef={viewportStateRef} />
             <OverlayModeToggle overlayMode={overlayMode} setOverlayMode={setOverlayMode} />
-            <MiniMap />
+            <MiniMap viewportStateRef={viewportStateRef} />
           </div>
         </div>
         
