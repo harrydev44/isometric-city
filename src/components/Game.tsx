@@ -393,15 +393,57 @@ function gridToScreen(x: number, y: number, offsetX: number, offsetY: number): {
   return { screenX, screenY };
 }
 
-// Convert screen coordinates to grid coordinates
+// Check if a point is inside an isometric diamond
+// For isometric tiles, the diamond is rotated 45 degrees
+// The diamond equation for a rotated diamond: |x - cx| / (w/2) + |y - cy| / (h/2) <= 1
+function pointInDiamond(px: number, py: number, centerX: number, centerY: number, w: number, h: number): boolean {
+  const dx = Math.abs(px - centerX);
+  const dy = Math.abs(py - centerY);
+  // For isometric diamonds, we use the Manhattan distance-like check
+  // This works because the diamond is axis-aligned in the isometric coordinate system
+  return (dx / (w / 2) + dy / (h / 2)) <= 1.01; // Small epsilon for edge cases
+}
+
+// Convert screen coordinates to grid coordinates with accurate point-in-diamond check
 function screenToGrid(screenX: number, screenY: number, offsetX: number, offsetY: number): { gridX: number; gridY: number } {
   const adjustedX = screenX - offsetX;
   const adjustedY = screenY - offsetY;
   
-  const gridX = (adjustedX / (TILE_WIDTH / 2) + adjustedY / (TILE_HEIGHT / 2)) / 2;
-  const gridY = (adjustedY / (TILE_HEIGHT / 2) - adjustedX / (TILE_WIDTH / 2)) / 2;
+  // First, get approximate grid coordinates
+  const approxGridX = (adjustedX / (TILE_WIDTH / 2) + adjustedY / (TILE_HEIGHT / 2)) / 2;
+  const approxGridY = (adjustedY / (TILE_HEIGHT / 2) - adjustedX / (TILE_WIDTH / 2)) / 2;
   
-  return { gridX: Math.floor(gridX), gridY: Math.floor(gridY) };
+  // Check the tile at the floor coordinates and its neighbors
+  const baseX = Math.floor(approxGridX);
+  const baseY = Math.floor(approxGridY);
+  
+  // Check candidate tiles (the tile itself and its 8 neighbors)
+  const candidates = [
+    { x: baseX, y: baseY },
+    { x: baseX - 1, y: baseY },
+    { x: baseX + 1, y: baseY },
+    { x: baseX, y: baseY - 1 },
+    { x: baseX, y: baseY + 1 },
+    { x: baseX - 1, y: baseY - 1 },
+    { x: baseX + 1, y: baseY - 1 },
+    { x: baseX - 1, y: baseY + 1 },
+    { x: baseX + 1, y: baseY + 1 },
+  ];
+  
+  // Find which diamond contains the point
+  // Note: adjustedX and adjustedY are already relative to offset, so we use 0,0 for gridToScreen
+  for (const candidate of candidates) {
+    const { screenX: tileScreenX, screenY: tileScreenY } = gridToScreen(candidate.x, candidate.y, 0, 0);
+    const centerX = tileScreenX + TILE_WIDTH / 2;
+    const centerY = tileScreenY + TILE_HEIGHT / 2;
+    
+    if (pointInDiamond(adjustedX, adjustedY, centerX, centerY, TILE_WIDTH, TILE_HEIGHT)) {
+      return { gridX: candidate.x, gridY: candidate.y };
+    }
+  }
+  
+  // Fallback to floor if no diamond matches (shouldn't happen, but safety)
+  return { gridX: baseX, gridY: baseY };
 }
 
 const EVENT_ICON_MAP: Record<string, React.ReactNode> = {
@@ -1904,6 +1946,8 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(isMobile ? 0.6 : 1);
+  // Use ref to track last hovered tile to avoid unnecessary state updates
+  const lastHoveredTileRef = useRef<{ x: number; y: number } | null>(null);
   const carsRef = useRef<Car[]>([]);
   const carIdRef = useRef(0);
   const carSpawnTimerRef = useRef(0);
@@ -5738,7 +5782,14 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
       
       if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
-        setHoveredTile({ x: gridX, y: gridY });
+        // Only update state if the tile actually changed
+        const newTile = { x: gridX, y: gridY };
+        if (!lastHoveredTileRef.current || 
+            lastHoveredTileRef.current.x !== newTile.x || 
+            lastHoveredTileRef.current.y !== newTile.y) {
+          lastHoveredTileRef.current = newTile;
+          setHoveredTile(newTile);
+        }
         
         // Update drag rectangle end point for zoning tools
         if (isDragging && showsDragGrid && dragStartTile) {
@@ -5842,6 +5893,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     
     // Clear hovered tile when mouse leaves
     if (!containerRef.current) {
+      lastHoveredTileRef.current = null;
       setHoveredTile(null);
     }
   }, [isDragging, gridSize, showsDragGrid, supportsDragPlace, dragStartTile, placeAtTile, selectedTool, dragEndTile, adjacentCities]);
@@ -6020,7 +6072,11 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={() => {
+        lastHoveredTileRef.current = null;
+        setHoveredTile(null);
+        handleMouseUp();
+      }}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
