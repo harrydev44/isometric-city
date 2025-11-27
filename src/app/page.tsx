@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { GameProvider } from '@/context/GameContext';
 import Game from '@/components/Game';
 import Image from 'next/image';
+import { useMobile } from '@/hooks/useMobile';
 
 const STORAGE_KEY = 'isocity-game-state';
 
@@ -26,6 +27,16 @@ const BUILDINGS = [
   'trees.png',
 ];
 
+// Fewer buildings for mobile
+const MOBILE_BUILDINGS = [
+  'residential.png',
+  'commercial.png',
+  'industrial.png',
+  'park.png',
+  'hospital.png',
+  'powerplant.png',
+];
+
 // Check if there's a saved game in localStorage
 function hasSavedGame(): boolean {
   if (typeof window === 'undefined') return false;
@@ -44,13 +55,19 @@ function hasSavedGame(): boolean {
 export default function HomePage() {
   const [showGame, setShowGame] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const { isMobileDevice, isSmallScreen, orientation } = useMobile();
+  const isMobile = isMobileDevice || isSmallScreen;
 
   // Check for saved game after mount (client-side only)
   useEffect(() => {
-    setIsChecking(false);
-    if (hasSavedGame()) {
-      setShowGame(true);
-    }
+    const checkSavedGame = () => {
+      setIsChecking(false);
+      if (hasSavedGame()) {
+        setShowGame(true);
+      }
+    };
+    // Use requestAnimationFrame to avoid synchronous setState in effect
+    requestAnimationFrame(checkSavedGame);
   }, []);
 
   if (isChecking) {
@@ -71,6 +88,69 @@ export default function HomePage() {
     );
   }
 
+  // Mobile landing page
+  if (isMobile) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 safe-area-top safe-area-bottom">
+        {/* Title */}
+        <h1 className="text-5xl sm:text-6xl font-light tracking-wider text-white/90 mb-4 animate-fadeIn">
+          IsoCity
+        </h1>
+        
+        {/* Tagline */}
+        <p className="text-white/50 text-sm mb-8 text-center">
+          Build your dream city on mobile
+        </p>
+        
+        {/* Building preview - compact grid for mobile */}
+        <div className="grid grid-cols-3 gap-2 mb-8 max-w-xs">
+          {MOBILE_BUILDINGS.map((building, index) => (
+            <div 
+              key={building}
+              className="aspect-square bg-white/5 border border-white/10 p-2 rounded-lg"
+              style={{
+                animation: 'fadeIn 0.4s ease-out forwards',
+                animationDelay: `${index * 80}ms`,
+                opacity: 0,
+              }}
+            >
+              <div className="w-full h-full relative opacity-80">
+                <Image
+                  src={`/assets/buildings/${building}`}
+                  alt={building.replace('.png', '').replace('_', ' ')}
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Start Button */}
+        <Button 
+          onClick={() => setShowGame(true)}
+          className="w-full max-w-xs px-8 py-6 text-xl font-medium tracking-wide bg-primary/90 hover:bg-primary text-white border-0 rounded-xl transition-all duration-300 shadow-lg shadow-primary/20"
+        >
+          Play Now
+        </Button>
+        
+        {/* Orientation hint for landscape */}
+        {orientation === 'portrait' && (
+          <p className="text-white/30 text-xs mt-6 text-center">
+            Tip: Rotate for a wider view
+          </p>
+        )}
+        
+        {/* Touch hint */}
+        <div className="text-white/40 text-xs mt-4 text-center flex flex-col gap-1">
+          <span>👆 Tap to place • 👆👆 Pinch to zoom</span>
+          <span>☝️ Drag to pan</span>
+        </div>
+      </main>
+    );
+  }
+
+  // Desktop landing page
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-8">
       <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, DM_Sans } from 'next/font/google';
 import './globals.css';
 
@@ -19,12 +19,33 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: 'ISOCITY — Metropolis Builder',
   description: 'A luxurious isometric city builder with Art Deco elegance. Zone districts, manage resources, and build your gleaming metropolis.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'IsoCity',
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#0f1219',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${playfair.variable} ${dmSans.variable}`}>
-      <body className="bg-background text-foreground antialiased font-sans">{children}</body>
+      <head>
+        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="apple-touch-icon" href="/assets/buildings/residential.png" />
+      </head>
+      <body className="bg-background text-foreground antialiased font-sans overflow-hidden">{children}</body>
     </html>
   );
 }

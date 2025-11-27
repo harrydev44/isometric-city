@@ -5,6 +5,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { Tool, TOOL_INFO, Tile, BuildingType, AdjacentCity } from '@/types/game';
 import { getBuildingSize } from '@/lib/simulation';
+import { useMobile } from '@/hooks/useMobile';
+import { MobileToolbar } from '@/components/mobile/MobileToolbar';
+import { MobileTopBar } from '@/components/mobile/MobileTopBar';
 import {
   PlayIcon,
   PauseIcon,
@@ -1738,10 +1741,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
-function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: { 
+function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false }: { 
   overlayMode: OverlayMode; 
   selectedTile: { x: number; y: number } | null; 
   setSelectedTile: (tile: { x: number; y: number } | null) => void;
+  isMobile?: boolean;
 }) {
   const { state, placeAtTile, connectToCity, currentSpritePack } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, hour } = state;
@@ -1749,12 +1753,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   const carsCanvasRef = useRef<HTMLCanvasElement>(null);
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState({ x: 620, y: 160 });
+  const [offset, setOffset] = useState({ x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 });
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(isMobile ? 0.6 : 1);
   const carsRef = useRef<Car[]>([]);
   const carIdRef = useRef(0);
   const carSpawnTimerRef = useRef(0);
@@ -1770,6 +1774,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   const pedestriansRef = useRef<Pedestrian[]>([]);
   const pedestrianIdRef = useRef(0);
   const pedestrianSpawnTimerRef = useRef(0);
+  
+  // Touch gesture state for mobile
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const initialPinchDistanceRef = useRef<number | null>(null);
+  const initialZoomRef = useRef<number>(zoom);
+  const lastTouchCenterRef = useRef<{ x: number; y: number } | null>(null);
   
   const worldStateRef = useRef<WorldRenderState>({
     grid,
@@ -5257,11 +5267,142 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     setOffset(clampedOffset);
     setZoom(newZoom);
   }, [zoom, offset, clampOffset]);
+
+  // Touch handlers for mobile
+  const getTouchDistance = useCallback((touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }, []);
+
+  const getTouchCenter = useCallback((touch1: React.Touch, touch2: React.Touch) => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      // Single touch - could be pan or tap
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+      setDragStart({ x: touch.clientX - offset.x, y: touch.clientY - offset.y });
+      setIsPanning(true);
+    } else if (e.touches.length === 2) {
+      // Two finger touch - pinch to zoom
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      initialPinchDistanceRef.current = distance;
+      initialZoomRef.current = zoom;
+      lastTouchCenterRef.current = getTouchCenter(e.touches[0], e.touches[1]);
+      setIsPanning(false);
+    }
+  }, [offset, zoom, getTouchDistance, getTouchCenter]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+
+    if (e.touches.length === 1 && isPanning && !initialPinchDistanceRef.current) {
+      // Single touch pan
+      const touch = e.touches[0];
+      const newOffset = {
+        x: touch.clientX - dragStart.x,
+        y: touch.clientY - dragStart.y,
+      };
+      setOffset(clampOffset(newOffset, zoom));
+    } else if (e.touches.length === 2 && initialPinchDistanceRef.current !== null) {
+      // Pinch to zoom
+      const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      const scale = currentDistance / initialPinchDistanceRef.current;
+      const newZoom = Math.max(0.3, Math.min(2, initialZoomRef.current * scale));
+
+      const currentCenter = getTouchCenter(e.touches[0], e.touches[1]);
+      const rect = containerRef.current?.getBoundingClientRect();
+      
+      if (rect && lastTouchCenterRef.current) {
+        // Calculate center position relative to canvas
+        const centerX = currentCenter.x - rect.left;
+        const centerY = currentCenter.y - rect.top;
+
+        // World position at pinch center
+        const worldX = (centerX - offset.x) / zoom;
+        const worldY = (centerY - offset.y) / zoom;
+
+        // Keep the same world position under the pinch center after zoom
+        const newOffsetX = centerX - worldX * newZoom;
+        const newOffsetY = centerY - worldY * newZoom;
+
+        // Also account for pan movement during pinch
+        const panDeltaX = currentCenter.x - lastTouchCenterRef.current.x;
+        const panDeltaY = currentCenter.y - lastTouchCenterRef.current.y;
+
+        const clampedOffset = clampOffset(
+          { x: newOffsetX + panDeltaX, y: newOffsetY + panDeltaY },
+          newZoom
+        );
+
+        setOffset(clampedOffset);
+        setZoom(newZoom);
+        lastTouchCenterRef.current = currentCenter;
+      }
+    }
+  }, [isPanning, dragStart, zoom, offset, clampOffset, getTouchDistance, getTouchCenter]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const touchStart = touchStartRef.current;
+    
+    if (e.touches.length === 0) {
+      // All fingers lifted
+      if (touchStart && e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const deltaX = Math.abs(touch.clientX - touchStart.x);
+        const deltaY = Math.abs(touch.clientY - touchStart.y);
+        const deltaTime = Date.now() - touchStart.time;
+
+        // Detect tap (short duration, minimal movement)
+        if (deltaTime < 300 && deltaX < 10 && deltaY < 10) {
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) {
+            const mouseX = (touch.clientX - rect.left) / zoom;
+            const mouseY = (touch.clientY - rect.top) / zoom;
+            const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
+
+            if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+              if (selectedTool === 'select') {
+                const origin = findBuildingOrigin(gridX, gridY);
+                if (origin) {
+                  setSelectedTile({ x: origin.originX, y: origin.originY });
+                } else {
+                  setSelectedTile({ x: gridX, y: gridY });
+                }
+              } else {
+                placeAtTile(gridX, gridY);
+              }
+            }
+          }
+        }
+      }
+
+      // Reset all touch state
+      setIsPanning(false);
+      setIsDragging(false);
+      touchStartRef.current = null;
+      initialPinchDistanceRef.current = null;
+      lastTouchCenterRef.current = null;
+    } else if (e.touches.length === 1) {
+      // Went from 2 touches to 1 - reset to pan mode
+      const touch = e.touches[0];
+      setDragStart({ x: touch.clientX - offset.x, y: touch.clientY - offset.y });
+      setIsPanning(true);
+      initialPinchDistanceRef.current = null;
+      lastTouchCenterRef.current = null;
+    }
+  }, [zoom, offset, gridSize, selectedTool, placeAtTile, setSelectedTile, findBuildingOrigin]);
   
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden"
+      className="relative w-full h-full overflow-hidden touch-none"
       style={{ 
         cursor: isPanning ? 'grabbing' : isDragging ? 'crosshair' : 'default',
       }}
@@ -5270,6 +5411,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       <canvas
         ref={canvasRef}
@@ -5478,6 +5623,8 @@ export default function Game() {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('none');
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const isInitialMount = useRef(true);
+  const { isMobileDevice, isSmallScreen } = useMobile();
+  const isMobile = isMobileDevice || isSmallScreen;
   
   // Cheat code system
   const {
@@ -5635,6 +5782,79 @@ export default function Game() {
     }
   }, [triggeredCheat, addMoney, addNotification, clearTriggeredCheat]);
 
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <TooltipProvider>
+        <div className="w-full h-full overflow-hidden bg-background flex flex-col">
+          {/* Mobile Top Bar */}
+          <MobileTopBar />
+          
+          {/* Main canvas area - fills remaining space, with padding for top/bottom bars */}
+          <div className="flex-1 relative overflow-hidden" style={{ paddingTop: '72px', paddingBottom: '76px' }}>
+            <CanvasIsometricGrid 
+              overlayMode={overlayMode} 
+              selectedTile={selectedTile} 
+              setSelectedTile={setSelectedTile}
+              isMobile={true}
+            />
+            
+            {/* Compact overlay toggle for mobile */}
+            <Card className="absolute top-2 right-2 p-1.5 shadow-lg bg-card/90 border-border/70 z-30">
+              <div className="flex gap-1">
+                <Button
+                  variant={overlayMode === 'none' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setOverlayMode('none')}
+                >
+                  <CloseIcon size={14} />
+                </Button>
+                <Button
+                  variant={overlayMode === 'power' ? 'default' : 'ghost'}
+                  size="icon"
+                  className={`h-8 w-8 ${overlayMode === 'power' ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
+                  onClick={() => setOverlayMode('power')}
+                >
+                  <PowerIcon size={14} />
+                </Button>
+                <Button
+                  variant={overlayMode === 'water' ? 'default' : 'ghost'}
+                  size="icon"
+                  className={`h-8 w-8 ${overlayMode === 'water' ? 'bg-blue-500 hover:bg-blue-600' : ''}`}
+                  onClick={() => setOverlayMode('water')}
+                >
+                  <WaterIcon size={14} />
+                </Button>
+                <Button
+                  variant={overlayMode === 'fire' ? 'default' : 'ghost'}
+                  size="icon"
+                  className={`h-8 w-8 ${overlayMode === 'fire' ? 'bg-red-500 hover:bg-red-600' : ''}`}
+                  onClick={() => setOverlayMode('fire')}
+                >
+                  <FireIcon size={14} />
+                </Button>
+              </div>
+            </Card>
+          </div>
+          
+          {/* Mobile Bottom Toolbar */}
+          <MobileToolbar onOpenPanel={(panel) => setActivePanel(panel)} />
+          
+          {/* Panels - render as fullscreen modals on mobile */}
+          {state.activePanel === 'budget' && <BudgetPanel />}
+          {state.activePanel === 'achievements' && <AchievementsPanel />}
+          {state.activePanel === 'statistics' && <StatisticsPanel />}
+          {state.activePanel === 'advisors' && <AdvisorsPanel />}
+          {state.activePanel === 'settings' && <SettingsPanel />}
+          
+          <VinnieDialog open={showVinnieDialog} onOpenChange={setShowVinnieDialog} />
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Desktop layout
   return (
     <TooltipProvider>
       <div className="w-full h-full min-h-[720px] overflow-hidden bg-background flex">
