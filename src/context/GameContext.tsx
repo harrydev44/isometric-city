@@ -29,6 +29,7 @@ const SPRITE_PACK_STORAGE_KEY = 'isocity-sprite-pack';
 
 type GameContextValue = {
   state: GameState;
+  setState: React.Dispatch<React.SetStateAction<GameState>>;
   setTool: (tool: Tool) => void;
   setSpeed: (speed: 0 | 1 | 2 | 3) => void;
   setTaxRate: (rate: number) => void;
@@ -79,7 +80,7 @@ const toolZoneMap: Partial<Record<Tool, ZoneType>> = {
   zone_dezone: 'none',
 };
 
-// Load game state from localStorage
+  // Load game state from localStorage
 function loadGameState(): GameState | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -108,6 +109,13 @@ function loadGameState(): GameState | null {
         // Migrate selectedTool if it's park_medium
         if (parsed.selectedTool === 'park_medium') {
           parsed.selectedTool = 'park_large';
+        }
+        // Add default values for new fields if they don't exist (backward compatibility)
+        if (!parsed.adjacentCities) {
+          parsed.adjacentCities = [];
+        }
+        if (!parsed.waterBodies) {
+          parsed.waterBodies = [];
         }
         return parsed as GameState;
       } else {
@@ -440,6 +448,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const value: GameContextValue = {
     state,
+    setState,
     setTool,
     setSpeed,
     setTaxRate,

@@ -17,7 +17,10 @@ import {
   RESIDENTIAL_BUILDINGS,
   COMMERCIAL_BUILDINGS,
   INDUSTRIAL_BUILDINGS,
+  AdjacentCity,
+  WaterBody,
 } from '@/types/game';
+import { generateCityName, generateWaterName } from './names';
 
 // Perlin-like noise for terrain generation
 function noise2D(x: number, y: number, seed: number = 42): number {
@@ -67,8 +70,8 @@ function perlinNoise(x: number, y: number, seed: number, octaves: number = 4): n
   return total / maxValue;
 }
 
-// Generate 2-3 large, round lakes
-function generateLakes(grid: Tile[][], size: number, seed: number): void {
+// Generate 2-3 large, round lakes and return water body info
+function generateLakes(grid: Tile[][], size: number, seed: number): WaterBody[] {
   // Use noise to find potential lake centers - look for low points
   const lakeNoise = (x: number, y: number) => perlinNoise(x, y, seed + 1000, 3);
   
@@ -208,10 +211,200 @@ function generateLakes(grid: Tile[][], size: number, seed: number): void {
       grid[tile.y][tile.x].landValue = 60; // Water increases nearby land value
     }
   }
+  
+  // Create water body records for lakes
+  const waterBodies: WaterBody[] = [];
+  const processed = new Set<string>();
+  
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (grid[y][x].building.type === 'water') {
+        const key = `${x},${y}`;
+        if (processed.has(key)) continue;
+        
+        // Flood fill to find all connected water tiles
+        const bodyTiles: { x: number; y: number }[] = [];
+        const queue: { x: number; y: number }[] = [{ x, y }];
+        processed.add(key);
+        
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          bodyTiles.push(current);
+          
+          const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+          for (const [dx, dy] of directions) {
+            const nx = current.x + dx;
+            const ny = current.y + dy;
+            const nkey = `${nx},${ny}`;
+            
+            if (nx >= 0 && nx < size && ny >= 0 && ny < size &&
+                grid[ny][nx].building.type === 'water' && !processed.has(nkey)) {
+              processed.add(nkey);
+              queue.push({ x: nx, y: ny });
+            }
+          }
+        }
+        
+        // Only create water body if it's large enough (at least 10 tiles)
+        if (bodyTiles.length >= 10) {
+          waterBodies.push({
+            id: `lake-${waterBodies.length}`,
+            name: generateWaterName('lake'),
+            type: 'lake',
+            tiles: bodyTiles,
+          });
+        }
+      }
+    }
+  }
+  
+  return waterBodies;
 }
 
-// Generate terrain - grass with scattered trees and lakes
-function generateTerrain(size: number): Tile[][] {
+// Generate ocean connections on map edges
+function generateOceans(grid: Tile[][], size: number, seed: number): WaterBody[] {
+  const waterBodies: WaterBody[] = [];
+  const oceanTiles: { x: number; y: number }[] = [];
+  
+  // Decide which edges have oceans (30% chance per edge)
+  const hasNorthOcean = Math.random() < 0.3;
+  const hasSouthOcean = Math.random() < 0.3;
+  const hasEastOcean = Math.random() < 0.3;
+  const hasWestOcean = Math.random() < 0.3;
+  
+  // Generate ocean on north edge
+  if (hasNorthOcean) {
+    const oceanWidth = Math.floor(size * (0.15 + Math.random() * 0.15)); // 15-30% of map width
+    const startX = Math.floor(Math.random() * (size - oceanWidth));
+    const oceanDepth = Math.floor(size * (0.05 + Math.random() * 0.1)); // 5-15% of map height
+    
+    for (let y = 0; y < oceanDepth; y++) {
+      for (let x = startX; x < Math.min(startX + oceanWidth, size); x++) {
+        if (grid[y][x].building.type !== 'water') {
+          grid[y][x].building = createBuilding('water');
+          oceanTiles.push({ x, y });
+        }
+      }
+    }
+    
+    if (oceanTiles.length > 0) {
+      waterBodies.push({
+        id: 'ocean-north',
+        name: generateWaterName('ocean'),
+        type: 'ocean',
+        tiles: oceanTiles,
+      });
+      oceanTiles.length = 0;
+    }
+  }
+  
+  // Generate ocean on south edge
+  if (hasSouthOcean) {
+    const oceanWidth = Math.floor(size * (0.15 + Math.random() * 0.15));
+    const startX = Math.floor(Math.random() * (size - oceanWidth));
+    const oceanDepth = Math.floor(size * (0.05 + Math.random() * 0.1));
+    
+    for (let y = size - oceanDepth; y < size; y++) {
+      for (let x = startX; x < Math.min(startX + oceanWidth, size); x++) {
+        if (grid[y][x].building.type !== 'water') {
+          grid[y][x].building = createBuilding('water');
+          oceanTiles.push({ x, y });
+        }
+      }
+    }
+    
+    if (oceanTiles.length > 0) {
+      waterBodies.push({
+        id: 'ocean-south',
+        name: generateWaterName('ocean'),
+        type: 'ocean',
+        tiles: oceanTiles,
+      });
+      oceanTiles.length = 0;
+    }
+  }
+  
+  // Generate ocean on east edge
+  if (hasEastOcean) {
+    const oceanHeight = Math.floor(size * (0.15 + Math.random() * 0.15));
+    const startY = Math.floor(Math.random() * (size - oceanHeight));
+    const oceanWidth = Math.floor(size * (0.05 + Math.random() * 0.1));
+    
+    for (let y = startY; y < Math.min(startY + oceanHeight, size); y++) {
+      for (let x = 0; x < oceanWidth; x++) {
+        if (grid[y][x].building.type !== 'water') {
+          grid[y][x].building = createBuilding('water');
+          oceanTiles.push({ x, y });
+        }
+      }
+    }
+    
+    if (oceanTiles.length > 0) {
+      waterBodies.push({
+        id: 'ocean-east',
+        name: generateWaterName('ocean'),
+        type: 'ocean',
+        tiles: oceanTiles,
+      });
+      oceanTiles.length = 0;
+    }
+  }
+  
+  // Generate ocean on west edge
+  if (hasWestOcean) {
+    const oceanHeight = Math.floor(size * (0.15 + Math.random() * 0.15));
+    const startY = Math.floor(Math.random() * (size - oceanHeight));
+    const oceanWidth = Math.floor(size * (0.05 + Math.random() * 0.1));
+    
+    for (let y = startY; y < Math.min(startY + oceanHeight, size); y++) {
+      for (let x = size - oceanWidth; x < size; x++) {
+        if (grid[y][x].building.type !== 'water') {
+          grid[y][x].building = createBuilding('water');
+          oceanTiles.push({ x, y });
+        }
+      }
+    }
+    
+    if (oceanTiles.length > 0) {
+      waterBodies.push({
+        id: 'ocean-west',
+        name: generateWaterName('ocean'),
+        type: 'ocean',
+        tiles: oceanTiles,
+      });
+    }
+  }
+  
+  return waterBodies;
+}
+
+// Generate adjacent cities (sometimes, not always)
+function generateAdjacentCities(): AdjacentCity[] {
+  const cities: AdjacentCity[] = [];
+  const directions: ('north' | 'east' | 'south' | 'west')[] = ['north', 'east', 'south', 'west'];
+  
+  // 60% chance to have at least one adjacent city
+  if (Math.random() < 0.6) {
+    // Randomly select 1-3 directions for cities
+    const numCities = 1 + Math.floor(Math.random() * 3);
+    const selectedDirections = directions
+      .sort(() => Math.random() - 0.5)
+      .slice(0, numCities);
+    
+    for (const direction of selectedDirections) {
+      cities.push({
+        name: generateCityName(),
+        direction,
+        connected: false,
+      });
+    }
+  }
+  
+  return cities;
+}
+
+// Generate terrain - grass with scattered trees, lakes, and oceans
+function generateTerrain(size: number): { grid: Tile[][]; waterBodies: WaterBody[] } {
   const grid: Tile[][] = [];
   const seed = Math.random() * 1000;
 
@@ -225,9 +418,12 @@ function generateTerrain(size: number): Tile[][] {
   }
   
   // Second pass: add lakes (small contiguous water regions)
-  generateLakes(grid, size, seed);
+  const lakeBodies = generateLakes(grid, size, seed);
   
-  // Third pass: add scattered trees (avoiding water)
+  // Third pass: add oceans on edges
+  const oceanBodies = generateOceans(grid, size, seed);
+  
+  // Fourth pass: add scattered trees (avoiding water)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (grid[y][x].building.type === 'water') continue; // Don't place trees on water
@@ -245,7 +441,7 @@ function generateTerrain(size: number): Tile[][] {
     }
   }
 
-  return grid;
+  return { grid, waterBodies: [...lakeBodies, ...oceanBodies] };
 }
 
 // Check if a tile is near water
@@ -354,7 +550,8 @@ function createAchievements(): Achievement[] {
 }
 
 export function createInitialGameState(size: number = 60, cityName: string = 'New City'): GameState {
-  const grid = generateTerrain(size);
+  const { grid, waterBodies } = generateTerrain(size);
+  const adjacentCities = generateAdjacentCities();
 
   return {
     grid,
@@ -376,6 +573,8 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     history: [],
     activePanel: 'none',
     disastersEnabled: true,
+    adjacentCities,
+    waterBodies,
   };
 }
 
