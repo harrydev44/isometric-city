@@ -99,6 +99,21 @@ type EmergencyVehicle = {
 
 // Pedestrian types and destinations
 type PedestrianDestType = 'school' | 'commercial' | 'industrial' | 'park' | 'home';
+type PedestrianState = 'heading_out' | 'entering' | 'visiting' | 'exiting' | 'returning';
+
+type PedestrianDestination = {
+  x: number;
+  y: number;
+  type: PedestrianDestType;
+  buildingType: BuildingType;
+};
+
+type PedestrianOffRoadEntry = {
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+};
 
 type Pedestrian = {
   id: number;
@@ -114,11 +129,24 @@ type Pedestrian = {
   walkOffset: number; // For walking animation
   sidewalkSide: 'left' | 'right'; // Which side of the road they walk on
   destType: PedestrianDestType;
+  destBuildingType: BuildingType;
   homeX: number;
   homeY: number;
   destX: number;
   destY: number;
-  returningHome: boolean;
+  destRoadX: number;
+  destRoadY: number;
+  state: PedestrianState;
+  canEnterDestination: boolean;
+  offRoadProgress: number;
+  offRoadEntry?: PedestrianOffRoadEntry;
+  visitDuration: number;
+  visitTimer: number;
+  visitTargetX: number;
+  visitTargetY: number;
+  visitWanderTimer: number;
+  visitJitterX: number;
+  visitJitterY: number;
   path: { x: number; y: number }[];
   pathIndex: number;
 };
@@ -147,6 +175,15 @@ const PEDESTRIAN_SHIRT_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3
 
 // Minimum zoom level to show pedestrians (zoomed in)
 const PEDESTRIAN_MIN_ZOOM = 0.5;
+
+const PEDESTRIAN_SHOP_BUILDINGS = new Set<BuildingType>(['shop_small', 'shop_medium', 'mall']);
+const PEDESTRIAN_RECREATION_BUILDINGS = new Set<BuildingType>(['park', 'park_large', 'tennis']);
+const PEDESTRIAN_INTERACTIVE_BUILDINGS = new Set<BuildingType>([
+  ...PEDESTRIAN_SHOP_BUILDINGS,
+  ...PEDESTRIAN_RECREATION_BUILDINGS,
+]);
+const PEDESTRIAN_ENTRY_SPEED = 1.35;
+const PEDESTRIAN_EXIT_SPEED = 1.45;
 
 function createDirectionMeta(step: { x: number; y: number }, vec: { dx: number; dy: number }): DirectionMeta {
   const length = Math.hypot(vec.dx, vec.dy) || 1;
@@ -339,11 +376,95 @@ function getDirectionToTile(fromX: number, fromY: number, toX: number, toY: numb
   return null;
 }
 
+function buildingSupportsPedEntry(buildingType: BuildingType): boolean {
+  return PEDESTRIAN_INTERACTIVE_BUILDINGS.has(buildingType);
+}
+
+function isRoadAdjacentToBuilding(
+  buildingX: number,
+  buildingY: number,
+  buildingType: BuildingType,
+  roadX: number,
+  roadY: number
+): boolean {
+  const size = getBuildingSize(buildingType);
+  for (let dy = 0; dy < size.height; dy++) {
+    for (let dx = 0; dx < size.width; dx++) {
+      const tileX = buildingX + dx;
+      const tileY = buildingY + dy;
+      if (Math.abs(tileX - roadX) <= 1 && Math.abs(tileY - roadY) <= 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getRandomVisitPoint(buildingX: number, buildingY: number, buildingType: BuildingType): { x: number; y: number } {
+  const size = getBuildingSize(buildingType);
+  const padding = 0.2;
+  const widthSpan = Math.max(0.0001, size.width - padding * 2);
+  const heightSpan = Math.max(0.0001, size.height - padding * 2);
+  const x = buildingX + padding + Math.random() * widthSpan;
+  const y = buildingY + padding + Math.random() * heightSpan;
+  return { x, y };
+}
+
+function getVisitDurationForDestination(destType: PedestrianDestType, buildingType: BuildingType): number {
+  if (buildingType === 'tennis') {
+    return 8 + Math.random() * 6;
+  }
+  if (destType === 'park') {
+    if (buildingType === 'park_large') {
+      return 10 + Math.random() * 10;
+    }
+    return 6 + Math.random() * 6;
+  }
+  if (destType === 'commercial' && PEDESTRIAN_SHOP_BUILDINGS.has(buildingType)) {
+    return 4 + Math.random() * 4;
+  }
+  return 3 + Math.random() * 3;
+}
+
+function getVisitWanderRadius(buildingType: BuildingType): number {
+  if (buildingType === 'park_large') return 12;
+  if (buildingType === 'park') return 8;
+  if (buildingType === 'tennis') return 10;
+  if (buildingType === 'mall') return 6;
+  if (PEDESTRIAN_SHOP_BUILDINGS.has(buildingType)) return 4;
+  return 3;
+}
+
+function shouldPedEnterDestination(
+  buildingType: BuildingType,
+  destX: number,
+  destY: number,
+  roadX: number,
+  roadY: number
+): boolean {
+  if (!buildingSupportsPedEntry(buildingType)) {
+    return false;
+  }
+  return isRoadAdjacentToBuilding(destX, destY, buildingType, roadX, roadY);
+}
+
 // Convert grid coordinates to screen coordinates (isometric)
 function gridToScreen(x: number, y: number, offsetX: number, offsetY: number): { screenX: number; screenY: number } {
   const screenX = (x - y) * (TILE_WIDTH / 2) + offsetX;
   const screenY = (x + y) * (TILE_HEIGHT / 2) + offsetY;
   return { screenX, screenY };
+}
+
+function computePedestrianRoadWorldPosition(ped: Pedestrian): { x: number; y: number } {
+  const { screenX, screenY } = gridToScreen(ped.tileX, ped.tileY, 0, 0);
+  const centerX = screenX + TILE_WIDTH / 2;
+  const centerY = screenY + TILE_HEIGHT / 2;
+  const meta = DIRECTION_META[ped.direction];
+  const sidewalkOffset = ped.sidewalkSide === 'left' ? -12 : 12;
+  return {
+    x: centerX + meta.vec.dx * ped.progress + meta.normal.nx * sidewalkOffset,
+    y: centerY + meta.vec.dy * ped.progress + meta.normal.ny * sidewalkOffset,
+  };
 }
 
 // Convert screen coordinates to grid coordinates
@@ -1948,11 +2069,11 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   }, []);
 
   // Find destinations for pedestrians (schools, commercial, industrial, parks)
-  const findPedestrianDestinations = useCallback((): { x: number; y: number; type: PedestrianDestType }[] => {
+  const findPedestrianDestinations = useCallback((): PedestrianDestination[] => {
     const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
     if (!currentGrid || currentGridSize <= 0) return [];
     
-    const destinations: { x: number; y: number; type: PedestrianDestType }[] = [];
+    const destinations: PedestrianDestination[] = [];
     const schoolTypes: BuildingType[] = ['school', 'university'];
     const commercialTypes: BuildingType[] = ['shop_small', 'shop_medium', 'office_low', 'office_high', 'mall'];
     const industrialTypes: BuildingType[] = ['factory_small', 'factory_medium', 'factory_large', 'warehouse'];
@@ -1962,15 +2083,15 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       for (let x = 0; x < currentGridSize; x++) {
         const buildingType = currentGrid[y][x].building.type;
         if (schoolTypes.includes(buildingType)) {
-          destinations.push({ x, y, type: 'school' });
+          destinations.push({ x, y, type: 'school', buildingType });
         } else if (commercialTypes.includes(buildingType)) {
           // Include any commercial building
-          destinations.push({ x, y, type: 'commercial' });
+          destinations.push({ x, y, type: 'commercial', buildingType });
         } else if (industrialTypes.includes(buildingType)) {
           // Include any industrial building
-          destinations.push({ x, y, type: 'industrial' });
+          destinations.push({ x, y, type: 'industrial', buildingType });
         } else if (parkTypes.includes(buildingType)) {
-          destinations.push({ x, y, type: 'park' });
+          destinations.push({ x, y, type: 'park', buildingType });
         }
       }
     }
@@ -2004,19 +2125,40 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       return false;
     }
     
+    const destRoad = path[path.length - 1];
+    const visitTarget = getRandomVisitPoint(dest.x, dest.y, dest.buildingType);
+    const visitDuration = getVisitDurationForDestination(dest.type, dest.buildingType);
+    const canEnterDestination = shouldPedEnterDestination(dest.buildingType, dest.x, dest.y, destRoad.x, destRoad.y);
+    
     // Start at a random point along the path for better distribution
     const startIndex = Math.floor(Math.random() * path.length);
-    const startTile = path[startIndex];
+    const outbound = startIndex < path.length - 1;
+    
+    let pathToUse = path;
+    let pathIndex = Math.min(startIndex, path.length - 1);
+    let state: PedestrianState = 'heading_out';
+    
+    if (!outbound) {
+      const returnPath = findPathOnRoads(currentGrid, currentGridSize, dest.x, dest.y, home.x, home.y);
+      if (!returnPath || returnPath.length === 0) {
+        return false;
+      }
+      pathToUse = returnPath;
+      pathIndex = 0;
+      state = 'returning';
+    }
+    
+    const startTile = pathToUse[pathIndex];
     
     // Determine initial direction based on next tile in path
     let direction: CarDirection = 'south';
-    if (startIndex + 1 < path.length) {
-      const nextTile = path[startIndex + 1];
+    if (pathIndex + 1 < pathToUse.length) {
+      const nextTile = pathToUse[pathIndex + 1];
       const dir = getDirectionToTile(startTile.x, startTile.y, nextTile.x, nextTile.y);
       if (dir) direction = dir;
-    } else if (startIndex > 0) {
+    } else if (pathIndex > 0) {
       // At end of path, use previous tile to determine direction
-      const prevTile = path[startIndex - 1];
+      const prevTile = pathToUse[pathIndex - 1];
       const dir = getDirectionToTile(prevTile.x, prevTile.y, startTile.x, startTile.y);
       if (dir) direction = dir;
     }
@@ -2036,12 +2178,26 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       walkOffset: Math.random() * Math.PI * 2,
       sidewalkSide: Math.random() < 0.5 ? 'left' : 'right',
       destType: dest.type,
+      destBuildingType: dest.buildingType,
       homeX: home.x,
       homeY: home.y,
       destX: dest.x,
       destY: dest.y,
-      returningHome: startIndex >= path.length - 1, // If starting at end, they're returning
-      path,
+      destRoadX: destRoad.x,
+      destRoadY: destRoad.y,
+      state,
+      canEnterDestination,
+      offRoadProgress: 0,
+      offRoadEntry: undefined,
+      visitDuration,
+      visitTimer: 0,
+      visitTargetX: visitTarget.x,
+      visitTargetY: visitTarget.y,
+      visitWanderTimer: 0,
+      visitJitterX: 0,
+      visitJitterY: 0,
+      path: pathToUse,
+      pathIndex,
     });
     
     return true;
@@ -2596,48 +2752,115 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     const updatedPedestrians: Pedestrian[] = [];
     
     for (const ped of [...pedestriansRef.current]) {
-      let alive = true;
-      
-      // Update age
       ped.age += delta;
       if (ped.age > ped.maxAge) {
         continue;
       }
       
-      // Update walk animation
       ped.walkOffset += delta * 8;
       
-      // Check if still on valid road
+      const beginReturnTrip = (): boolean => {
+        const returnPath = findPathOnRoads(currentGrid, currentGridSize, ped.destX, ped.destY, ped.homeX, ped.homeY);
+        if (returnPath && returnPath.length > 0) {
+          ped.path = returnPath;
+          ped.pathIndex = 0;
+          ped.progress = 0;
+          ped.tileX = returnPath[0].x;
+          ped.tileY = returnPath[0].y;
+          ped.state = 'returning';
+          ped.offRoadEntry = undefined;
+          ped.offRoadProgress = 0;
+          ped.visitJitterX = 0;
+          ped.visitJitterY = 0;
+          if (returnPath.length > 1) {
+            const nextTile = returnPath[1];
+            const dir = getDirectionToTile(returnPath[0].x, returnPath[0].y, nextTile.x, nextTile.y);
+            if (dir) ped.direction = dir;
+          }
+          return true;
+        }
+        return false;
+      };
+      
+      const startDestinationVisit = () => {
+        const startPosition = computePedestrianRoadWorldPosition(ped);
+        const targetPoint = gridToScreen(ped.visitTargetX, ped.visitTargetY, 0, 0);
+        ped.offRoadEntry = {
+          startX: startPosition.x,
+          startY: startPosition.y,
+          targetX: targetPoint.screenX + TILE_WIDTH / 2,
+          targetY: targetPoint.screenY + TILE_HEIGHT / 2,
+        };
+        ped.state = 'entering';
+        ped.offRoadProgress = 0;
+        ped.visitTimer = ped.visitDuration;
+        ped.visitWanderTimer = 0;
+        ped.visitJitterX = 0;
+        ped.visitJitterY = 0;
+      };
+      
+      const handleArrival = (): boolean => {
+        if (ped.state === 'heading_out') {
+          if (ped.canEnterDestination) {
+            startDestinationVisit();
+            return true;
+          }
+          return beginReturnTrip();
+        }
+        return false;
+      };
+      
+      if (ped.state === 'entering') {
+        ped.offRoadProgress = Math.min(1, ped.offRoadProgress + delta * speedMultiplier * PEDESTRIAN_ENTRY_SPEED);
+        if (ped.offRoadProgress >= 1) {
+          ped.state = 'visiting';
+          ped.visitTimer = ped.visitDuration;
+        }
+        updatedPedestrians.push(ped);
+        continue;
+      }
+      
+      if (ped.state === 'visiting') {
+        ped.visitTimer -= delta * speedMultiplier;
+        ped.visitWanderTimer += delta * speedMultiplier;
+        const wanderRadius = getVisitWanderRadius(ped.destBuildingType);
+        ped.visitJitterX = Math.sin(ped.visitWanderTimer * 1.3) * wanderRadius;
+        ped.visitJitterY = Math.cos(ped.visitWanderTimer * 0.9) * wanderRadius;
+        if (ped.visitTimer <= 0) {
+          ped.state = 'exiting';
+        }
+        updatedPedestrians.push(ped);
+        continue;
+      }
+      
+      if (ped.state === 'exiting') {
+        ped.offRoadProgress = Math.max(0, ped.offRoadProgress - delta * speedMultiplier * PEDESTRIAN_EXIT_SPEED);
+        if (ped.offRoadProgress <= 0) {
+          if (!beginReturnTrip()) {
+            continue;
+          }
+        }
+        updatedPedestrians.push(ped);
+        continue;
+      }
+      
       if (!isRoadTile(currentGrid, currentGridSize, ped.tileX, ped.tileY)) {
         continue;
       }
       
-      // Move pedestrian along path
       ped.progress += ped.speed * delta * speedMultiplier;
       
-      // Handle single-tile paths (already at destination)
-      if (ped.path.length === 1 && ped.progress >= 1) {
-        if (!ped.returningHome) {
-          ped.returningHome = true;
-          const returnPath = findPathOnRoads(currentGrid, currentGridSize, ped.destX, ped.destY, ped.homeX, ped.homeY);
-          if (returnPath && returnPath.length > 0) {
-            ped.path = returnPath;
-            ped.pathIndex = 0;
-            ped.progress = 0;
-            ped.tileX = returnPath[0].x;
-            ped.tileY = returnPath[0].y;
-            if (returnPath.length > 1) {
-              const nextTile = returnPath[1];
-              const dir = getDirectionToTile(returnPath[0].x, returnPath[0].y, nextTile.x, nextTile.y);
-              if (dir) ped.direction = dir;
-            }
-          } else {
-            continue; // Remove pedestrian
+      if (ped.path.length === 1) {
+        if (ped.progress >= 1) {
+          if (!handleArrival()) {
+            continue;
           }
-        } else {
-          continue; // Arrived home, remove
         }
+        updatedPedestrians.push(ped);
+        continue;
       }
+      
+      let alive = true;
       
       while (ped.progress >= 1 && ped.pathIndex < ped.path.length - 1) {
         ped.pathIndex++;
@@ -2645,7 +2868,6 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         
         const currentTile = ped.path[ped.pathIndex];
         
-        // Bounds check
         if (currentTile.x < 0 || currentTile.x >= currentGridSize ||
             currentTile.y < 0 || currentTile.y >= currentGridSize) {
           alive = false;
@@ -2655,33 +2877,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         ped.tileX = currentTile.x;
         ped.tileY = currentTile.y;
         
-        // Check if reached end of path
         if (ped.pathIndex >= ped.path.length - 1) {
-          if (!ped.returningHome) {
-            // Arrived at destination - start returning home
-            ped.returningHome = true;
-            const returnPath = findPathOnRoads(currentGrid, currentGridSize, ped.destX, ped.destY, ped.homeX, ped.homeY);
-            if (returnPath && returnPath.length > 0) {
-              ped.path = returnPath;
-              ped.pathIndex = 0;
-              ped.progress = 0;
-              // Update direction for return trip
-              if (returnPath.length > 1) {
-                const nextTile = returnPath[1];
-                const dir = getDirectionToTile(returnPath[0].x, returnPath[0].y, nextTile.x, nextTile.y);
-                if (dir) ped.direction = dir;
-              }
-            } else {
-              alive = false;
-            }
-          } else {
-            // Arrived back home - remove pedestrian
-            alive = false;
-          }
           break;
         }
         
-        // Update direction for next segment
         if (ped.pathIndex + 1 < ped.path.length) {
           const nextTile = ped.path[ped.pathIndex + 1];
           const dir = getDirectionToTile(ped.tileX, ped.tileY, nextTile.x, nextTile.y);
@@ -2689,9 +2888,17 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         }
       }
       
-      if (alive) {
-        updatedPedestrians.push(ped);
+      if (!alive) {
+        continue;
       }
+      
+      if (ped.pathIndex >= ped.path.length - 1) {
+        if (!handleArrival()) {
+          continue;
+        }
+      }
+      
+      updatedPedestrians.push(ped);
     }
     
     pedestriansRef.current = updatedPedestrians;
@@ -2838,16 +3045,20 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     const viewRight = viewWidth - currentOffset.x / currentZoom + TILE_WIDTH;
     const viewBottom = viewHeight - currentOffset.y / currentZoom + TILE_HEIGHT * 2;
     
-    // Helper function to check if pedestrian is behind a building
-    const isPedBehindBuilding = (pedTileX: number, pedTileY: number): boolean => {
-      const pedDepth = pedTileX + pedTileY;
+    const isPedBehindBuilding = (ped: Pedestrian): boolean => {
+      if (ped.state === 'entering' || ped.state === 'visiting' || ped.state === 'exiting') {
+        // Keep off-road pedestrians visible while they explore destinations
+        return false;
+      }
+      
+      const pedDepth = ped.tileX + ped.tileY;
       
       for (let dy = 0; dy <= 1; dy++) {
         for (let dx = 0; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
           
-          const checkX = pedTileX + dx;
-          const checkY = pedTileY + dy;
+          const checkX = ped.tileX + dx;
+          const checkY = ped.tileY + dy;
           
           if (checkX < 0 || checkY < 0 || checkX >= currentGridSize || checkY >= currentGridSize) {
             continue;
@@ -2872,16 +3083,23 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       return false;
     };
     
+    const getPedWorldPosition = (ped: Pedestrian): { x: number; y: number } => {
+      if ((ped.state === 'entering' || ped.state === 'visiting' || ped.state === 'exiting') && ped.offRoadEntry) {
+        const { startX, startY, targetX, targetY } = ped.offRoadEntry;
+        const baseX = startX + (targetX - startX) * ped.offRoadProgress;
+        const baseY = startY + (targetY - startY) * ped.offRoadProgress;
+        if (ped.state === 'visiting') {
+          return { x: baseX + ped.visitJitterX, y: baseY + ped.visitJitterY };
+        }
+        return { x: baseX, y: baseY };
+      }
+      return computePedestrianRoadWorldPosition(ped);
+    };
+    
     pedestriansRef.current.forEach(ped => {
-      const { screenX, screenY } = gridToScreen(ped.tileX, ped.tileY, 0, 0);
-      const centerX = screenX + TILE_WIDTH / 2;
-      const centerY = screenY + TILE_HEIGHT / 2;
-      const meta = DIRECTION_META[ped.direction];
-      
-      // Pedestrians walk on sidewalks - offset them toward the edge of the road
-      const sidewalkOffset = ped.sidewalkSide === 'left' ? -12 : 12;
-      const pedX = centerX + meta.vec.dx * ped.progress + meta.normal.nx * sidewalkOffset;
-      const pedY = centerY + meta.vec.dy * ped.progress + meta.normal.ny * sidewalkOffset;
+      const position = getPedWorldPosition(ped);
+      const pedX = position.x;
+      const pedY = position.y;
       
       // Viewport culling
       if (pedX < viewLeft - 20 || pedX > viewRight + 20 || pedY < viewTop - 40 || pedY > viewBottom + 40) {
@@ -2889,7 +3107,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       }
       
       // Check if pedestrian is behind a building
-      if (isPedBehindBuilding(ped.tileX, ped.tileY)) {
+      if (isPedBehindBuilding(ped)) {
         return;
       }
       
