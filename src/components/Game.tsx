@@ -518,13 +518,6 @@ const TopBar = React.memo(function TopBar() {
   
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
-  // Format hour as 12-hour time
-  const formatTime = (h: number) => {
-    const period = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayHour}:00 ${period}`;
-  };
-  
   return (
     <div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
       <div className="flex items-center gap-6">
@@ -537,11 +530,7 @@ const TopBar = React.memo(function TopBar() {
           </div>
           <div className="flex items-center gap-2 text-muted-foreground text-xs font-mono tabular-nums">
             <span>{monthNames[month - 1]} {year}</span>
-            <span className="text-muted-foreground/50">•</span>
-            <span className="flex items-center gap-1">
-              <TimeOfDayIcon hour={hour} />
-              {formatTime(hour)}
-            </span>
+            <TimeOfDayIcon hour={hour} />
           </div>
         </div>
         
@@ -4902,8 +4891,8 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
           
           // Number of window lights based on building size
           let numWindows = 2;
-          if (buildingType.includes('medium') || buildingType.includes('low')) numWindows = 3;
-          if (buildingType.includes('high') || buildingType === 'mall') numWindows = 5;
+          if (buildingType?.includes('medium') || buildingType?.includes('low')) numWindows = 3;
+          if (buildingType?.includes('high') || buildingType === 'mall') numWindows = 5;
           if (buildingType === 'mansion' || buildingType === 'office_high') numWindows = 4;
           
           // Draw window light cutouts

@@ -242,6 +242,7 @@ export interface GameState {
   speed: 0 | 1 | 2 | 3;
   selectedTool: Tool;
   taxRate: number;
+  effectiveTaxRate: number; // Lagging tax rate that gradually moves toward taxRate (affects demand)
   stats: Stats;
   budget: Budget;
   services: ServiceCoverage;

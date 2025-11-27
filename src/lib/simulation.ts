@@ -573,6 +573,7 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     speed: 1,
     selectedTool: 'select',
     taxRate: 9,
+    effectiveTaxRate: 9, // Start matching taxRate
     stats: createInitialStats(),
     budget: createInitialBudget(),
     services: createServiceCoverage(size),
@@ -976,7 +977,8 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
 }
 
 // Calculate city stats
-function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: number, services: ServiceCoverage): Stats {
+// effectiveTaxRate is the lagged tax rate used for demand calculations
+function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: number, effectiveTaxRate: number, services: ServiceCoverage): Stats {
   let population = 0;
   let jobs = 0;
   let totalPollution = 0;
@@ -1031,10 +1033,16 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
   }
 
   // Calculate demand - subway network boosts commercial demand
+  // Tax rate affects demand: higher taxes reduce demand, lower taxes increase it
+  // Base tax rate is 9%, so we calculate penalty/bonus relative to that
+  // At 9% tax: no modifier. At 0% tax: +18 demand. At 20% tax: -22 demand
+  // Uses effectiveTaxRate (lagged) so changes don't impact demand immediately
+  const taxDemandModifier = (9 - effectiveTaxRate) * 2;
+  
   const subwayBonus = Math.min(20, subwayTiles * 0.5 + subwayStations * 3);
-  const residentialDemand = Math.min(100, Math.max(-100, (jobs - population * 0.7) / 18));
-  const commercialDemand = Math.min(100, Math.max(-100, (population * 0.3 - jobs * 0.3) / 4 + subwayBonus));
-  const industrialDemand = Math.min(100, Math.max(-100, (population * 0.35 - jobs * 0.3) / 2.0));
+  const residentialDemand = Math.min(100, Math.max(-100, (jobs - population * 0.7) / 18 + taxDemandModifier));
+  const commercialDemand = Math.min(100, Math.max(-100, (population * 0.3 - jobs * 0.3) / 4 + subwayBonus + taxDemandModifier * 0.8));
+  const industrialDemand = Math.min(100, Math.max(-100, (population * 0.35 - jobs * 0.3) / 2.0 + taxDemandModifier * 0.5));
 
   // Calculate income and expenses
   const income = Math.floor(population * taxRate * 0.1 + jobs * taxRate * 0.05);
@@ -1386,12 +1394,16 @@ export function simulateTick(state: GameState): GameState {
 
       // Progress construction for non-zoned buildings (service buildings, parks, etc.)
       // Zoned buildings handle construction in evolveBuilding
-      if (tile.zone === 'none' && 
-          tile.building.constructionProgress !== undefined && 
+      if (tile.zone === 'none' &&
+          tile.building.constructionProgress !== undefined &&
           tile.building.constructionProgress < 100 &&
           !NO_CONSTRUCTION_TYPES.includes(tile.building.type)) {
-        // Construction requires power and water to progress
-        if (tile.building.powered && tile.building.watered) {
+        // Utility buildings (power plants, water towers) can construct without requiring utilities
+        // This prevents a chicken-and-egg problem where you need power to build power plants
+        const isUtilityBuilding = tile.building.type === 'power_plant' || tile.building.type === 'water_tower';
+        const canConstruct = isUtilityBuilding || (tile.building.powered && tile.building.watered);
+        
+        if (canConstruct) {
           // Construction speed scales with building size (larger buildings take longer)
           const constructionSpeed = getConstructionSpeed(tile.building.type);
           tile.building.constructionProgress = Math.min(100, tile.building.constructionProgress + constructionSpeed);
@@ -1460,8 +1472,14 @@ export function simulateTick(state: GameState): GameState {
   // Update budget costs
   const newBudget = updateBudgetCosts(newGrid, state.budget);
 
-  // Calculate stats
-  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, services);
+  // Gradually move effectiveTaxRate toward taxRate
+  // This creates a lagging effect so tax changes don't immediately impact demand
+  // Rate of change: ~0.1% per tick, so a 10% change takes ~100 ticks (~3 game days)
+  const taxRateDiff = state.taxRate - state.effectiveTaxRate;
+  const newEffectiveTaxRate = state.effectiveTaxRate + taxRateDiff * 0.02;
+
+  // Calculate stats (using lagged effectiveTaxRate for demand calculations)
+  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
   newStats.money = state.stats.money;
 
   // Update money on month change
@@ -1541,6 +1559,7 @@ export function simulateTick(state: GameState): GameState {
     day: newDay,
     hour: newHour,
     tick: newTick,
+    effectiveTaxRate: newEffectiveTaxRate,
     stats: newStats,
     budget: newBudget,
     services,

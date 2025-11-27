@@ -127,6 +127,10 @@ function loadGameState(): GameState | null {
         if (parsed.hour === undefined) {
           parsed.hour = 12; // Default to noon
         }
+        // Ensure effectiveTaxRate exists for lagging tax effect
+        if (parsed.effectiveTaxRate === undefined) {
+          parsed.effectiveTaxRate = parsed.taxRate ?? 9; // Start at current tax rate
+        }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -515,6 +519,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         if (!parsed.waterBodies) {
           parsed.waterBodies = [];
+        }
+        // Ensure effectiveTaxRate exists for lagging tax effect
+        if (parsed.effectiveTaxRate === undefined) {
+          parsed.effectiveTaxRate = parsed.taxRate ?? 9;
         }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
