@@ -133,6 +133,25 @@ export type EmergencyVehicle = {
 // Pedestrian types and destinations
 export type PedestrianDestType = 'school' | 'commercial' | 'industrial' | 'park' | 'home';
 
+export type Train = {
+  id: number;
+  tileX: number;
+  tileY: number;
+  direction: CarDirection;
+  progress: number;
+  speed: number;
+  age: number;
+  maxAge: number;
+  color: string;
+  cars: number; // Number of cars in the train (1-4)
+  stationX: number; // Origin station
+  stationY: number;
+  destStationX: number; // Destination station
+  destStationY: number;
+  path: { x: number; y: number }[];
+  pathIndex: number;
+};
+
 export type Pedestrian = {
   id: number;
   tileX: number;

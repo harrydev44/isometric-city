@@ -30,6 +30,7 @@ import {
   PedestrianDestType,
   Firework,
   WorldRenderState,
+  Train,
 } from '@/components/game/types';
 import {
   CAR_COLORS,
@@ -112,6 +113,7 @@ import { drawPedestrians as drawPedestriansUtil } from '@/components/game/drawPe
 import { useVehicleSystems, VehicleSystemRefs, VehicleSystemState } from '@/components/game/vehicleSystems';
 import { useBuildingHelpers } from '@/components/game/buildingHelpers';
 import { useAircraftSystems, AircraftSystemRefs, AircraftSystemState } from '@/components/game/aircraftSystems';
+import { useTrainSystem, TrainSystemRefs, TrainSystemState } from '@/components/game/trainSystem';
 import {
   analyzeMergedRoad,
   getAdjacentRoads,
@@ -181,6 +183,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const pedestriansRef = useRef<Pedestrian[]>([]);
   const pedestrianIdRef = useRef(0);
   const pedestrianSpawnTimerRef = useRef(0);
+  
+  // Train system refs
+  const trainsRef = useRef<Train[]>([]);
+  const trainIdRef = useRef(0);
+  const trainSpawnTimerRef = useRef(0);
   
   // Touch gesture state for mobile
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -322,6 +329,24 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     cachedPopulationRef,
     isMobile,
   };
+
+  // Train system refs and state
+  const trainSystemRefs: TrainSystemRefs = {
+    trainsRef,
+    trainIdRef,
+    trainSpawnTimerRef,
+  };
+
+  const trainSystemState: TrainSystemState = {
+    worldStateRef,
+    isMobile,
+  };
+
+  const {
+    spawnTrain,
+    updateTrains,
+    drawTrains,
+  } = useTrainSystem(trainSystemRefs, trainSystemState);
 
   const {
     updateAirplanes,
@@ -2357,6 +2382,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         leftColor = '#3a3a3a';
         rightColor = '#5a5a5a';
         strokeColor = '#333';
+      } else if (tile.building.type === 'rail') {
+        topColor = '#2a2a2a';
+        leftColor = '#1a1a1a';
+        rightColor = '#3a3a3a';
+        strokeColor = '#111';
       } else if (isPark) {
         topColor = '#4a7c3f';
         leftColor = '#3d6634';
@@ -3190,6 +3220,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           const depth = x + y;
           roadQueue.push({ screenX, screenY, tile, depth });
         }
+        // Rails go to their own queue (drawn above water, similar to roads)
+        else if (tile.building.type === 'rail') {
+          const depth = x + y;
+          roadQueue.push({ screenX, screenY, tile, depth }); // Use same queue as roads for now
+        }
         // Check for beach tiles (grass/empty tiles adjacent to water) - use pre-computed metadata
         else if ((tile.building.type === 'grass' || tile.building.type === 'empty') &&
                  (tileMetadata?.isAdjacentToWater ?? false)) {
@@ -3273,20 +3308,63 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // Draw roads (above water, needs full redraw including base tile)
     insertionSortByDepth(roadQueue);
     roadQueue.forEach(({ tile, screenX, screenY }) => {
-        // Draw road base tile first (grey diamond)
         const w = TILE_WIDTH;
         const h = TILE_HEIGHT;
-        ctx.fillStyle = '#4a4a4a';
-        ctx.beginPath();
-        ctx.moveTo(screenX + w / 2, screenY);
-        ctx.lineTo(screenX + w, screenY + h / 2);
-        ctx.lineTo(screenX + w / 2, screenY + h);
-        ctx.lineTo(screenX, screenY + h / 2);
-        ctx.closePath();
-        ctx.fill();
         
-        // Draw road markings and sidewalks
-        drawBuilding(ctx, screenX, screenY, tile);
+        if (tile.building.type === 'rail') {
+          // Draw rail track base (darker than roads)
+          ctx.fillStyle = '#2a2a2a';
+          ctx.beginPath();
+          ctx.moveTo(screenX + w / 2, screenY);
+          ctx.lineTo(screenX + w, screenY + h / 2);
+          ctx.lineTo(screenX + w / 2, screenY + h);
+          ctx.lineTo(screenX, screenY + h / 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Draw rail ties (sleepers) - horizontal lines across the track
+          if (zoom >= 0.5) {
+            ctx.strokeStyle = '#4a3a2a';
+            ctx.lineWidth = 1;
+            const numTies = 4;
+            const tieSpacing = h / (numTies + 1);
+            for (let i = 1; i <= numTies; i++) {
+              const tieY = screenY + tieSpacing * i;
+              ctx.beginPath();
+              ctx.moveTo(screenX + w * 0.3, tieY);
+              ctx.lineTo(screenX + w * 0.7, tieY);
+              ctx.stroke();
+            }
+            
+            // Draw rails (two parallel lines)
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1.5;
+            const railOffset = w * 0.15;
+            // Left rail
+            ctx.beginPath();
+            ctx.moveTo(screenX + w / 2 - railOffset, screenY);
+            ctx.lineTo(screenX + w / 2 - railOffset, screenY + h);
+            ctx.stroke();
+            // Right rail
+            ctx.beginPath();
+            ctx.moveTo(screenX + w / 2 + railOffset, screenY);
+            ctx.lineTo(screenX + w / 2 + railOffset, screenY + h);
+            ctx.stroke();
+          }
+        } else {
+          // Draw road base tile first (grey diamond)
+          ctx.fillStyle = '#4a4a4a';
+          ctx.beginPath();
+          ctx.moveTo(screenX + w / 2, screenY);
+          ctx.lineTo(screenX + w, screenY + h / 2);
+          ctx.lineTo(screenX + w / 2, screenY + h);
+          ctx.lineTo(screenX, screenY + h / 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Draw road markings and sidewalks
+          drawBuilding(ctx, screenX, screenY, tile);
+        }
       });
     
     // Draw green base tiles for grass/empty tiles adjacent to water (after water, before gray bases)
@@ -3484,6 +3562,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         updateCrimeIncidents(delta); // Update/decay crime incidents
         updateEmergencyVehicles(delta); // Update emergency vehicles!
         updatePedestrians(delta); // Update pedestrians (zoom-gated)
+        updateTrains(delta); // Update trains (rail stations required)
         updateAirplanes(delta); // Update airplanes (airport required)
         updateHelicopters(delta); // Update helicopters (hospital/airport required)
         updateBoats(delta); // Update boats (marina/pier required)
@@ -3501,6 +3580,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       } else {
         drawCars(ctx);
         drawPedestrians(ctx); // Draw pedestrians (zoom-gated)
+        drawTrains(ctx); // Draw trains on rails
         drawBoats(ctx); // Draw boats on water
         drawSmog(ctx); // Draw factory smog (above ground, below aircraft)
         drawEmergencyVehicles(ctx); // Draw emergency vehicles!
@@ -3513,7 +3593,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateBoats, drawBoats, drawIncidentIndicators, updateFireworks, drawFireworks, updateSmog, drawSmog, visualHour, isMobile]);
+  }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, updateTrains, drawTrains, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateBoats, drawBoats, drawIncidentIndicators, updateFireworks, drawFireworks, updateSmog, drawSmog, visualHour, isMobile]);
   
   // Day/Night cycle lighting rendering - optimized for performance
   useEffect(() => {
@@ -3805,8 +3885,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
             placedRoadTilesRef.current.clear();
             // Place immediately on first click
             placeAtTile(gridX, gridY);
-            // Track initial tile for roads and subways
-            if (selectedTool === 'road' || selectedTool === 'subway') {
+            // Track initial tile for roads, subways, and rails
+            if (selectedTool === 'road' || selectedTool === 'subway' || selectedTool === 'rail') {
               placedRoadTilesRef.current.add(`${gridX},${gridY}`);
             }
           }
@@ -3923,8 +4003,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         if (isDragging && showsDragGrid && dragStartTile) {
           setDragEndTile({ x: gridX, y: gridY });
         }
-        // For roads and subways, use straight-line snapping
-        else if (isDragging && (selectedTool === 'road' || selectedTool === 'subway') && dragStartTile) {
+        // For roads, subways, and rails, use straight-line snapping
+        else if (isDragging && (selectedTool === 'road' || selectedTool === 'subway' || selectedTool === 'rail') && dragStartTile) {
           const dx = Math.abs(gridX - dragStartTile.x);
           const dy = Math.abs(gridY - dragStartTile.y);
           

@@ -711,7 +711,7 @@ function createTile(x: number, y: number, buildingType: BuildingType = 'grass'):
 }
 
 // Building types that don't require construction (already complete when placed)
-const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'empty', 'water', 'road', 'tree'];
+const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'empty', 'water', 'road', 'rail', 'tree'];
 
 function createBuilding(type: BuildingType): Building {
   // Buildings that don't require construction start at 100% complete
@@ -1942,6 +1942,7 @@ const BUILDING_SIZES: Partial<Record<BuildingType, { width: number; height: numb
   power_plant: { width: 2, height: 2 },
   hospital: { width: 2, height: 2 },
   school: { width: 2, height: 2 },
+  rail_station: { width: 2, height: 2 },
   stadium: { width: 3, height: 3 },
   museum: { width: 3, height: 3 },
   university: { width: 3, height: 3 },
