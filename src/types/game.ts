@@ -289,6 +289,40 @@ export interface HistoryPoint {
   happiness: number;
 }
 
+export type Season = 'winter' | 'spring' | 'summer' | 'fall';
+
+export type WeatherType = 'clear' | 'rain' | 'snow' | 'lightning' | 'heat';
+
+export interface WeatherEconomicEffect {
+  incomeMultiplier: number;
+  expenseMultiplier: number;
+  happinessDelta: number;
+  demand: {
+    residential: number;
+    commercial: number;
+    industrial: number;
+  };
+}
+
+export interface WeatherState {
+  year: number;
+  month: number;
+  day: number;
+  season: Season;
+  type: WeatherType;
+  description: string;
+  intensity: number; // 0-1 scale
+  temperatureC: number;
+  humidity: number;
+  cloudCover: number; // 0-1 scale used for visuals
+  windSpeedKph: number;
+  precipitationRate: number; // mm/hr equivalent for visual intensity
+  lightningFrequency: number; // 0-1 probability for flashes
+  snowAccumulation: number; // 0-1 coverage to blend on surfaces
+  dayLengthHours: number; // daylight duration for lighting
+  economic: WeatherEconomicEffect;
+}
+
 export interface AdjacentCity {
   id: string;
   name: string;
@@ -328,6 +362,7 @@ export interface GameState {
   disastersEnabled: boolean;
   adjacentCities: AdjacentCity[];
   waterBodies: WaterBody[];
+  weather: WeatherState;
 }
 
 // Building evolution paths based on zone and level

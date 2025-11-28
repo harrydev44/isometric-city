@@ -3,7 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
-import { Tool, TOOL_INFO, Tile, BuildingType, AdjacentCity } from '@/types/game';
+import { Tool, TOOL_INFO, Tile, BuildingType, AdjacentCity, WeatherState } from '@/types/game';
 import { getBuildingSize, requiresWaterAdjacency, getWaterAdjacency } from '@/lib/simulation';
 import { useMobile } from '@/hooks/useMobile';
 import { MobileToolbar } from '@/components/mobile/MobileToolbar';
@@ -233,10 +233,49 @@ const TimeOfDayIcon = ({ hour }: { hour: number }) => {
   }
 };
 
+const WeatherIcon = ({ weather }: { weather: WeatherState }) => {
+  switch (weather.type) {
+    case 'rain':
+      return (
+        <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M7 18l-1.5 3M12 18l-1.5 3M17 18l-1.5 3" strokeLinecap="round" />
+          <path d="M7 17h10a4 4 0 100-8 5 5 0 10-9.9 1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'snow':
+      return (
+        <svg className="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M12 3v18M5 7l14 10M5 17L19 7" strokeLinecap="round" />
+          <path d="M7 3l2 2M15 3l2 2M7 21l2-2M15 21l2-2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'lightning':
+      return (
+        <svg className="w-5 h-5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13 2L4 14h6l-2 8 9-12h-6z" />
+        </svg>
+      );
+    case 'heat':
+      return (
+        <svg className="w-5 h-5 text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 3v2M12 19v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M3 12h2M19 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return (
+        <svg className="w-5 h-5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" strokeLinecap="round" />
+        </svg>
+      );
+  }
+};
+
 // Memoized TopBar Component
 const TopBar = React.memo(function TopBar() {
   const { state, setSpeed, setTaxRate, isSaving } = useGame();
-  const { stats, year, month, day, hour, speed, taxRate, cityName } = state;
+  const { stats, year, month, day, hour, speed, taxRate, cityName, weather } = state;
   
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const formattedDate = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}-${year}`;
@@ -263,6 +302,7 @@ const TopBar = React.memo(function TopBar() {
             <TimeOfDayIcon hour={hour} />
           </div>
         </div>
+        <WeatherBadge weather={weather} />
         
         <div className="flex items-center gap-1 bg-secondary rounded-md p-1">
           {[0, 1, 2, 3].map(s => (
@@ -342,6 +382,26 @@ function StatBadge({ value, label, variant = 'default' }: {
     <div className="flex flex-col items-start min-w-[70px]">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</div>
       <div className={`text-sm font-mono tabular-nums font-semibold ${colorClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function WeatherBadge({ weather }: { weather: WeatherState }) {
+  const label = weather.type.charAt(0).toUpperCase() + weather.type.slice(1);
+  const description = weather.description || label;
+  const daylight = `${weather.dayLengthHours.toFixed(1)}h daylight`;
+  const secondary = weather.type === 'rain' || weather.type === 'snow' || weather.type === 'lightning'
+    ? `${Math.round(weather.precipitationRate * 100)}% precip`
+    : `${Math.round(weather.humidity * 100)}% humidity`;
+  return (
+    <div className="flex items-center gap-3 bg-secondary/70 border border-border/40 rounded-md px-3 py-2 shadow-inner">
+      <WeatherIcon weather={weather} />
+      <div className="flex flex-col leading-tight">
+        <span className="text-xs font-semibold text-foreground">{description}</span>
+        <span className="text-[11px] text-muted-foreground capitalize">{label} • {Math.round(weather.temperatureC)}°C</span>
+        <span className="text-[11px] text-muted-foreground capitalize">{weather.season} • {daylight}</span>
+        <span className="text-[10px] text-muted-foreground/80">{secondary}</span>
+      </div>
     </div>
   );
 }
@@ -1844,10 +1904,11 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
   onViewportChange?: (viewport: { offset: { x: number; y: number }; zoom: number; canvasSize: { width: number; height: number } }) => void;
 }) {
   const { state, placeAtTile, connectToCity, currentSpritePack } = useGame();
-  const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, hour } = state;
+  const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, hour, weather } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const carsCanvasRef = useRef<HTMLCanvasElement>(null);
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const weatherCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1902,6 +1963,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
 
   // Navigation light flash timer for planes/helicopters/boats at night
   const navLightFlashTimerRef = useRef(0);
+
+  type CloudParticle = { x: number; y: number; width: number; height: number; speed: number; opacity: number };
+  type WeatherParticle = { x: number; y: number; speedX: number; speedY: number; length: number; type: 'rain' | 'snow'; opacity: number };
+  const cloudParticlesRef = useRef<CloudParticle[]>([]);
+  const precipitationParticlesRef = useRef<WeatherParticle[]>([]);
+  const lightningFlashRef = useRef(0);
 
   // Firework system refs
   const fireworksRef = useRef<Firework[]>([]);
@@ -5669,6 +5736,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
           lightingCanvasRef.current.style.width = `${rect.width}px`;
           lightingCanvasRef.current.style.height = `${rect.height}px`;
         }
+        if (weatherCanvasRef.current) {
+          weatherCanvasRef.current.style.width = `${rect.width}px`;
+          weatherCanvasRef.current.style.height = `${rect.height}px`;
+        }
         
         // Set actual size in memory (scaled for DPI)
         setCanvasSize({
@@ -7133,6 +7204,264 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     return () => cancelAnimationFrame(animationFrameId);
   }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateBoats, drawBoats, drawIncidentIndicators, updateFireworks, drawFireworks, updateSmog, drawSmog, hour, isMobile]);
   
+  // Atmospheric weather rendering layer
+  useEffect(() => {
+    const canvas = weatherCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const precipitationActive = weather.type === 'rain' || weather.type === 'snow' || weather.type === 'lightning';
+    const needsSnowOverlay = weather.snowAccumulation > 0.05 || weather.type === 'snow';
+    const dpr = window.devicePixelRatio || 1;
+
+    const createCloud = (): CloudParticle => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * Math.min(canvas.height * 0.4, 300 * dpr),
+      width: (isMobile ? 140 : 220) * (0.5 + Math.random()),
+      height: (isMobile ? 40 : 60) * (0.4 + Math.random()),
+      speed: (10 + weather.windSpeedKph * 0.6) * (0.5 + Math.random()),
+      opacity: 0.15 + weather.cloudCover * 0.4 + Math.random() * 0.1,
+    });
+
+    const rebuildClouds = () => {
+      cloudParticlesRef.current = [];
+      const count = Math.max(2, Math.round(weather.cloudCover * (isMobile ? 6 : 12)));
+      for (let i = 0; i < count; i++) {
+        cloudParticlesRef.current.push(createCloud());
+      }
+    };
+
+    rebuildClouds();
+    precipitationParticlesRef.current = [];
+    lightningFlashRef.current = 0;
+
+    const createPrecipitationParticle = (): WeatherParticle => {
+      if (weather.type === 'snow') {
+        const fallSpeed = 30 + weather.intensity * 40;
+        return {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          speedX: (Math.random() - 0.5) * 20 + weather.windSpeedKph * 0.2,
+          speedY: fallSpeed,
+          length: 1 + Math.random() * 2,
+          type: 'snow',
+          opacity: 0.2 + weather.intensity * 0.3,
+        };
+      }
+      const fallSpeed = 350 + weather.intensity * 600;
+      return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        speedX: weather.windSpeedKph * 0.4,
+        speedY: fallSpeed,
+        length: 10 + Math.random() * 10,
+        type: 'rain',
+        opacity: 0.3 + weather.intensity * 0.4,
+      };
+    };
+
+    const ensurePrecipitationParticles = () => {
+      if (!precipitationActive || weather.precipitationRate <= 0) {
+        precipitationParticlesRef.current = [];
+        return 0;
+      }
+      const baseCount = isMobile ? 180 : 360;
+      const target = Math.max(40, Math.round(baseCount * Math.max(0.1, weather.precipitationRate)));
+      while (precipitationParticlesRef.current.length < target) {
+        precipitationParticlesRef.current.push(createPrecipitationParticle());
+      }
+      if (precipitationParticlesRef.current.length > target) {
+        precipitationParticlesRef.current.splice(target);
+      }
+      return target;
+    };
+
+    let animationFrameId = 0;
+    let lastTime = performance.now();
+
+    const drawClouds = (delta: number) => {
+      if (weather.cloudCover <= 0.05) return;
+      const clouds = cloudParticlesRef.current;
+      if (!clouds.length) return;
+      ctx.save();
+      ctx.fillStyle = '#d1d9ff';
+      clouds.forEach((cloud) => {
+        cloud.x += cloud.speed * delta * 30;
+        if (cloud.x - cloud.width > canvas.width) {
+          cloud.x = -cloud.width;
+          cloud.y = Math.random() * Math.min(canvas.height * 0.4, 280 * dpr);
+        }
+        ctx.globalAlpha = Math.min(0.6, cloud.opacity);
+        ctx.beginPath();
+        ctx.ellipse(cloud.x, cloud.y, cloud.width, cloud.height, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    };
+
+    const drawPrecipitation = (delta: number) => {
+      const count = ensurePrecipitationParticles();
+      if (!count) return;
+      const particles = precipitationParticlesRef.current;
+      if (weather.type === 'snow') {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        particles.forEach((p) => {
+          ctx.globalAlpha = p.opacity;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.length + 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          p.x += p.speedX * delta;
+          p.y += p.speedY * delta;
+          if (p.y > canvas.height + 5) {
+            p.y = -5;
+            p.x = Math.random() * canvas.width;
+          }
+          if (p.x < -5) p.x = canvas.width + 5;
+          if (p.x > canvas.width + 5) p.x = -5;
+        });
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(160, 200, 255, 0.8)';
+        ctx.lineWidth = isMobile ? 0.8 : 1;
+        ctx.lineCap = 'round';
+        particles.forEach((p) => {
+          ctx.globalAlpha = Math.min(1, p.opacity);
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.speedX * 0.02, p.y - p.length);
+          ctx.stroke();
+          p.x += p.speedX * delta;
+          p.y += p.speedY * delta;
+          if (p.y > canvas.height + 20) {
+            p.y = -10;
+            p.x = Math.random() * canvas.width;
+          }
+          if (p.x < -20) p.x = canvas.width + 10;
+          if (p.x > canvas.width + 20) p.x = -10;
+        });
+        ctx.restore();
+      }
+    };
+
+    const drawHeatHaze = () => {
+      if (weather.type !== 'heat') return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 170, 80, 0.08)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    };
+
+    const drawLightningGlow = (delta: number) => {
+      if (weather.type !== 'lightning') return;
+      lightningFlashRef.current = Math.max(0, lightningFlashRef.current - delta * 1.6);
+      if (Math.random() < weather.lightningFrequency * (isMobile ? 0.4 : 0.7) * delta) {
+        lightningFlashRef.current = 1;
+      }
+      if (lightningFlashRef.current > 0) {
+        const alpha = lightningFlashRef.current * 0.4;
+        ctx.save();
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (Math.random() < 0.6) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          let currentX = Math.random() * canvas.width;
+          let currentY = 0;
+          ctx.moveTo(currentX, currentY);
+          const segments = 4 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < segments; i++) {
+            currentX += (Math.random() - 0.5) * 120;
+            currentY += canvas.height / segments;
+            ctx.lineTo(currentX, currentY);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    };
+
+    const drawSnowOverlay = () => {
+      if (!needsSnowOverlay) return;
+      const currentWorld = worldStateRef.current;
+      const currentGrid = currentWorld.grid;
+      if (!currentGrid || currentWorld.gridSize <= 0) return;
+      const accumulation = Math.max(weather.snowAccumulation, weather.type === 'snow' ? 0.15 : 0);
+      if (accumulation <= 0.02) return;
+
+      const currentZoom = currentWorld.zoom;
+      const currentOffset = currentWorld.offset;
+      const currentGridSize = currentWorld.gridSize;
+      ctx.save();
+      ctx.scale(dpr * currentZoom, dpr * currentZoom);
+      ctx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+
+      const viewWidth = canvas.width / (dpr * currentZoom);
+      const viewHeight = canvas.height / (dpr * currentZoom);
+      const viewLeft = -currentOffset.x / currentZoom - TILE_WIDTH * 2;
+      const viewTop = -currentOffset.y / currentZoom - TILE_HEIGHT * 4;
+      const viewRight = viewWidth - currentOffset.x / currentZoom + TILE_WIDTH * 2;
+      const viewBottom = viewHeight - currentOffset.y / currentZoom + TILE_HEIGHT * 4;
+
+      const minGridY = Math.max(0, Math.floor((viewTop / TILE_HEIGHT) - currentGridSize / 2));
+      const maxGridY = Math.min(currentGridSize - 1, Math.ceil((viewBottom / TILE_HEIGHT) + currentGridSize / 2));
+      const minGridX = Math.max(0, Math.floor((viewLeft / TILE_WIDTH) + currentGridSize / 2));
+      const maxGridX = Math.min(currentGridSize - 1, Math.ceil((viewRight / TILE_WIDTH) + currentGridSize / 2));
+
+      const gridToScreen = (gx: number, gy: number) => ({
+        screenX: (gx - gy) * TILE_WIDTH / 2,
+        screenY: (gx + gy) * TILE_HEIGHT / 2,
+      });
+
+      for (let y = minGridY; y <= maxGridY; y++) {
+        for (let x = minGridX; x <= maxGridX; x++) {
+          const { screenX, screenY } = gridToScreen(x, y);
+          if (screenX + TILE_WIDTH < viewLeft || screenX > viewRight ||
+              screenY + TILE_HEIGHT * 3 < viewTop || screenY > viewBottom) {
+            continue;
+          }
+          const tile = currentGrid[y][x];
+          if (!tile || tile.building.type === 'water') continue;
+          const alphaBoost = tile.building.type === 'road' ? 0.15 : 0;
+          let alpha = Math.min(0.4, 0.08 + accumulation * 0.25 + alphaBoost);
+          if (alpha <= 0.02) continue;
+          ctx.beginPath();
+          ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
+          ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+          ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+          ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    };
+
+    const render = (time: number) => {
+      animationFrameId = requestAnimationFrame(render);
+      const delta = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawClouds(delta);
+      if (precipitationActive) {
+        drawPrecipitation(delta);
+      }
+      drawSnowOverlay();
+      drawLightningGlow(delta);
+      drawHeatHaze();
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [weather, canvasSize.width, canvasSize.height, isMobile]);
+
   // Day/Night cycle lighting rendering - optimized for performance
   useEffect(() => {
     const canvas = lightingCanvasRef.current;
@@ -7142,15 +7471,80 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     
     const dpr = window.devicePixelRatio || 1;
     
-    // Calculate darkness based on hour (0-23)
-    // Dawn: 5-7, Day: 7-18, Dusk: 18-20, Night: 20-5
+    // Calculate darkness based on hour (0-23) and seasonal daylight
+    const daylightHours = weather?.dayLengthHours ?? 12;
+    let sunrise = Math.max(0, 12 - daylightHours / 2);
+    let sunset = Math.min(24, 12 + daylightHours / 2);
+    if (sunset - sunrise < 2) {
+      sunset = sunrise + 2;
+    }
+    const transition = 1.5;
+    const dayDarkness = Math.max(0, Math.min(0.85,
+      (weather?.cloudCover ?? 0) * 0.45 +
+      (weather?.type === 'rain' ? 0.18 : 0) +
+      (weather?.type === 'snow' ? 0.1 : 0)
+    ));
+    const dawnStart = sunrise - transition;
+    const dawnEnd = sunrise + transition;
+    const duskStart = sunset - transition;
+    const duskEnd = sunset + transition;
+
     const getDarkness = (h: number): number => {
-      if (h >= 7 && h < 18) return 0; // Full daylight
-      if (h >= 5 && h < 7) return 1 - (h - 5) / 2; // Dawn transition
-      if (h >= 18 && h < 20) return (h - 18) / 2; // Dusk transition
-      return 1; // Night
+      if (h < dawnStart) return 1;
+      if (h < dawnEnd) {
+        const t = (h - dawnStart) / (dawnEnd - dawnStart);
+        return 1 - t * (1 - dayDarkness);
+      }
+      if (h < duskStart) return dayDarkness;
+      if (h < duskEnd) {
+        const t = (h - duskStart) / (duskEnd - duskStart);
+        return dayDarkness + t * (1 - dayDarkness);
+      }
+      return 1;
     };
-    
+
+    const getBaseAmbientColor = (h: number): { r: number; g: number; b: number } => {
+      if (h >= dawnEnd && h < duskStart) return { r: 255, g: 255, b: 255 };
+      if (h >= dawnStart && h < dawnEnd) {
+        const t = (h - dawnStart) / (dawnEnd - dawnStart);
+        return {
+          r: Math.round(80 + 175 * t),
+          g: Math.round(60 + 165 * t),
+          b: Math.round(90 + 165 * t),
+        };
+      }
+      if (h >= duskStart && h < duskEnd) {
+        const t = 1 - (h - duskStart) / (duskEnd - duskStart);
+        return {
+          r: Math.round(80 + 175 * t),
+          g: Math.round(60 + 165 * t),
+          b: Math.round(90 + 165 * t),
+        };
+      }
+      return { r: 20, g: 30, b: 60 };
+    };
+
+    const tintAmbient = (color: { r: number; g: number; b: number }) => {
+      const cover = weather?.cloudCover ?? 0;
+      let r = color.r;
+      let g = color.g;
+      let b = color.b;
+      if (weather?.type === 'rain' || weather?.type === 'snow') {
+        r = r * 0.85 + 20;
+        g = g * 0.9 + 30;
+        b = b * 0.95 + 60;
+      }
+      if (weather?.type === 'heat') {
+        r = Math.min(255, r + 20);
+        g = Math.min(255, g + 10);
+      }
+      const grey = 210;
+      r = Math.round(r * (1 - cover * 0.4) + grey * cover * 0.4);
+      g = Math.round(g * (1 - cover * 0.35) + grey * cover * 0.35);
+      b = Math.round(b * (1 - cover * 0.3) + grey * cover * 0.3);
+      return { r, g, b };
+    };
+
     const darkness = getDarkness(hour);
     
     // Clear canvas first
@@ -7163,40 +7557,14 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     // On mobile, use simplified lighting (just the overlay, skip individual lights)
     // This significantly reduces CPU usage on mobile devices
     if (isMobile && darkness > 0) {
-      const getAmbientColor = (h: number): { r: number; g: number; b: number } => {
-        if (h >= 7 && h < 18) return { r: 255, g: 255, b: 255 };
-        if (h >= 5 && h < 7) {
-          const t = (h - 5) / 2;
-          return { r: Math.round(60 + 40 * t), g: Math.round(40 + 30 * t), b: Math.round(70 + 20 * t) };
-        }
-        if (h >= 18 && h < 20) {
-          const t = (h - 18) / 2;
-          return { r: Math.round(100 - 40 * t), g: Math.round(70 - 30 * t), b: Math.round(90 - 20 * t) };
-        }
-        return { r: 20, g: 30, b: 60 };
-      };
-      const ambient = getAmbientColor(hour);
+      const ambient = tintAmbient(getBaseAmbientColor(hour));
       const alpha = darkness * 0.45; // Slightly less darkening on mobile
       ctx.fillStyle = `rgba(${ambient.r}, ${ambient.g}, ${ambient.b}, ${alpha})`;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       return;
     }
     
-    // Get ambient color based on time
-    const getAmbientColor = (h: number): { r: number; g: number; b: number } => {
-      if (h >= 7 && h < 18) return { r: 255, g: 255, b: 255 };
-      if (h >= 5 && h < 7) {
-        const t = (h - 5) / 2;
-        return { r: Math.round(60 + 40 * t), g: Math.round(40 + 30 * t), b: Math.round(70 + 20 * t) };
-      }
-      if (h >= 18 && h < 20) {
-        const t = (h - 18) / 2;
-        return { r: Math.round(100 - 40 * t), g: Math.round(70 - 30 * t), b: Math.round(90 - 20 * t) };
-      }
-      return { r: 20, g: 30, b: 60 };
-    };
-    
-    const ambient = getAmbientColor(hour);
+    const ambient = tintAmbient(getBaseAmbientColor(hour));
     
     // Apply darkness overlay
     const alpha = darkness * 0.55;
@@ -7394,7 +7762,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
     
-  }, [grid, gridSize, hour, offset, zoom, canvasSize.width, canvasSize.height, isMobile]);
+  }, [grid, gridSize, hour, offset, zoom, canvasSize.width, canvasSize.height, isMobile, weather]);
   
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
@@ -7844,6 +8212,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       />
       <canvas
         ref={carsCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute top-0 left-0 pointer-events-none"
+      />
+      <canvas
+        ref={weatherCanvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
         className="absolute top-0 left-0 pointer-events-none"

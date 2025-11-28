@@ -20,6 +20,7 @@ import {
   INDUSTRIAL_BUILDINGS,
 } from '@/types/game';
 import { generateCityName, generateWaterName } from './names';
+import { generateWeatherState, updateWeatherState, applyWeatherEconomicEffects } from './weather';
 
 // Check if a factory_small at this position would render as a farm
 // This matches the deterministic logic in Game.tsx for farm variant selection
@@ -646,6 +647,7 @@ function createServiceCoverage(size: number): ServiceCoverage {
 export function createInitialGameState(size: number = 60, cityName: string = 'New City'): GameState {
   const { grid, waterBodies } = generateTerrain(size);
   const adjacentCities = generateAdjacentCities();
+  const initialWeather = generateWeatherState(2024, 1, 1);
 
   return {
     grid,
@@ -670,6 +672,7 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     disastersEnabled: true,
     adjacentCities,
     waterBodies,
+    weather: initialWeather,
   };
 }
 
@@ -1453,6 +1456,7 @@ function generateAdvisorMessages(stats: Stats, services: ServiceCoverage, grid: 
 export function simulateTick(state: GameState): GameState {
   // Optimized: shallow clone rows, deep clone tiles only when modified
   const size = state.gridSize;
+  const previousWeather = state.weather ?? generateWeatherState(state.year, state.month, state.day);
   
   // Pre-calculate service coverage once (read-only operation on original grid)
   const services = calculateServiceCoverage(state.grid, size);
@@ -1626,8 +1630,7 @@ export function simulateTick(state: GameState): GameState {
   const newEffectiveTaxRate = state.effectiveTaxRate + taxRateDiff * 0.03;
 
   // Calculate stats (using lagged effectiveTaxRate for demand calculations)
-  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
-  newStats.money = state.stats.money;
+  let newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
 
   // Update money on month change
   let newYear = state.year;
@@ -1661,6 +1664,14 @@ export function simulateTick(state: GameState): GameState {
     newMonth = 1;
     newYear++;
   }
+
+  const updatedWeather = updateWeatherState(previousWeather, {
+    year: newYear,
+    month: newMonth,
+    day: newDay,
+  });
+  newStats = applyWeatherEconomicEffects(newStats, updatedWeather);
+  newStats.money = state.stats.money;
 
   // Generate advisor messages
   const advisorMessages = generateAdvisorMessages(newStats, services, newGrid);
@@ -1704,6 +1715,7 @@ export function simulateTick(state: GameState): GameState {
     advisorMessages,
     notifications: newNotifications,
     history,
+    weather: updatedWeather,
   };
 }
 

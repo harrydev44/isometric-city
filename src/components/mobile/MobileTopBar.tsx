@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useGame } from '@/context/GameContext';
-import { Tile } from '@/types/game';
+import { Tile, WeatherState } from '@/types/game';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +49,26 @@ function TimeOfDayIcon({ hour }: { hour: number }) {
   }
 }
 
+function WeatherPill({ weather }: { weather: WeatherState }) {
+  const glyph = weather.type === 'rain'
+    ? '🌧️'
+    : weather.type === 'snow'
+      ? '❄️'
+      : weather.type === 'lightning'
+        ? '⛈️'
+        : weather.type === 'heat'
+          ? '🔥'
+          : '☀️';
+  return (
+    <div className="flex items-center gap-1 text-[9px] text-muted-foreground bg-secondary/70 rounded-full px-2 py-0.5">
+      <span aria-hidden>{glyph}</span>
+      <span className="capitalize">{weather.type}</span>
+      <span>{Math.round(weather.temperatureC)}°C</span>
+      <span>{weather.dayLengthHours.toFixed(1)}h</span>
+    </div>
+  );
+}
+
 function DemandBar({ label, demand, color }: { label: string; demand: number; color: string }) {
   const percentage = Math.min(100, Math.abs(demand));
   const isPositive = demand >= 0;
@@ -76,7 +96,7 @@ export function MobileTopBar({
   onCloseTile: () => void;
 }) {
   const { state, setSpeed, setTaxRate, isSaving } = useGame();
-  const { stats, year, month, hour, speed, taxRate, cityName } = state;
+  const { stats, year, month, hour, speed, taxRate, cityName, weather } = state;
   const [showDetails, setShowDetails] = useState(false);
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -105,6 +125,9 @@ export function MobileTopBar({
                 <TimeOfDayIcon hour={hour} />
               </div>
             </button>
+            <div className="mt-0.5">
+              <WeatherPill weather={weather} />
+            </div>
           </div>
 
           {/* Center: Speed controls */}

@@ -17,6 +17,7 @@ import {
   placeSubway,
   simulateTick,
 } from '@/lib/simulation';
+import { generateWeatherState } from '@/lib/weather';
 import {
   SPRITE_PACKS,
   DEFAULT_SPRITE_PACK_ID,
@@ -158,6 +159,10 @@ function loadGameState(): GameState | null {
         // Ensure effectiveTaxRate exists for lagging tax effect
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9; // Start at current tax rate
+        }
+        // Ensure weather exists for legacy saves
+        if (!parsed.weather) {
+          parsed.weather = generateWeatherState(parsed.year ?? 2024, parsed.month ?? 1, parsed.day ?? 1);
         }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
@@ -563,6 +568,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Ensure effectiveTaxRate exists for lagging tax effect
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9;
+        }
+        if (!parsed.weather) {
+          parsed.weather = generateWeatherState(parsed.year ?? 2024, parsed.month ?? 1, parsed.day ?? 1);
         }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
