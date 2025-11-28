@@ -148,6 +148,16 @@ import {
   screenToGrid,
 } from '@/components/game/utils';
 import {
+  analyzeRoadNetwork,
+  initializeTrafficLights,
+  updateTrafficLights,
+  getTrafficLightState,
+  TrafficLight,
+} from '@/components/game/traffic';
+import {
+  drawAdvancedRoad,
+} from '@/components/game/roadDrawing';
+import {
   drawGreenBaseTile,
   drawGreyBaseTile,
   drawBeach,
@@ -1920,6 +1930,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
   const cachedPopulationRef = useRef<{ count: number; gridVersion: number }>({ count: 0, gridVersion: -1 });
   const gridVersionRef = useRef(0);
 
+  // Traffic light system
+  const trafficLightsRef = useRef<Map<string, TrafficLight>>(new Map());
+  const trafficLightsGridVersionRef = useRef(-1);
+
   const worldStateRef = useRef<WorldRenderState>({
     grid,
     gridSize,
@@ -1952,6 +1966,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
     worldStateRef.current.gridSize = gridSize;
     // Increment grid version to invalidate cached calculations
     gridVersionRef.current++;
+    
+    // Reinitialize traffic lights when grid changes
+    if (trafficLightsGridVersionRef.current !== gridVersionRef.current) {
+      trafficLightsRef.current = initializeTrafficLights(grid, gridSize);
+      trafficLightsGridVersionRef.current = gridVersionRef.current;
+    }
   }, [grid, gridSize]);
 
   useEffect(() => {
@@ -6351,9 +6371,13 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
       const w = TILE_WIDTH;
       const h = TILE_HEIGHT;
       
-      // Handle roads separately with adjacency
+      // Handle roads separately with advanced road system
       if (buildingType === 'road') {
-        drawRoad(ctx, x, y, tile.x, tile.y);
+        const roadInfo = analyzeRoadNetwork(grid, gridSize, tile.x, tile.y);
+        const trafficLight = getTrafficLightState(trafficLightsRef.current, tile.x, tile.y);
+        if (roadInfo) {
+          drawAdvancedRoad(ctx, x, y, tile.x, tile.y, roadInfo, trafficLight);
+        }
         return;
       }
       
@@ -7046,8 +7070,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         ctx.closePath();
         ctx.fill();
         
-        // Draw road markings and sidewalks
-        drawBuilding(ctx, screenX, screenY, tile);
+        // Draw advanced road system (markings, lanes, dividers, traffic lights)
+        const roadInfo = analyzeRoadNetwork(grid, gridSize, tile.x, tile.y);
+        const trafficLight = getTrafficLightState(trafficLightsRef.current, tile.x, tile.y);
+        if (roadInfo) {
+          drawAdvancedRoad(ctx, screenX, screenY, tile.x, tile.y, roadInfo, trafficLight);
+        }
       });
     
     // Draw green base tiles for grass/empty tiles adjacent to water (after water, before gray bases)
@@ -7172,6 +7200,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMob
         updateFireworks(delta, hour); // Update fireworks (nighttime only)
         updateSmog(delta); // Update factory smog particles
         navLightFlashTimerRef.current += delta * 3; // Update nav light flash timer
+        updateTrafficLights(trafficLightsRef.current, delta); // Update traffic lights
       }
       drawCars(ctx);
       drawPedestrians(ctx); // Draw pedestrians (zoom-gated)
