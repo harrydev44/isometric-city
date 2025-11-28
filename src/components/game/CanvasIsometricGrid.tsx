@@ -119,6 +119,9 @@ import {
 } from '@/components/game/renderHelpers';
 import { drawAirplanes as drawAirplanesUtil, drawHelicopters as drawHelicoptersUtil } from '@/components/game/drawAircraft';
 import { drawPedestrians as drawPedestriansUtil } from '@/components/game/drawPedestrians';
+import { useVehicleSystem } from '@/components/game/hooks/useVehicleSystem';
+import { usePedestrianSystem } from '@/components/game/hooks/usePedestrianSystem';
+import { useCrimeSystem } from '@/components/game/hooks/useCrimeSystem';
 
 // Props interface for CanvasIsometricGrid
 export interface CanvasIsometricGridProps {
@@ -153,21 +156,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     screenY: number;
   } | null>(null);
   const [zoom, setZoom] = useState(isMobile ? 0.6 : 1);
-  const carsRef = useRef<Car[]>([]);
-  const carIdRef = useRef(0);
-  const carSpawnTimerRef = useRef(0);
-  const emergencyVehiclesRef = useRef<EmergencyVehicle[]>([]);
-  const emergencyVehicleIdRef = useRef(0);
-  const emergencyDispatchTimerRef = useRef(0);
+  
+  // Refs for systems that need to be shared
   const activeFiresRef = useRef<Set<string>>(new Set()); // Track fires that already have a truck dispatched
   const activeCrimesRef = useRef<Set<string>>(new Set()); // Track crimes that already have a car dispatched
-  const activeCrimeIncidentsRef = useRef<Map<string, { x: number; y: number; type: 'robbery' | 'burglary' | 'disturbance' | 'traffic'; timeRemaining: number }>>(new Map()); // Persistent crime incidents
-  const crimeSpawnTimerRef = useRef(0); // Timer for spawning new crime incidents
-  
-  // Pedestrian system refs
-  const pedestriansRef = useRef<Pedestrian[]>([]);
-  const pedestrianIdRef = useRef(0);
-  const pedestrianSpawnTimerRef = useRef(0);
   
   // Touch gesture state for mobile
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -236,6 +228,42 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   
   // Roads, bulldoze, and other tools support drag-to-place but don't show the grid
   const supportsDragPlace = selectedTool !== 'select';
+  
+  // Initialize hooks for vehicle, pedestrian, and crime systems
+  const findStationsCallback = useCallback((type: 'fire_station' | 'police_station'): { x: number; y: number }[] => {
+    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    return findStations(currentGrid, currentGridSize, type);
+  }, []);
+
+  const findFiresCallback = useCallback((): { x: number; y: number }[] => {
+    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    return findFires(currentGrid, currentGridSize);
+  }, []);
+
+  const crimeSystem = useCrimeSystem({
+    worldStateRef,
+    policeService: state.services.police,
+    population: state.stats.population,
+    activeCrimesRef,
+  });
+
+  const vehicleSystem = useVehicleSystem({
+    worldStateRef,
+    isMobile,
+    findStations: findStationsCallback,
+    findFires: findFiresCallback,
+    findCrimeIncidents: crimeSystem.findCrimeIncidents,
+    activeFiresRef,
+    activeCrimesRef,
+    activeCrimeIncidentsRef: crimeSystem.activeCrimeIncidentsRef,
+  });
+
+  const pedestrianSystem = usePedestrianSystem({
+    worldStateRef,
+    isMobile,
+    gridVersionRef,
+    cachedRoadTileCountRef,
+  });
   
   useEffect(() => {
     worldStateRef.current.grid = grid;
@@ -448,20 +476,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     return true;
   }, [findResidentialBuildingsCallback, findPedestrianDestinationsCallback]);
 
-  // Find stations (uses imported utility)
-  const findStationsCallback = useCallback((type: 'fire_station' | 'police_station'): { x: number; y: number }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findStations(currentGrid, currentGridSize, type);
-  }, []);
-
-  // Find fires (uses imported utility)
-  const findFiresCallback = useCallback((): { x: number; y: number }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findFires(currentGrid, currentGridSize);
-  }, []);
-
-  // Spawn new crime incidents periodically (persistent like fires)
-  const spawnCrimeIncidents = useCallback((delta: number) => {
+  // REMOVED: spawnCrimeIncidents, updateCrimeIncidents, findCrimeIncidents - Now in useCrimeSystem hook
+  // REMOVED: updateCars, drawCars, updateEmergencyVehicles, drawEmergencyVehicles, dispatchEmergencyVehicle, updateEmergencyDispatch - Now in useVehicleSystem hook
+  // REMOVED: spawnPedestrian, updatePedestrians - Now in usePedestrianSystem hook
+  // REMOVED: findStationsCallback, findFiresCallback - Moved to hook initialization section
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed } = worldStateRef.current;
     if (!currentGrid || currentGridSize <= 0 || currentSpeed === 0) return;
     
@@ -1269,7 +1287,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     };
     
     // Use extracted utility function for drawing
-    drawPedestriansUtil(ctx, pedestriansRef.current, currentGrid, currentGridSize, viewBounds);
+    drawPedestriansUtil(ctx, pedestrianSystem.pedestriansRef.current, currentGrid, currentGridSize, viewBounds);
     
     ctx.restore();
   }, [isMobile]);
@@ -2941,7 +2959,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     const viewBottom = viewHeight - currentOffset.y / currentZoom + TILE_HEIGHT * 4;
     
     // Draw crime incident indicators
-    activeCrimeIncidentsRef.current.forEach((crime) => {
+    crimeSystem.activeCrimeIncidentsRef.current.forEach((crime) => {
       const { screenX, screenY } = gridToScreen(crime.x, crime.y, 0, 0);
       const centerX = screenX + TILE_WIDTH / 2;
       const centerY = screenY + TILE_HEIGHT / 2;
@@ -4843,11 +4861,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       lastRenderTime = time;
       
       if (delta > 0) {
-        updateCars(delta);
-        spawnCrimeIncidents(delta); // Spawn new crime incidents
-        updateCrimeIncidents(delta); // Update/decay crime incidents
-        updateEmergencyVehicles(delta); // Update emergency vehicles!
-        updatePedestrians(delta); // Update pedestrians (zoom-gated)
+        vehicleSystem.updateCars(delta);
+        crimeSystem.spawnCrimeIncidents(delta); // Spawn new crime incidents
+        crimeSystem.updateCrimeIncidents(delta); // Update/decay crime incidents
+        vehicleSystem.updateEmergencyVehicles(delta); // Update emergency vehicles!
+        pedestrianSystem.updatePedestrians(delta); // Update pedestrians (zoom-gated)
         updateAirplanes(delta); // Update airplanes (airport required)
         updateHelicopters(delta); // Update helicopters (hospital/airport required)
         updateBoats(delta); // Update boats (marina/pier required)
@@ -4855,11 +4873,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         updateSmog(delta); // Update factory smog particles
         navLightFlashTimerRef.current += delta * 3; // Update nav light flash timer
       }
-      drawCars(ctx);
+      vehicleSystem.drawCars(ctx);
       drawPedestrians(ctx); // Draw pedestrians (zoom-gated)
       drawBoats(ctx); // Draw boats on water
       drawSmog(ctx); // Draw factory smog (above ground, below aircraft)
-      drawEmergencyVehicles(ctx); // Draw emergency vehicles!
+      vehicleSystem.drawEmergencyVehicles(ctx); // Draw emergency vehicles!
       drawIncidentIndicators(ctx, delta); // Draw fire/crime incident indicators!
       drawHelicopters(ctx); // Draw helicopters (below planes, above ground)
       drawAirplanes(ctx); // Draw airplanes above everything
@@ -5260,7 +5278,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         // Check for fire or crime incidents at this tile for tooltip display
         const tile = grid[gridY]?.[gridX];
         const crimeKey = `${gridX},${gridY}`;
-        const crimeIncident = activeCrimeIncidentsRef.current.get(crimeKey);
+        const crimeIncident = crimeSystem.activeCrimeIncidentsRef.current.get(crimeKey);
         
         if (tile?.building.onFire) {
           // Fire incident
