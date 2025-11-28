@@ -75,6 +75,60 @@ export type BuildingType =
 
 export type ZoneType = 'none' | 'residential' | 'commercial' | 'industrial';
 
+// Season types based on month
+export type Season = 'spring' | 'summer' | 'fall' | 'winter';
+
+// Weather types with their characteristics
+export type WeatherType = 'clear' | 'cloudy' | 'rain' | 'snow' | 'thunderstorm' | 'heat_wave';
+
+// Weather state for the game
+export interface WeatherState {
+  current: WeatherType;
+  intensity: number; // 0-1, affects visual intensity
+  duration: number; // ticks remaining for current weather
+  cloudCover: number; // 0-1, visual cloud density
+  temperature: number; // abstract temp modifier (-1 to 1)
+}
+
+// Get season from month
+export function getSeasonFromMonth(month: number): Season {
+  if (month >= 3 && month <= 5) return 'spring';
+  if (month >= 6 && month <= 8) return 'summer';
+  if (month >= 9 && month <= 11) return 'fall';
+  return 'winter'; // Dec, Jan, Feb
+}
+
+// Weather probabilities by season (weights for random selection)
+export const WEATHER_PROBABILITIES: Record<Season, Partial<Record<WeatherType, number>>> = {
+  spring: { clear: 35, cloudy: 30, rain: 30, thunderstorm: 5 },
+  summer: { clear: 45, cloudy: 20, rain: 15, thunderstorm: 10, heat_wave: 10 },
+  fall: { clear: 30, cloudy: 35, rain: 30, snow: 5 },
+  winter: { clear: 25, cloudy: 30, snow: 35, rain: 10 },
+};
+
+// Day length parameters by season (dawn hour, dusk hour)
+export const SEASON_DAY_LENGTH: Record<Season, { dawn: number; dusk: number }> = {
+  spring: { dawn: 6, dusk: 19 },
+  summer: { dawn: 5, dusk: 21 },
+  fall: { dawn: 6, dusk: 18 },
+  winter: { dawn: 7, dusk: 17 },
+};
+
+// Economic effects by weather type (multipliers, 1.0 = no effect)
+export const WEATHER_ECONOMIC_EFFECTS: Record<WeatherType, {
+  residential: number;
+  commercial: number;
+  industrial: number;
+  happiness: number;
+}> = {
+  clear: { residential: 1.0, commercial: 1.0, industrial: 1.0, happiness: 1.05 },
+  cloudy: { residential: 1.0, commercial: 0.98, industrial: 1.0, happiness: 0.98 },
+  rain: { residential: 0.98, commercial: 0.92, industrial: 0.98, happiness: 0.92 },
+  snow: { residential: 0.95, commercial: 0.85, industrial: 0.90, happiness: 0.90 },
+  thunderstorm: { residential: 0.90, commercial: 0.80, industrial: 0.85, happiness: 0.80 },
+  heat_wave: { residential: 0.95, commercial: 1.05, industrial: 0.92, happiness: 0.88 },
+};
+
 export type Tool =
   | 'select'
   | 'bulldoze'
@@ -328,6 +382,12 @@ export interface GameState {
   disastersEnabled: boolean;
   adjacentCities: AdjacentCity[];
   waterBodies: WaterBody[];
+  // Weather system
+  weather: WeatherState;
+  season: Season;
+  // Snow/rain accumulation (0-1)
+  snowAccumulation: number;
+  rainWetness: number;
 }
 
 // Building evolution paths based on zone and level

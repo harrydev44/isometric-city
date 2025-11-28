@@ -68,6 +68,52 @@ export const FIREWORK_SPAWN_INTERVAL_MAX = 1.2; // seconds between firework laun
 export const FIREWORK_SHOW_DURATION = 45; // seconds - how long a firework show lasts
 export const FIREWORK_SHOW_CHANCE = 0.35; // 35% chance of fireworks on any given night
 
+// Weather visual constants
+
+// Cloud system constants
+export const CLOUD_DRIFT_SPEED = 15; // pixels per second
+export const CLOUD_SPAWN_INTERVAL = 2.0; // seconds between spawns (when cloudy)
+export const CLOUD_SIZE_MIN = 80;
+export const CLOUD_SIZE_MAX = 200;
+export const CLOUD_MAX_COUNT = 25;
+export const CLOUD_MAX_COUNT_MOBILE = 12;
+export const CLOUD_BASE_OPACITY = 0.4;
+export const CLOUD_PARALLAX_FACTOR = 0.3; // how much front layer moves faster
+
+// Rain system constants
+export const RAIN_FALL_SPEED_MIN = 400;
+export const RAIN_FALL_SPEED_MAX = 600;
+export const RAIN_SPAWN_RATE = 150; // particles per second during rain
+export const RAIN_SPAWN_RATE_MOBILE = 60;
+export const RAIN_LENGTH_MIN = 15;
+export const RAIN_LENGTH_MAX = 30;
+export const RAIN_MAX_COUNT = 500;
+export const RAIN_MAX_COUNT_MOBILE = 150;
+export const RAIN_OPACITY = 0.35;
+export const RAIN_ANGLE = 0.15; // radians, slight diagonal
+
+// Snow system constants
+export const SNOW_FALL_SPEED_MIN = 30;
+export const SNOW_FALL_SPEED_MAX = 60;
+export const SNOW_SWAY_SPEED = 1.5; // horizontal wobble frequency
+export const SNOW_SWAY_AMOUNT = 20; // pixels of horizontal sway
+export const SNOW_SPAWN_RATE = 80; // particles per second during snow
+export const SNOW_SPAWN_RATE_MOBILE = 30;
+export const SNOW_SIZE_MIN = 2;
+export const SNOW_SIZE_MAX = 5;
+export const SNOW_MAX_COUNT = 400;
+export const SNOW_MAX_COUNT_MOBILE = 120;
+export const SNOW_OPACITY = 0.8;
+
+// Lightning system constants
+export const LIGHTNING_CHANCE_PER_SECOND = 0.08; // during thunderstorm
+export const LIGHTNING_DURATION = 0.15; // seconds
+export const LIGHTNING_FLASH_INTENSITY = 0.6;
+
+// Snow accumulation visual constants
+export const SNOW_COVER_OPACITY_MAX = 0.7;
+export const RAIN_WET_OPACITY_MAX = 0.25;
+
 // Direction metadata helpers
 function createDirectionMeta(step: { x: number; y: number }, vec: { dx: number; dy: number }): DirectionMeta {
   const length = Math.hypot(vec.dx, vec.dy) || 1;

@@ -14,12 +14,119 @@ import {
   Notification,
   AdjacentCity,
   WaterBody,
+  WeatherState,
+  WeatherType,
+  Season,
   BUILDING_STATS,
   RESIDENTIAL_BUILDINGS,
   COMMERCIAL_BUILDINGS,
   INDUSTRIAL_BUILDINGS,
+  getSeasonFromMonth,
+  WEATHER_PROBABILITIES,
+  WEATHER_ECONOMIC_EFFECTS,
+  SEASON_DAY_LENGTH,
 } from '@/types/game';
 import { generateCityName, generateWaterName } from './names';
+
+// Weather duration in ticks (min and max)
+const WEATHER_DURATION_MIN = 60; // ~1 game day at normal speed
+const WEATHER_DURATION_MAX = 300; // ~5 game days
+
+// Create initial weather state
+function createInitialWeather(season: Season): WeatherState {
+  const weather = selectNewWeather(season);
+  return {
+    current: weather,
+    intensity: 0.5 + Math.random() * 0.5,
+    duration: WEATHER_DURATION_MIN + Math.floor(Math.random() * (WEATHER_DURATION_MAX - WEATHER_DURATION_MIN)),
+    cloudCover: weather === 'clear' ? 0.1 : weather === 'cloudy' ? 0.5 : 0.7,
+    temperature: getWeatherTemperature(weather, season),
+  };
+}
+
+// Select new weather based on season probabilities
+function selectNewWeather(season: Season): WeatherType {
+  const probs = WEATHER_PROBABILITIES[season];
+  const entries = Object.entries(probs) as [WeatherType, number][];
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let roll = Math.random() * total;
+  
+  for (const [weather, weight] of entries) {
+    roll -= weight;
+    if (roll <= 0) return weather;
+  }
+  
+  return 'clear';
+}
+
+// Get temperature modifier based on weather and season
+function getWeatherTemperature(weather: WeatherType, season: Season): number {
+  const seasonBase: Record<Season, number> = {
+    spring: 0.2,
+    summer: 0.7,
+    fall: 0.1,
+    winter: -0.5,
+  };
+  
+  const weatherMod: Record<WeatherType, number> = {
+    clear: 0.1,
+    cloudy: -0.1,
+    rain: -0.2,
+    snow: -0.3,
+    thunderstorm: -0.15,
+    heat_wave: 0.4,
+  };
+  
+  return Math.max(-1, Math.min(1, seasonBase[season] + weatherMod[weather]));
+}
+
+// Update weather state each tick
+function updateWeather(state: GameState): { weather: WeatherState; season: Season; snowAccumulation: number; rainWetness: number } {
+  const season = getSeasonFromMonth(state.month);
+  let weather = { ...state.weather };
+  let snowAccumulation = state.snowAccumulation;
+  let rainWetness = state.rainWetness;
+  
+  // Decrement duration
+  weather.duration--;
+  
+  // Check for weather change
+  if (weather.duration <= 0) {
+    const newWeatherType = selectNewWeather(season);
+    weather = {
+      current: newWeatherType,
+      intensity: 0.4 + Math.random() * 0.6,
+      duration: WEATHER_DURATION_MIN + Math.floor(Math.random() * (WEATHER_DURATION_MAX - WEATHER_DURATION_MIN)),
+      cloudCover: newWeatherType === 'clear' ? 0.1 + Math.random() * 0.2 : 
+                  newWeatherType === 'cloudy' ? 0.4 + Math.random() * 0.3 :
+                  0.6 + Math.random() * 0.3,
+      temperature: getWeatherTemperature(newWeatherType, season),
+    };
+  }
+  
+  // Update accumulation based on weather
+  const accumulationRate = 0.008;
+  const meltRate = 0.003;
+  const dryRate = 0.01;
+  
+  if (weather.current === 'snow') {
+    snowAccumulation = Math.min(1, snowAccumulation + accumulationRate * weather.intensity);
+  } else if (weather.temperature > 0) {
+    // Snow melts when warm
+    snowAccumulation = Math.max(0, snowAccumulation - meltRate * (1 + weather.temperature));
+  }
+  
+  if (weather.current === 'rain' || weather.current === 'thunderstorm') {
+    rainWetness = Math.min(1, rainWetness + accumulationRate * 2 * weather.intensity);
+    // Rain also melts snow faster
+    snowAccumulation = Math.max(0, snowAccumulation - meltRate * 2);
+  } else {
+    // Roads dry out
+    rainWetness = Math.max(0, rainWetness - dryRate);
+  }
+  
+  return { weather, season, snowAccumulation, rainWetness };
+}
 
 // Check if a factory_small at this position would render as a farm
 // This matches the deterministic logic in Game.tsx for farm variant selection
@@ -646,6 +753,7 @@ function createServiceCoverage(size: number): ServiceCoverage {
 export function createInitialGameState(size: number = 60, cityName: string = 'New City'): GameState {
   const { grid, waterBodies } = generateTerrain(size);
   const adjacentCities = generateAdjacentCities();
+  const initialSeason = getSeasonFromMonth(1); // January = winter
 
   return {
     grid,
@@ -670,6 +778,11 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     disastersEnabled: true,
     adjacentCities,
     waterBodies,
+    // Weather system initialization
+    weather: createInitialWeather(initialSeason),
+    season: initialSeason,
+    snowAccumulation: initialSeason === 'winter' ? 0.3 : 0,
+    rainWetness: 0,
   };
 }
 
@@ -1135,7 +1248,8 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
 
 // Calculate city stats
 // effectiveTaxRate is the lagged tax rate used for demand calculations
-function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: number, effectiveTaxRate: number, services: ServiceCoverage): Stats {
+// weather affects demand and happiness
+function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: number, effectiveTaxRate: number, services: ServiceCoverage, weather?: WeatherState): Stats {
   let population = 0;
   let jobs = 0;
   let totalPollution = 0;
@@ -1211,11 +1325,20 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
   const baseCommercialDemand = (population * 0.3 - jobs * 0.3) / 4 + subwayBonus;
   const baseIndustrialDemand = (population * 0.35 - jobs * 0.3) / 2.0;
   
+  // Get weather economic effects (default to 1.0 if no weather)
+  const weatherEffects = weather ? WEATHER_ECONOMIC_EFFECTS[weather.current] : {
+    residential: 1.0,
+    commercial: 1.0,
+    industrial: 1.0,
+    happiness: 1.0,
+  };
+  
   // Apply tax effect: multiply by tax factor, then add small modifier
   // The multiplier ensures high taxes crush demand; the additive fine-tunes at normal rates
-  const residentialDemand = Math.min(100, Math.max(-100, baseResidentialDemand * taxMultiplier + taxAdditiveModifier));
-  const commercialDemand = Math.min(100, Math.max(-100, baseCommercialDemand * taxMultiplier + taxAdditiveModifier * 0.8));
-  const industrialDemand = Math.min(100, Math.max(-100, baseIndustrialDemand * taxMultiplier + taxAdditiveModifier * 0.5));
+  // Also apply weather effects to demand
+  const residentialDemand = Math.min(100, Math.max(-100, (baseResidentialDemand * taxMultiplier + taxAdditiveModifier) * weatherEffects.residential));
+  const commercialDemand = Math.min(100, Math.max(-100, (baseCommercialDemand * taxMultiplier + taxAdditiveModifier * 0.8) * weatherEffects.commercial));
+  const industrialDemand = Math.min(100, Math.max(-100, (baseIndustrialDemand * taxMultiplier + taxAdditiveModifier * 0.5) * weatherEffects.industrial));
 
   // Calculate income and expenses
   const income = Math.floor(population * taxRate * 0.1 + jobs * taxRate * 0.05);
@@ -1245,7 +1368,7 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
   const environment = Math.min(100, Math.max(0, greenRatio * 200 - pollutionRatio * 100 + 50));
 
   const jobSatisfaction = jobs >= population ? 100 : (jobs / (population || 1)) * 100;
-  const happiness = Math.min(100, (
+  const baseHappiness = Math.min(100, (
     safety * 0.15 +
     health * 0.2 +
     education * 0.15 +
@@ -1253,6 +1376,8 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
     jobSatisfaction * 0.2 +
     (100 - taxRate * 3) * 0.15
   ));
+  // Apply weather effect to happiness
+  const happiness = Math.min(100, Math.max(0, baseHappiness * weatherEffects.happiness));
 
   return {
     population,
@@ -1665,14 +1790,17 @@ export function simulateTick(state: GameState): GameState {
   // Update budget costs
   const newBudget = updateBudgetCosts(newGrid, state.budget);
 
+  // Update weather system
+  const weatherUpdate = updateWeather(state);
+
   // Gradually move effectiveTaxRate toward taxRate
   // This creates a lagging effect so tax changes don't immediately impact demand
   // Rate of change: 3% of difference per tick, so large changes take ~50-80 ticks (~2-3 game days)
   const taxRateDiff = state.taxRate - state.effectiveTaxRate;
   const newEffectiveTaxRate = state.effectiveTaxRate + taxRateDiff * 0.03;
 
-  // Calculate stats (using lagged effectiveTaxRate for demand calculations)
-  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
+  // Calculate stats (using lagged effectiveTaxRate for demand calculations, including weather effects)
+  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services, weatherUpdate.weather);
   newStats.money = state.stats.money;
 
   // Update money on month change
@@ -1681,14 +1809,55 @@ export function simulateTick(state: GameState): GameState {
   let newDay = state.day;
   let newTick = state.tick + 1;
   
-  // Calculate visual hour for day/night cycle (much slower than game time)
-  // One full day/night cycle = 15 game days (450 ticks)
-  // This makes the cycle atmospheric rather than jarring
-  const totalTicks = ((state.year - 2024) * 12 * 30 * 30) + ((state.month - 1) * 30 * 30) + ((state.day - 1) * 30) + newTick;
-  const cycleLength = 450; // ticks per visual day (15 game days)
-  const newHour = Math.floor((totalTicks % cycleLength) / cycleLength * 24);
+  // SPEED UP: Days pass more quickly now - 12 ticks per day instead of 30
+  // This makes game dates advance faster without affecting vehicle/animation speeds
+  const TICKS_PER_DAY = 12;
+  
+  // Calculate visual hour for day/night cycle based on season
+  // One full day/night cycle = 15 game days (180 ticks with new speed)
+  // Season affects day length (dawn/dusk hours)
+  const dayLengthParams = SEASON_DAY_LENGTH[weatherUpdate.season];
+  const totalTicks = ((state.year - 2024) * 12 * 30 * TICKS_PER_DAY) + ((state.month - 1) * 30 * TICKS_PER_DAY) + ((state.day - 1) * TICKS_PER_DAY) + newTick;
+  const cycleLength = 180; // ticks per visual day (15 game days * 12 ticks)
+  const cycleProgress = (totalTicks % cycleLength) / cycleLength; // 0-1 through the visual day
+  
+  // Map cycle progress to hour, respecting season day length
+  // Night: 0-dawn, Day: dawn-dusk, Night: dusk-24
+  const { dawn, dusk } = dayLengthParams;
+  const dayLength = dusk - dawn;
+  const nightLength = 24 - dayLength;
+  const nightBeforeDawn = dawn;
+  const nightAfterDusk = 24 - dusk;
+  
+  let newHour: number;
+  if (cycleProgress < 0.5) {
+    // First half: night (before dawn) -> day
+    const halfProgress = cycleProgress * 2; // 0-1 through first half
+    if (halfProgress < nightBeforeDawn / (nightBeforeDawn + dayLength / 2)) {
+      // Night before dawn
+      newHour = Math.floor(halfProgress * (nightBeforeDawn + dayLength / 2));
+    } else {
+      // Day (first half)
+      const dayProgress = (halfProgress - nightBeforeDawn / (nightBeforeDawn + dayLength / 2)) / (1 - nightBeforeDawn / (nightBeforeDawn + dayLength / 2));
+      newHour = dawn + Math.floor(dayProgress * dayLength / 2);
+    }
+  } else {
+    // Second half: day -> night (after dusk)
+    const halfProgress = (cycleProgress - 0.5) * 2; // 0-1 through second half
+    const midDay = dawn + dayLength / 2;
+    const daySecondHalf = dayLength / 2;
+    if (halfProgress < daySecondHalf / (daySecondHalf + nightAfterDusk)) {
+      // Day (second half)
+      newHour = midDay + Math.floor(halfProgress * (daySecondHalf + nightAfterDusk));
+    } else {
+      // Night after dusk
+      const nightProgress = (halfProgress - daySecondHalf / (daySecondHalf + nightAfterDusk)) / (1 - daySecondHalf / (daySecondHalf + nightAfterDusk));
+      newHour = dusk + Math.floor(nightProgress * nightAfterDusk);
+    }
+  }
+  newHour = Math.min(23, Math.max(0, newHour));
 
-  if (newTick >= 30) {
+  if (newTick >= TICKS_PER_DAY) {
     newTick = 0;
     newDay++;
     // Weekly income/expense (deposit every 7 days at 1/4 monthly rate)
@@ -1750,6 +1919,11 @@ export function simulateTick(state: GameState): GameState {
     advisorMessages,
     notifications: newNotifications,
     history,
+    // Weather state
+    weather: weatherUpdate.weather,
+    season: weatherUpdate.season,
+    snowAccumulation: weatherUpdate.snowAccumulation,
+    rainWetness: weatherUpdate.rainWetness,
   };
 }
 

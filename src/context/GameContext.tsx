@@ -159,6 +159,23 @@ function loadGameState(): GameState | null {
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9; // Start at current tax rate
         }
+        // Migrate weather system for saved games
+        if (!parsed.weather) {
+          const month = parsed.month || 1;
+          const season = month >= 3 && month <= 5 ? 'spring' : 
+                        month >= 6 && month <= 8 ? 'summer' : 
+                        month >= 9 && month <= 11 ? 'fall' : 'winter';
+          parsed.weather = {
+            current: 'clear',
+            intensity: 0.5,
+            duration: 150,
+            cloudCover: 0.2,
+            temperature: season === 'summer' ? 0.5 : season === 'winter' ? -0.3 : 0.1,
+          };
+          parsed.season = season;
+          parsed.snowAccumulation = season === 'winter' ? 0.2 : 0;
+          parsed.rainWetness = 0;
+        }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -563,6 +580,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Ensure effectiveTaxRate exists for lagging tax effect
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9;
+        }
+        // Migrate weather system for loaded games
+        if (!parsed.weather) {
+          const month = parsed.month || 1;
+          const season = month >= 3 && month <= 5 ? 'spring' : 
+                        month >= 6 && month <= 8 ? 'summer' : 
+                        month >= 9 && month <= 11 ? 'fall' : 'winter';
+          parsed.weather = {
+            current: 'clear',
+            intensity: 0.5,
+            duration: 150,
+            cloudCover: 0.2,
+            temperature: season === 'summer' ? 0.5 : season === 'winter' ? -0.3 : 0.1,
+          };
+          parsed.season = season;
+          parsed.snowAccumulation = season === 'winter' ? 0.2 : 0;
+          parsed.rainWetness = 0;
         }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {

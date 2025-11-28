@@ -282,6 +282,53 @@ export type DirectionMeta = {
   normal: { nx: number; ny: number };
 };
 
+// Weather particle types
+export type CloudParticle = {
+  x: number;
+  y: number;
+  vx: number; // horizontal drift
+  size: number;
+  opacity: number;
+  layer: number; // 0 = back, 1 = front (for parallax)
+};
+
+export type RainParticle = {
+  x: number;
+  y: number;
+  length: number;
+  speed: number;
+  opacity: number;
+};
+
+export type SnowParticle = {
+  x: number;
+  y: number;
+  vx: number; // horizontal sway
+  vy: number; // fall speed
+  size: number;
+  opacity: number;
+  wobble: number; // current wobble phase
+};
+
+export type LightningFlash = {
+  active: boolean;
+  intensity: number;
+  duration: number;
+  age: number;
+};
+
+// Weather visual system state
+export type WeatherVisualState = {
+  clouds: CloudParticle[];
+  raindrops: RainParticle[];
+  snowflakes: SnowParticle[];
+  lightning: LightningFlash;
+  cloudSpawnTimer: number;
+  rainSpawnTimer: number;
+  snowSpawnTimer: number;
+  lightningTimer: number;
+};
+
 // World render state
 export type WorldRenderState = {
   grid: import('@/types/game').Tile[][];
