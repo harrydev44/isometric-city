@@ -18,6 +18,9 @@ import {
   RESIDENTIAL_BUILDINGS,
   COMMERCIAL_BUILDINGS,
   INDUSTRIAL_BUILDINGS,
+  Season,
+  Weather,
+  WeatherType,
 } from '@/types/game';
 import { generateCityName, generateWaterName } from './names';
 
@@ -643,16 +646,187 @@ function createServiceCoverage(size: number): ServiceCoverage {
 }
 
 
+// Calculate season from month
+export function getSeasonFromMonth(month: number): Season {
+  if (month >= 3 && month <= 5) return 'spring';
+  if (month >= 6 && month <= 8) return 'summer';
+  if (month >= 9 && month <= 11) return 'fall';
+  return 'winter'; // 12, 1, 2
+}
+
+// Generate weather based on season
+function generateWeather(season: Season, currentWeather: Weather | null): Weather {
+  // If current weather is still active, continue it
+  if (currentWeather && currentWeather.duration > 0) {
+    return {
+      ...currentWeather,
+      duration: currentWeather.duration - 1,
+    };
+  }
+
+  // Generate new weather based on season
+  const rand = Math.random();
+  let weatherType: WeatherType = 'clear';
+  let intensity = 0;
+  let cloudCover = 0;
+  let duration = 0;
+
+  switch (season) {
+    case 'spring':
+      if (rand < 0.4) {
+        weatherType = 'rain';
+        intensity = 0.3 + Math.random() * 0.4; // 0.3-0.7
+        cloudCover = 0.6 + Math.random() * 0.3; // 0.6-0.9
+        duration = 20 + Math.floor(Math.random() * 40); // 20-60 ticks
+      } else if (rand < 0.5) {
+        weatherType = 'lightning';
+        intensity = 0.5 + Math.random() * 0.3; // 0.5-0.8
+        cloudCover = 0.7 + Math.random() * 0.2; // 0.7-0.9
+        duration = 10 + Math.floor(Math.random() * 20); // 10-30 ticks
+      } else {
+        weatherType = 'clear';
+        cloudCover = Math.random() * 0.3; // 0-0.3
+        duration = 30 + Math.floor(Math.random() * 50); // 30-80 ticks
+      }
+      break;
+
+    case 'summer':
+      if (rand < 0.3) {
+        weatherType = 'heat';
+        intensity = 0.4 + Math.random() * 0.4; // 0.4-0.8
+        cloudCover = Math.random() * 0.2; // 0-0.2
+        duration = 40 + Math.floor(Math.random() * 60); // 40-100 ticks
+      } else if (rand < 0.45) {
+        weatherType = 'rain';
+        intensity = 0.2 + Math.random() * 0.3; // 0.2-0.5
+        cloudCover = 0.5 + Math.random() * 0.3; // 0.5-0.8
+        duration = 15 + Math.floor(Math.random() * 30); // 15-45 ticks
+      } else if (rand < 0.55) {
+        weatherType = 'lightning';
+        intensity = 0.6 + Math.random() * 0.3; // 0.6-0.9
+        cloudCover = 0.8 + Math.random() * 0.15; // 0.8-0.95
+        duration = 8 + Math.floor(Math.random() * 15); // 8-23 ticks
+      } else {
+        weatherType = 'clear';
+        cloudCover = Math.random() * 0.2; // 0-0.2
+        duration = 50 + Math.floor(Math.random() * 70); // 50-120 ticks
+      }
+      break;
+
+    case 'fall':
+      if (rand < 0.5) {
+        weatherType = 'rain';
+        intensity = 0.4 + Math.random() * 0.4; // 0.4-0.8
+        cloudCover = 0.7 + Math.random() * 0.2; // 0.7-0.9
+        duration = 25 + Math.floor(Math.random() * 45); // 25-70 ticks
+      } else if (rand < 0.6) {
+        weatherType = 'lightning';
+        intensity = 0.4 + Math.random() * 0.3; // 0.4-0.7
+        cloudCover = 0.6 + Math.random() * 0.3; // 0.6-0.9
+        duration = 12 + Math.floor(Math.random() * 25); // 12-37 ticks
+      } else {
+        weatherType = 'clear';
+        cloudCover = 0.2 + Math.random() * 0.4; // 0.2-0.6
+        duration = 30 + Math.floor(Math.random() * 50); // 30-80 ticks
+      }
+      break;
+
+    case 'winter':
+      if (rand < 0.6) {
+        weatherType = 'snow';
+        intensity = 0.3 + Math.random() * 0.5; // 0.3-0.8
+        cloudCover = 0.8 + Math.random() * 0.15; // 0.8-0.95
+        duration = 30 + Math.floor(Math.random() * 60); // 30-90 ticks
+      } else if (rand < 0.7) {
+        weatherType = 'rain'; // Sometimes winter rain
+        intensity = 0.2 + Math.random() * 0.3; // 0.2-0.5
+        cloudCover = 0.7 + Math.random() * 0.2; // 0.7-0.9
+        duration = 20 + Math.floor(Math.random() * 30); // 20-50 ticks
+      } else {
+        weatherType = 'clear';
+        cloudCover = 0.3 + Math.random() * 0.4; // 0.3-0.7
+        duration = 25 + Math.floor(Math.random() * 45); // 25-70 ticks
+      }
+      break;
+  }
+
+  return {
+    type: weatherType,
+    intensity,
+    duration,
+    cloudCover,
+  };
+}
+
+// Calculate day length multiplier based on season (affects when dawn/dusk occur)
+export function getDayLengthMultiplier(season: Season): number {
+  switch (season) {
+    case 'spring':
+      return 1.0; // Normal day length
+    case 'summer':
+      return 1.2; // Longer days
+    case 'fall':
+      return 0.9; // Shorter days
+    case 'winter':
+      return 0.75; // Much shorter days
+    default:
+      return 1.0;
+  }
+}
+
+// Apply weather economic effects
+function applyWeatherEffects(stats: Stats, weather: Weather): Stats {
+  const newStats = { ...stats };
+  const effect = weather.intensity;
+
+  switch (weather.type) {
+    case 'rain':
+      // Rain slightly reduces commercial activity but helps environment
+      newStats.demand.commercial = Math.max(-100, newStats.demand.commercial - effect * 5);
+      newStats.environment = Math.min(100, newStats.environment + effect * 2);
+      break;
+
+    case 'snow':
+      // Snow reduces all activity but improves environment
+      newStats.demand.residential = Math.max(-100, newStats.demand.residential - effect * 3);
+      newStats.demand.commercial = Math.max(-100, newStats.demand.commercial - effect * 4);
+      newStats.demand.industrial = Math.max(-100, newStats.demand.industrial - effect * 5);
+      newStats.environment = Math.min(100, newStats.environment + effect * 1);
+      break;
+
+    case 'lightning':
+      // Lightning can cause minor disruptions
+      newStats.demand.commercial = Math.max(-100, newStats.demand.commercial - effect * 4);
+      newStats.demand.industrial = Math.max(-100, newStats.demand.industrial - effect * 3);
+      break;
+
+    case 'heat':
+      // Heat reduces productivity slightly
+      newStats.demand.industrial = Math.max(-100, newStats.demand.industrial - effect * 3);
+      newStats.demand.commercial = Math.max(-100, newStats.demand.commercial - effect * 2);
+      break;
+
+    case 'clear':
+      // Clear weather has no negative effects
+      break;
+  }
+
+  return newStats;
+}
+
 export function createInitialGameState(size: number = 60, cityName: string = 'New City'): GameState {
   const { grid, waterBodies } = generateTerrain(size);
   const adjacentCities = generateAdjacentCities();
+  const month = 1;
+  const season = getSeasonFromMonth(month);
+  const initialWeather = generateWeather(season, null);
 
   return {
     grid,
     gridSize: size,
     cityName,
     year: 2024,
-    month: 1,
+    month,
     day: 1,
     hour: 12, // Start at noon
     tick: 0,
@@ -670,6 +844,8 @@ export function createInitialGameState(size: number = 60, cityName: string = 'Ne
     disastersEnabled: true,
     adjacentCities,
     waterBodies,
+    weather: initialWeather,
+    season,
   };
 }
 
@@ -1626,7 +1802,7 @@ export function simulateTick(state: GameState): GameState {
   const newEffectiveTaxRate = state.effectiveTaxRate + taxRateDiff * 0.03;
 
   // Calculate stats (using lagged effectiveTaxRate for demand calculations)
-  const newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
+  let newStats = calculateStats(newGrid, size, newBudget, state.taxRate, newEffectiveTaxRate, services);
   newStats.money = state.stats.money;
 
   // Update money on month change
@@ -1635,11 +1811,27 @@ export function simulateTick(state: GameState): GameState {
   let newDay = state.day;
   let newTick = state.tick + 1;
   
+  // Update season if month changed
+  let newSeason = state.season;
+  const monthChanged = newMonth !== state.month;
+  if (monthChanged) {
+    newSeason = getSeasonFromMonth(newMonth);
+  }
+  
+  // Update weather
+  const newWeather = generateWeather(newSeason, state.weather);
+  
+  // Apply weather effects to stats
+  newStats = applyWeatherEffects(newStats, newWeather);
+  
   // Calculate visual hour for day/night cycle (much slower than game time)
   // One full day/night cycle = 15 game days (450 ticks)
   // This makes the cycle atmospheric rather than jarring
+  // Adjust cycle length based on season (longer days in summer, shorter in winter)
+  const dayLengthMultiplier = getDayLengthMultiplier(newSeason);
   const totalTicks = ((state.year - 2024) * 12 * 30 * 30) + ((state.month - 1) * 30 * 30) + ((state.day - 1) * 30) + newTick;
-  const cycleLength = 450; // ticks per visual day (15 game days)
+  const baseCycleLength = 450; // ticks per visual day (15 game days)
+  const cycleLength = baseCycleLength * dayLengthMultiplier;
   const newHour = Math.floor((totalTicks % cycleLength) / cycleLength * 24);
 
   if (newTick >= 30) {
@@ -1704,6 +1896,8 @@ export function simulateTick(state: GameState): GameState {
     advisorMessages,
     notifications: newNotifications,
     history,
+    weather: newWeather,
+    season: newSeason,
   };
 }
 

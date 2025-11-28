@@ -294,3 +294,39 @@ export type WorldRenderState = {
 
 // Overlay modes for visualization
 export type OverlayMode = 'none' | 'power' | 'water' | 'fire' | 'police' | 'health' | 'education' | 'subway';
+
+// Weather particle types
+export type RainParticle = {
+  x: number;
+  y: number;
+  speed: number;
+  length: number;
+  opacity: number;
+};
+
+export type SnowParticle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  opacity: number;
+};
+
+export type CloudParticle = {
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  speed: number;
+};
+
+export type LightningBolt = {
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  age: number;
+  maxAge: number;
+  intensity: number;
+};
