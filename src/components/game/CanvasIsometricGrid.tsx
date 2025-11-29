@@ -173,6 +173,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCanvasRef = useRef<HTMLCanvasElement>(null); // PERF: Separate canvas for hover/selection highlights
   const carsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const buildingsCanvasRef = useRef<HTMLCanvasElement>(null); // Separate canvas for buildings to render above vehicles
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderPendingRef = useRef<number | null>(null); // PERF: Track pending render frame
@@ -248,6 +249,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   // Factory smog system refs
   const factorySmogRef = useRef<FactorySmog[]>([]);
   const smogLastGridVersionRef = useRef(-1); // Track when to rebuild factory list
+  
+  // Building queue ref - stores buildings to render on separate canvas
+  const buildingQueueRef = useRef<{ screenX: number; screenY: number; tile: Tile; depth: number }[]>([]);
+  // Building render callback ref - stores function to draw a single building
+  const drawBuildingCallbackRef = useRef<((ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile) => void) | null>(null);
 
   // Traffic light system timer (cumulative time for cycling through states)
   const trafficLightTimerRef = useRef(0);
@@ -1699,6 +1705,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         if (carsCanvasRef.current) {
           carsCanvasRef.current.style.width = `${rect.width}px`;
           carsCanvasRef.current.style.height = `${rect.height}px`;
+        }
+        if (buildingsCanvasRef.current) {
+          buildingsCanvasRef.current.style.width = `${rect.width}px`;
+          buildingsCanvasRef.current.style.height = `${rect.height}px`;
         }
         if (lightingCanvasRef.current) {
           lightingCanvasRef.current.style.width = `${rect.width}px`;
@@ -3539,11 +3549,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // The beachQueue is no longer used for drawing beaches on land tiles
     
     
-    // Draw buildings sorted by depth so multi-tile sprites sit above adjacent tiles
+    // Store buildings sorted by depth for rendering on separate canvas (above vehicles)
     insertionSortByDepth(buildingQueue);
-    buildingQueue.forEach(({ tile, screenX, screenY }) => {
-      drawBuilding(ctx, screenX, screenY, tile);
-    });
+    buildingQueueRef.current = buildingQueue;
+    // Store drawBuilding callback for use in buildings canvas
+    drawBuildingCallbackRef.current = drawBuilding;
     
     // Draw overlays last so they remain visible on top of buildings
     overlayQueue.forEach(({ tile, screenX, screenY }) => {
@@ -3682,6 +3692,40 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }, [hoveredTile, selectedTile, offset, zoom, gridSize, grid]);
+  
+  // Render buildings on separate canvas (above vehicles)
+  // This useEffect reads from buildingQueueRef which is populated by the main canvas render
+  useEffect(() => {
+    const canvas = buildingsCanvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Clear the buildings canvas
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Apply transform (same as main canvas)
+    ctx.scale(dpr, dpr);
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(zoom, zoom);
+    
+    // Disable image smoothing for pixel-perfect rendering
+    ctx.imageSmoothingEnabled = false;
+    
+    // Draw all buildings from the queue using the callback from main canvas render
+    const drawBuildingCallback = drawBuildingCallbackRef.current;
+    if (drawBuildingCallback) {
+      buildingQueueRef.current.forEach(({ tile, screenX, screenY }) => {
+        drawBuildingCallback(ctx, screenX, screenY, tile);
+      });
+    }
+    
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }, [offset, zoom, grid, gridSize, gameVersion, overlayMode, selectedTool, currentSpritePack, imagesLoaded, state]);
   
   // Animate decorative car traffic AND emergency vehicles on top of the base canvas
   useEffect(() => {
@@ -4448,6 +4492,13 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       />
       <canvas
         ref={carsCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute top-0 left-0 pointer-events-none"
+      />
+      {/* Buildings canvas - renders above vehicles */}
+      <canvas
+        ref={buildingsCanvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
         className="absolute top-0 left-0 pointer-events-none"
