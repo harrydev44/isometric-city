@@ -292,5 +292,31 @@ export type WorldRenderState = {
   canvasSize: { width: number; height: number };
 };
 
+// Train types
+export type TrainDirection = 'north' | 'east' | 'south' | 'west';
+
+export type TrainType = 'passenger' | 'freight';
+
+export interface TrainCarriage {
+  offsetProgress: number;
+  type: 'engine' | 'passenger' | 'freight_box' | 'freight_tank' | 'freight_flat' | 'caboose';
+}
+
+export interface Train {
+  id: number;
+  type: TrainType;
+  tileX: number;
+  tileY: number;
+  direction: TrainDirection;
+  progress: number;
+  speed: number;
+  age: number;
+  maxAge: number;
+  color: string;
+  accentColor: string;
+  carriages: TrainCarriage[];
+  length: number;
+}
+
 // Overlay modes for visualization
 export type OverlayMode = 'none' | 'power' | 'water' | 'fire' | 'police' | 'health' | 'education' | 'subway';

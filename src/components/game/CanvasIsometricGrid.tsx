@@ -132,6 +132,19 @@ import {
   ROAD_CONFIG,
   TRAFFIC_LIGHT_TIMING,
 } from '@/components/game/trafficSystem';
+import { drawRailTracks, analyzeRailTile, getAdjacentRails } from '@/components/game/railSystem';
+import {
+  Train,
+  TrainDirection,
+  TrainType,
+  createTrain,
+  findRandomRailTile,
+  getRailDirectionOptions,
+  pickNextTrainDirection,
+  getTrainCarriagePosition,
+  TRAIN_DIRECTION_META,
+  TRAIN_CONFIG,
+} from '@/components/game/trainSystem';
 import { CrimeType, getCrimeName, getCrimeDescription, getFireDescriptionForTile, getFireNameForTile } from '@/components/game/incidentData';
 
 // Props interface for CanvasIsometricGrid
@@ -225,6 +238,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
 
   // Traffic light system timer (cumulative time for cycling through states)
   const trafficLightTimerRef = useRef(0);
+
+  // Train system refs
+  const trainsRef = useRef<Train[]>([]);
+  const trainIdRef = useRef(0);
+  const trainSpawnTimerRef = useRef(0);
 
   // Performance: Cache expensive grid calculations
   const cachedRoadTileCountRef = useRef<{ count: number; gridVersion: number }>({ count: 0, gridVersion: -1 });
@@ -1019,6 +1037,149 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     return findFireworkBuildings(currentGrid, currentGridSize, FIREWORK_BUILDINGS);
   }, []);
 
+  // Update trains - spawn, move, and manage lifecycle
+  const updateTrains = useCallback((delta: number) => {
+    const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed } = worldStateRef.current;
+
+    if (!currentGrid || currentGridSize <= 0) {
+      trainsRef.current = [];
+      return;
+    }
+
+    const speedMultiplier = currentSpeed === 0 ? 0 : currentSpeed === 1 ? 1 : currentSpeed === 2 ? 1.5 : 2;
+
+    // Spawn trains
+    const maxTrains = 15;
+    trainSpawnTimerRef.current -= delta;
+    if (trainsRef.current.length < maxTrains && trainSpawnTimerRef.current <= 0) {
+      const spawnLocation = findRandomRailTile(currentGrid, gridSize);
+      if (spawnLocation) {
+        const trainType: TrainType = Math.random() < 0.6 ? 'passenger' : 'freight';
+        const train = createTrain(
+          trainIdRef.current++,
+          trainType,
+          spawnLocation.x,
+          spawnLocation.y,
+          spawnLocation.direction
+        );
+        trainsRef.current.push(train);
+      }
+      trainSpawnTimerRef.current = 3 + Math.random() * 5; // 3-8 seconds between spawns
+    }
+
+    // Update existing trains
+    const updatedTrains: Train[] = [];
+
+    for (const train of trainsRef.current) {
+      train.age += delta;
+
+      // Remove old trains
+      if (train.age > train.maxAge) {
+        continue;
+      }
+
+      // Update progress
+      train.progress += train.speed * delta * speedMultiplier;
+
+      // Move to next tile when progress >= 1
+      while (train.progress >= 1) {
+        train.progress -= 1;
+
+        // Get next direction
+        const nextDir = pickNextTrainDirection(train.direction, currentGrid, gridSize, train.tileX, train.tileY);
+        if (!nextDir) {
+          // No valid direction, remove train
+          break;
+        }
+
+        // Move to next tile
+        const meta = TRAIN_DIRECTION_META[nextDir];
+        const newTileX = train.tileX + meta.step.x;
+        const newTileY = train.tileY + meta.step.y;
+
+        // Check if new tile is valid rail
+        if (newTileX < 0 || newTileX >= gridSize || newTileY < 0 || newTileY >= gridSize) {
+          // Out of bounds
+          break;
+        }
+
+        if (currentGrid[newTileY][newTileX].building.type !== 'rail') {
+          // Not a rail tile
+          break;
+        }
+
+        // Update position
+        train.tileX = newTileX;
+        train.tileY = newTileY;
+        train.direction = nextDir;
+      }
+
+      updatedTrains.push(train);
+    }
+
+    trainsRef.current = updatedTrains;
+  }, [worldStateRef, gridSize]);
+
+  // Draw trains with multi-carriage support
+  const drawTrains = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset: currentOffset, zoom: currentZoom, grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    const canvas = ctx.canvas;
+    const dpr = window.devicePixelRatio || 1;
+
+    if (!currentGrid || currentGridSize <= 0 || trainsRef.current.length === 0) {
+      return;
+    }
+
+    ctx.save();
+    ctx.scale(dpr * currentZoom, dpr * currentZoom);
+    ctx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+
+    for (const train of trainsRef.current) {
+      // Draw each carriage
+      for (const carriage of train.carriages) {
+        const pos = getTrainCarriagePosition(train, carriage, currentGrid, gridSize);
+        if (!pos) continue;
+
+        ctx.save();
+        ctx.translate(pos.screenX, pos.screenY);
+        ctx.rotate(pos.angle);
+
+        // Draw carriage based on type
+        const isEngine = carriage.type === 'engine';
+        const length = isEngine ? 18 : carriage.type === 'caboose' ? 14 : 16;
+        const width = 10;
+
+        // Main body
+        ctx.fillStyle = isEngine ? train.color : carriage.type === 'caboose' ? '#dc2626' : train.color;
+        ctx.fillRect(-length / 2, -width / 2, length, width);
+
+        // Windows or details
+        if (carriage.type === 'passenger' || carriage.type === 'caboose') {
+          ctx.fillStyle = '#87ceeb';
+          ctx.fillRect(-length / 2 + 2, -width / 2 + 2, length - 4, 3);
+          ctx.fillRect(-length / 2 + 2, width / 2 - 5, length - 4, 3);
+        }
+
+        // Accent stripe
+        ctx.fillStyle = train.accentColor;
+        ctx.fillRect(-length / 2, -1, length, 2);
+
+        // Wheels
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(-length / 3, width / 2, 2, 0, Math.PI * 2);
+        ctx.arc(length / 3, width / 2, 2, 0, Math.PI * 2);
+        ctx.arc(-length / 3, -width / 2, 2, 0, Math.PI * 2);
+        ctx.arc(length / 3, -width / 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+  }, [worldStateRef, gridSize]);
+
   // Update fireworks - spawn, animate, and manage lifecycle
   const updateFireworks = useCallback((delta: number, currentHour: number) => {
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed } = worldStateRef.current;
@@ -1696,6 +1857,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     const buildingQueue: BuildingDraw[] = [];
     const waterQueue: BuildingDraw[] = [];
     const roadQueue: BuildingDraw[] = []; // Roads drawn above water
+    const railQueue: BuildingDraw[] = []; // Rails drawn above water
     const beachQueue: BuildingDraw[] = [];
     const baseTileQueue: BuildingDraw[] = [];
     const greenBaseTileQueue: BuildingDraw[] = [];
@@ -1732,6 +1894,12 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     function hasRoad(gridX: number, gridY: number): boolean {
       if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
       return grid[gridY][gridX].building.type === 'road';
+    }
+
+    // Helper function to check if a tile has a rail
+    function hasRail(gridX: number, gridY: number): boolean {
+      if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
+      return grid[gridY][gridX].building.type === 'rail';
     }
     
     // Helper function to check if a tile has a marina dock or pier (no beaches next to these)
@@ -3241,6 +3409,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           const depth = x + y;
           roadQueue.push({ screenX, screenY, tile, depth });
         }
+        // Rails go to their own queue (drawn above water, similar to roads)
+        else if (tile.building.type === 'rail') {
+          const depth = x + y;
+          railQueue.push({ screenX, screenY, tile, depth });
+        }
         // Check for beach tiles (grass/empty tiles adjacent to water) - use pre-computed metadata
         else if ((tile.building.type === 'grass' || tile.building.type === 'empty') &&
                  (tileMetadata?.isAdjacentToWater ?? false)) {
@@ -3338,6 +3511,18 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         
         // Draw road markings and sidewalks
         drawBuilding(ctx, screenX, screenY, tile);
+      });
+    
+    // Draw rails (above water, similar to roads)
+    insertionSortByDepth(railQueue);
+    railQueue.forEach(({ tile, screenX, screenY }) => {
+        // Draw rail base tile first (greenish-gray diamond for ballast)
+        const w = TILE_WIDTH;
+        const h = TILE_HEIGHT;
+        drawGreenBaseTile(ctx, screenX, screenY, tile, zoom);
+        
+        // Draw rail tracks
+        drawRailTracks(ctx, screenX, screenY, tile.x, tile.y, grid, gridSize, zoom);
       });
     
     // Draw green base tiles for grass/empty tiles adjacent to water (after water, before gray bases)
@@ -3535,6 +3720,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         updateCrimeIncidents(delta); // Update/decay crime incidents
         updateEmergencyVehicles(delta); // Update emergency vehicles!
         updatePedestrians(delta); // Update pedestrians (zoom-gated)
+        updateTrains(delta); // Update trains (rail required)
         updateAirplanes(delta); // Update airplanes (airport required)
         updateHelicopters(delta); // Update helicopters (hospital/airport required)
         updateBoats(delta); // Update boats (marina/pier required)
@@ -3552,6 +3738,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       } else {
         drawCars(ctx);
         drawPedestrians(ctx); // Draw pedestrians (zoom-gated)
+        drawTrains(ctx); // Draw trains on rails
         drawBoats(ctx); // Draw boats on water
         drawSmog(ctx); // Draw factory smog (above ground, below aircraft)
         drawEmergencyVehicles(ctx); // Draw emergency vehicles!

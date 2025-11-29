@@ -86,11 +86,13 @@ function clamp(value: number, min: number, max: number) {
 
 const toolBuildingMap: Partial<Record<Tool, BuildingType>> = {
   road: 'road',
+  rail: 'rail',
   tree: 'tree',
   police_station: 'police_station',
   fire_station: 'fire_station',
   hospital: 'hospital',
   school: 'school',
+  rail_station: 'rail_station',
   university: 'university',
   park: 'park',
   park_large: 'park_large',
