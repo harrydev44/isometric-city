@@ -173,6 +173,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCanvasRef = useRef<HTMLCanvasElement>(null); // PERF: Separate canvas for hover/selection highlights
   const carsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const tallBuildingsCanvasRef = useRef<HTMLCanvasElement>(null); // Canvas for tall buildings that render above vehicles
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderPendingRef = useRef<number | null>(null); // PERF: Track pending render frame
@@ -1700,6 +1701,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           carsCanvasRef.current.style.width = `${rect.width}px`;
           carsCanvasRef.current.style.height = `${rect.height}px`;
         }
+        if (tallBuildingsCanvasRef.current) {
+          tallBuildingsCanvasRef.current.style.width = `${rect.width}px`;
+          tallBuildingsCanvasRef.current.style.height = `${rect.height}px`;
+        }
         if (lightingCanvasRef.current) {
           lightingCanvasRef.current.style.width = `${rect.width}px`;
           lightingCanvasRef.current.style.height = `${rect.height}px`;
@@ -1716,6 +1721,44 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, []);
+  
+  // Helper function to check if a building is tall (should render above vehicles)
+  // Buildings with significant vertical offsets (like skyscrapers) are considered tall
+  const isTallBuilding = useCallback((buildingType: BuildingType): boolean => {
+    const activePack = getActiveSpritePack();
+    const spriteKey = BUILDING_TO_SPRITE[buildingType];
+    if (!spriteKey) return false;
+    
+    // Check building-specific vertical offsets first
+    const buildingVerticalOffset = activePack.buildingVerticalOffsets?.[buildingType];
+    if (buildingVerticalOffset !== undefined) {
+      return buildingVerticalOffset <= -0.5; // Tall if offset is -0.5 or more negative
+    }
+    
+    // Check sprite-level vertical offsets
+    const spriteVerticalOffset = activePack.verticalOffsets[spriteKey];
+    if (spriteVerticalOffset !== undefined) {
+      return spriteVerticalOffset <= -0.5; // Tall if offset is -0.5 or more negative
+    }
+    
+    // Check for known tall building types
+    const tallBuildingTypes: BuildingType[] = [
+      'apartment_high',
+      'apartment_low',
+      'office_high',
+      'office_low',
+      'mall',
+      'stadium',
+      'museum',
+      'airport',
+      'amusement_park',
+      'space_program',
+      'city_hall',
+      'university',
+      'hospital',
+    ];
+    return tallBuildingTypes.includes(buildingType);
+  }, [currentSpritePack]);
   
   // Main render function - PERF: Uses requestAnimationFrame throttling to batch multiple state updates
   useEffect(() => {
@@ -1781,6 +1824,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // PERF: Reuse queue arrays across frames to avoid GC pressure
     // Arrays are cleared by setting length = 0 which is faster than recreating
     const buildingQueue: BuildingDraw[] = [];
+    const tallBuildingQueue: BuildingDraw[] = []; // Tall buildings that render above vehicles
     const waterQueue: BuildingDraw[] = [];
     const roadQueue: BuildingDraw[] = []; // Roads drawn above water
     const railQueue: BuildingDraw[] = []; // Rail tracks drawn above water
@@ -3396,13 +3440,18 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
                  (tileMetadata?.isAdjacentToWater ?? false)) {
           beachQueue.push({ screenX, screenY, tile, depth: x + y });
         }
-        // Other buildings go to regular building queue
+        // Other buildings go to regular building queue or tall building queue
         else {
           const isBuilding = tile.building.type !== 'grass' && tile.building.type !== 'empty';
           if (isBuilding) {
             const size = getBuildingSize(tile.building.type);
             const depth = x + y + size.width + size.height - 2;
-            buildingQueue.push({ screenX, screenY, tile, depth });
+            // Separate tall buildings (like skyscrapers) to render above vehicles
+            if (isTallBuilding(tile.building.type)) {
+              tallBuildingQueue.push({ screenX, screenY, tile, depth });
+            } else {
+              buildingQueue.push({ screenX, screenY, tile, depth });
+            }
           }
         }
         
@@ -3750,6 +3799,123 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
   }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateBoats, drawBoats, updateTrains, drawTrainsCallback, drawIncidentIndicators, updateFireworks, drawFireworks, updateSmog, drawSmog, visualHour, isMobile]);
+  
+  // Render tall buildings on separate canvas layer above vehicles
+  useEffect(() => {
+    const canvas = tallBuildingsCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Set canvas size
+    canvas.width = canvasSize.width;
+    canvas.height = canvasSize.height;
+    
+    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (!grid || gridSize <= 0) return;
+    
+    ctx.save();
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(offset.x, offset.y);
+    
+    // Calculate viewport bounds
+    const viewWidth = canvasSize.width / (dpr * zoom);
+    const viewHeight = canvasSize.height / (dpr * zoom);
+    const viewLeft = -offset.x / zoom - TILE_WIDTH;
+    const viewTop = -offset.y / zoom - TILE_HEIGHT * 2;
+    const viewRight = viewWidth - offset.x / zoom + TILE_WIDTH;
+    const viewBottom = viewHeight - offset.y / zoom + TILE_HEIGHT * 2;
+    
+    // Collect tall buildings
+    const tallBuildings: Array<{ tile: Tile; screenX: number; screenY: number; depth: number }> = [];
+    
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        const tile = grid[y][x];
+        if (!tile || tile.building.type === 'grass' || tile.building.type === 'empty' || 
+            tile.building.type === 'water' || tile.building.type === 'road' || tile.building.type === 'rail') {
+          continue;
+        }
+        
+        if (isTallBuilding(tile.building.type)) {
+          const { screenX, screenY } = gridToScreen(x, y, 0, 0);
+          
+          // Viewport culling
+          if (screenX + TILE_WIDTH < viewLeft || screenX > viewRight ||
+              screenY + TILE_HEIGHT * 4 < viewTop || screenY > viewBottom) {
+            continue;
+          }
+          
+          const size = getBuildingSize(tile.building.type);
+          const depth = x + y + size.width + size.height - 2;
+          tallBuildings.push({ tile, screenX, screenY, depth });
+        }
+      }
+    }
+    
+    // Sort by depth for proper rendering order
+    tallBuildings.sort((a, b) => a.depth - b.depth);
+    
+    // Draw tall buildings using the same logic as main render
+    // We need to recreate the drawBuilding function here since it's defined inside the main render effect
+    const drawTallBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile) => {
+      const buildingType = tile.building.type;
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+      
+      // Check if this building type has a sprite
+      const activePack = getActiveSpritePack();
+      const hasTileSprite = BUILDING_TO_SPRITE[buildingType] || 
+        (activePack.parksBuildings && activePack.parksBuildings[buildingType]) ||
+        (activePack.stationsVariants && activePack.stationsVariants[buildingType]);
+      
+      if (hasTileSprite && imagesLoaded) {
+        // Simplified building drawing - reuse the same sprite drawing logic
+        // This is a simplified version; for full functionality, we'd need to extract drawBuilding
+        const coords = getSpriteCoords(buildingType, 1000, 1000); // Placeholder dimensions
+        if (coords) {
+          const spriteSheet = getCachedImage(activePack.src);
+          if (spriteSheet) {
+            const sheetWidth = spriteSheet.naturalWidth || spriteSheet.width;
+            const sheetHeight = spriteSheet.naturalHeight || spriteSheet.height;
+            const actualCoords = getSpriteCoords(buildingType, sheetWidth, sheetHeight);
+            if (actualCoords) {
+              const buildingSize = getBuildingSize(buildingType);
+              const scaleMultiplier = buildingSize.width > 1 || buildingSize.height > 1 
+                ? Math.max(buildingSize.width, buildingSize.height) : 1;
+              const destWidth = w * 1.2 * scaleMultiplier * (activePack.globalScale ?? 1);
+              const aspectRatio = actualCoords.sh / actualCoords.sw;
+              const destHeight = destWidth * aspectRatio;
+              
+              const spriteKey = BUILDING_TO_SPRITE[buildingType];
+              const verticalOffset = activePack.buildingVerticalOffsets?.[buildingType] 
+                ?? (spriteKey ? (activePack.verticalOffsets[spriteKey] ?? 0) : 0);
+              
+              const drawX = x + w / 2 - destWidth / 2;
+              const drawY = y + h - destHeight + verticalOffset * h;
+              
+              ctx.drawImage(
+                spriteSheet,
+                actualCoords.sx, actualCoords.sy, actualCoords.sw, actualCoords.sh,
+                Math.round(drawX), Math.round(drawY), Math.round(destWidth), Math.round(destHeight)
+              );
+            }
+          }
+        }
+      }
+    };
+    
+    tallBuildings.forEach(({ tile, screenX, screenY }) => {
+      drawTallBuilding(ctx, screenX, screenY, tile);
+    });
+    
+    ctx.restore();
+  }, [grid, gridSize, offset, zoom, canvasSize, imagesLoaded, imageLoadVersion, currentSpritePack, isTallBuilding]);
   
   // Day/Night cycle lighting rendering - optimized for performance
   useEffect(() => {
@@ -4448,6 +4614,12 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       />
       <canvas
         ref={carsCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute top-0 left-0 pointer-events-none"
+      />
+      <canvas
+        ref={tallBuildingsCanvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
         className="absolute top-0 left-0 pointer-events-none"
