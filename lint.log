@@ -1,0 +1,121 @@
+
+> isometric-city@0.1.0 lint
+> eslint .
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+
+/workspace/src/app/opengraph-image.tsx
+  152:9   warning  img elements must have an alt prop, either with meaningful text, or an empty string for decorative images  jsx-a11y/alt-text
+  167:13  warning  img elements must have an alt prop, either with meaningful text, or an empty string for decorative images  jsx-a11y/alt-text
+
+/workspace/src/components/game/CanvasIsometricGrid.tsx
+   689:7   error    Error: This value cannot be modified
+
+Modifying a value used previously in an effect function or as an effect dependency is not allowed. Consider moving the modification before calling useEffect().
+
+/workspace/src/components/game/CanvasIsometricGrid.tsx:689:7
+  687 |     
+  688 |     for (const boat of boatsRef.current) {
+> 689 |       boat.age += delta;
+      |       ^^^^ `boatsRef` cannot be modified
+  690 |       
+  691 |       // Update wake particles (similar to contrails) - shorter on mobile
+  692 |       const wakeMaxAge = isMobile ? 0.6 : WAKE_MAX_AGE;                                                                          react-hooks/immutability
+  1047:6   warning  React Hook useCallback has a missing dependency: 'isMobile'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/exhaustive-deps
+  1214:7   error    Error: This value cannot be modified
+
+Modifying a value used previously in an effect function or as an effect dependency is not allowed. Consider moving the modification before calling useEffect().
+
+/workspace/src/components/game/CanvasIsometricGrid.tsx:1214:7
+  1212 |     
+  1213 |     for (const firework of fireworksRef.current) {
+> 1214 |       firework.age += delta;
+       |       ^^^^^^^^ `fireworksRef` cannot be modified
+  1215 |       
+  1216 |       switch (firework.state) {
+  1217 |         case 'launching': {                                                                                                                    react-hooks/immutability
+  1486:7   error    Error: This value cannot be modified
+
+Modifying a value used previously in an effect function or as an effect dependency is not allowed. Consider moving the modification before calling useEffect().
+
+/workspace/src/components/game/CanvasIsometricGrid.tsx:1486:7
+  1484 |       const spawnInterval = baseSpawnInterval * spawnMultiplier;
+  1485 |       
+> 1486 |       smog.spawnTimer += adjustedDelta;
+       |       ^^^^ `factorySmogRef` cannot be modified
+  1487 |       
+  1488 |       // Spawn new particles (only if below particle limit)
+  1489 |       while (smog.spawnTimer >= spawnInterval && smog.particles.length < maxParticles) {  react-hooks/immutability
+  3614:6   warning  React Hook useEffect has a missing dependency: 'isMobile'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+  4099:17  warning  Unused eslint-disable directive (no problems were reported)
+
+/workspace/src/components/game/aircraftSystems.ts
+  191:7  error  Error: This value cannot be modified
+
+Modifying component props or hook arguments is not allowed. Consider using a local variable instead.
+
+/workspace/src/components/game/aircraftSystems.ts:191:7
+  189 |       const contrailMaxAge = isMobile ? 0.8 : CONTRAIL_MAX_AGE;
+  190 |       const contrailSpawnInterval = isMobile ? 0.06 : CONTRAIL_SPAWN_INTERVAL;
+> 191 |       plane.contrail = plane.contrail
+      |       ^^^^^ `airplanesRef` cannot be modified
+  192 |         .map(p => ({ ...p, age: p.age + delta, opacity: Math.max(0, 1 - p.age / contrailMaxAge) }))
+  193 |         .filter(p => p.age < contrailMaxAge);
+  194 |         react-hooks/immutability
+  389:7  error  Error: This value cannot be modified
+
+Modifying component props or hook arguments is not allowed. Consider using a local variable instead.
+
+/workspace/src/components/game/aircraftSystems.ts:389:7
+  387 |     for (const heli of helicoptersRef.current) {
+  388 |       // Update rotor animation
+> 389 |       heli.rotorAngle += delta * 25; // Fast rotor spin
+      |       ^^^^ `helicoptersRef` cannot be modified
+  390 |       
+  391 |       // Update rotor wash particles - shorter duration on mobile
+  392 |       const washMaxAge = isMobile ? 0.4 : ROTOR_WASH_MAX_AGE;                                                               react-hooks/immutability
+
+/workspace/src/components/game/boatSystem.ts
+  148:7  error    Error: This value cannot be modified
+
+Modifying component props or hook arguments is not allowed. Consider using a local variable instead.
+
+/workspace/src/components/game/boatSystem.ts:148:7
+  146 |     
+  147 |     for (const boat of boatsRef.current) {
+> 148 |       boat.age += delta;
+      |       ^^^^ `boatsRef` cannot be modified
+  149 |       
+  150 |       // Update wake particles (similar to contrails) - shorter on mobile
+  151 |       const wakeMaxAge = isMobile ? 0.6 : WAKE_MAX_AGE;  react-hooks/immutability
+  506:6  warning  React Hook useCallback has a missing dependency: 'isMobile'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/exhaustive-deps
+
+/workspace/src/components/game/effectsSystems.ts
+  189:7  error  Error: This value cannot be modified
+
+Modifying component props or hook arguments is not allowed. Consider using a local variable instead.
+
+/workspace/src/components/game/effectsSystems.ts:189:7
+  187 |     
+  188 |     for (const firework of fireworksRef.current) {
+> 189 |       firework.age += delta;
+      |       ^^^^^^^^ `fireworksRef` cannot be modified
+  190 |       
+  191 |       switch (firework.state) {
+  192 |         case 'launching': {                                                                                                                    react-hooks/immutability
+  455:7  error  Error: This value cannot be modified
+
+Modifying component props or hook arguments is not allowed. Consider using a local variable instead.
+
+/workspace/src/components/game/effectsSystems.ts:455:7
+  453 |       const spawnInterval = baseSpawnInterval * spawnMultiplier;
+  454 |       
+> 455 |       smog.spawnTimer += adjustedDelta;
+      |       ^^^^ `factorySmogRef` cannot be modified
+  456 |       
+  457 |       // Spawn new particles (only if below particle limit)
+  458 |       while (smog.spawnTimer >= spawnInterval && smog.particles.length < maxParticles) {  react-hooks/immutability
+
+✖ 14 problems (8 errors, 6 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

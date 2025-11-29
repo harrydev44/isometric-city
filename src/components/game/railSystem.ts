@@ -18,6 +18,8 @@ export type RailConnection = {
   west: boolean;
 };
 
+type Point = { x: number; y: number };
+
 /** Track segment type based on connections */
 export type TrackType = 
   | 'straight_ns'     // North-South straight
@@ -131,6 +133,9 @@ export const TIES_PER_TILE = 5;
 
 /** Separation between the two parallel tracks as ratio of tile width */
 export const TRACK_SEPARATION_RATIO = 0.22;
+
+/** How far along the crossbar the T-junction curves should merge */
+const T_JUNCTION_BRANCH_RATIO = 0.4;
 
 /** Train car dimensions - smaller for double track */
 export const TRAIN_CAR = {
@@ -286,6 +291,7 @@ function drawBallast(
   const southEdge = { x: x + w * 0.75, y: y + h * 0.75 };
   const westEdge = { x: x + w * 0.25, y: y + h * 0.75 };
   const center = { x: cx, y: cy };
+  const edgePoints: TJunctionEdges = { northEdge, eastEdge, southEdge, westEdge, center };
 
   ctx.fillStyle = RAIL_COLORS.BALLAST;
 
@@ -385,6 +391,13 @@ function drawBallast(
     ctx.fill();
   };
 
+  const renderTJunctionBallastCurves = () => {
+    const curves = computeTJunctionCurves(trackType, edgePoints);
+    curves.forEach(curve => {
+      drawDoubleCurvedBallast(curve.from, curve.to, curve.control, curve.fromPerp, curve.toPerp, curve.curvePerp);
+    });
+  };
+
   // Draw based on track type
   switch (trackType) {
     case 'straight_ns':
@@ -410,21 +423,25 @@ function drawBallast(
     case 'junction_t_n':
       drawDoubleStraightBallast(eastEdge, westEdge, ISO_NS);
       drawDoubleStraightBallast(center, southEdge, ISO_EW);
+      renderTJunctionBallastCurves();
       drawCenterBallast();
       break;
     case 'junction_t_e':
       drawDoubleStraightBallast(northEdge, southEdge, ISO_EW);
       drawDoubleStraightBallast(center, westEdge, ISO_NS);
+      renderTJunctionBallastCurves();
       drawCenterBallast();
       break;
     case 'junction_t_s':
       drawDoubleStraightBallast(eastEdge, westEdge, ISO_NS);
       drawDoubleStraightBallast(center, northEdge, ISO_EW);
+      renderTJunctionBallastCurves();
       drawCenterBallast();
       break;
     case 'junction_t_w':
       drawDoubleStraightBallast(northEdge, southEdge, ISO_EW);
       drawDoubleStraightBallast(center, eastEdge, ISO_NS);
+      renderTJunctionBallastCurves();
       drawCenterBallast();
       break;
     case 'junction_cross':
@@ -474,6 +491,200 @@ function drawBallast(
 /** Screen-space perpendicular (90° clockwise rotation) */
 const getScreenPerp = (dx: number, dy: number) => ({ x: dy, y: -dx });
 
+type TJunctionEdges = {
+  northEdge: Point;
+  eastEdge: Point;
+  southEdge: Point;
+  westEdge: Point;
+  center: Point;
+};
+
+type TJunctionCurveGeometry = {
+  from: Point;
+  to: Point;
+  control: Point;
+  fromDir: Point;
+  toDir: Point;
+  fromPerp: Point;
+  toPerp: Point;
+  curvePerp: Point;
+};
+
+type TJunctionConfig = {
+  stemPoint: Point;
+  stemDir: Point;
+  branchPoints: [Point, Point];
+  branchDirs: [Point, Point];
+};
+
+function normalizeVector(vec: Point): Point {
+  const len = Math.hypot(vec.x, vec.y);
+  if (len === 0) return { x: 0, y: 0 };
+  return { x: vec.x / len, y: vec.y / len };
+}
+
+function intersectDirectedLines(p0: Point, d0: Point, p1: Point, d1: Point): Point | null {
+  const denom = d0.x * d1.y - d0.y * d1.x;
+  if (Math.abs(denom) < 1e-6) return null;
+  const diff = { x: p1.x - p0.x, y: p1.y - p0.y };
+  const t = (diff.x * d1.y - diff.y * d1.x) / denom;
+  return { x: p0.x + d0.x * t, y: p0.y + d0.y * t };
+}
+
+function getTJunctionConfig(trackType: TrackType, edges: TJunctionEdges): TJunctionConfig | null {
+  const { northEdge, eastEdge, southEdge, westEdge, center } = edges;
+  const ratio = T_JUNCTION_BRANCH_RATIO;
+
+  if (trackType === 'junction_t_n' || trackType === 'junction_t_s') {
+    const eastBranch: Point = {
+      x: center.x + (eastEdge.x - center.x) * ratio,
+      y: center.y + (eastEdge.y - center.y) * ratio,
+    };
+    const westBranch: Point = {
+      x: center.x + (westEdge.x - center.x) * ratio,
+      y: center.y + (westEdge.y - center.y) * ratio,
+    };
+
+    const horizontalDir = normalizeVector({
+      x: westBranch.x - eastBranch.x,
+      y: westBranch.y - eastBranch.y,
+    });
+    if (horizontalDir.x === 0 && horizontalDir.y === 0) return null;
+
+    const branchDirs: [Point, Point] = [
+      horizontalDir,
+      { x: -horizontalDir.x, y: -horizontalDir.y },
+    ];
+
+    const stemPoint = trackType === 'junction_t_n' ? southEdge : northEdge;
+    const stemDir = normalizeVector({
+      x: center.x - stemPoint.x,
+      y: center.y - stemPoint.y,
+    });
+
+    return {
+      stemPoint,
+      stemDir,
+      branchPoints: [eastBranch, westBranch],
+      branchDirs,
+    };
+  }
+
+  if (trackType === 'junction_t_e' || trackType === 'junction_t_w') {
+    const northBranch: Point = {
+      x: center.x + (northEdge.x - center.x) * ratio,
+      y: center.y + (northEdge.y - center.y) * ratio,
+    };
+    const southBranch: Point = {
+      x: center.x + (southEdge.x - center.x) * ratio,
+      y: center.y + (southEdge.y - center.y) * ratio,
+    };
+
+    const verticalDir = normalizeVector({
+      x: southBranch.x - northBranch.x,
+      y: southBranch.y - northBranch.y,
+    });
+    if (verticalDir.x === 0 && verticalDir.y === 0) return null;
+
+    const branchDirs: [Point, Point] = [
+      verticalDir,
+      { x: -verticalDir.x, y: -verticalDir.y },
+    ];
+
+    const stemPoint = trackType === 'junction_t_e' ? westEdge : eastEdge;
+    const stemDir = normalizeVector({
+      x: center.x - stemPoint.x,
+      y: center.y - stemPoint.y,
+    });
+
+    return {
+      stemPoint,
+      stemDir,
+      branchPoints: [northBranch, southBranch],
+      branchDirs,
+    };
+  }
+
+  return null;
+}
+
+function createTJunctionCurveGeometry(
+  stemPoint: Point,
+  branchPoint: Point,
+  stemDir: Point,
+  branchDir: Point
+): TJunctionCurveGeometry | null {
+  const fromDir = normalizeVector(stemDir);
+  const toDir = normalizeVector(branchDir);
+
+  if ((fromDir.x === 0 && fromDir.y === 0) || (toDir.x === 0 && toDir.y === 0)) {
+    return null;
+  }
+
+  const control = intersectDirectedLines(
+    stemPoint,
+    fromDir,
+    branchPoint,
+    { x: -toDir.x, y: -toDir.y }
+  ) ?? {
+    x: (stemPoint.x + branchPoint.x) / 2,
+    y: (stemPoint.y + branchPoint.y) / 2,
+  };
+
+  let fromPerp = normalizeVector(getScreenPerp(fromDir.x, fromDir.y));
+  if (fromPerp.x === 0 && fromPerp.y === 0) {
+    fromPerp = { x: -fromDir.y, y: fromDir.x };
+  }
+
+  let toPerp = normalizeVector(getScreenPerp(toDir.x, toDir.y));
+  if (toPerp.x === 0 && toPerp.y === 0) {
+    toPerp = { x: -toDir.y, y: toDir.x };
+  }
+
+  let curvePerp = normalizeVector({
+    x: fromPerp.x + toPerp.x,
+    y: fromPerp.y + toPerp.y,
+  });
+  if (curvePerp.x === 0 && curvePerp.y === 0) {
+    curvePerp = fromPerp;
+  }
+
+  return {
+    from: stemPoint,
+    to: branchPoint,
+    control,
+    fromDir,
+    toDir,
+    fromPerp,
+    toPerp,
+    curvePerp,
+  };
+}
+
+function computeTJunctionCurves(
+  trackType: TrackType,
+  edges: TJunctionEdges
+): TJunctionCurveGeometry[] {
+  const config = getTJunctionConfig(trackType, edges);
+  if (!config) return [];
+
+  const curves: TJunctionCurveGeometry[] = [];
+
+  config.branchPoints.forEach((branchPoint, index) => {
+    const geometry = createTJunctionCurveGeometry(
+      config.stemPoint,
+      branchPoint,
+      config.stemDir,
+      config.branchDirs[index]
+    );
+    if (geometry) {
+      curves.push(geometry);
+    }
+  });
+
+  return curves;
+}
+
 /**
  * Draw rail ties (sleepers) for DOUBLE tracks
  */
@@ -500,6 +711,7 @@ function drawTies(
   const southEdge = { x: x + w * 0.75, y: y + h * 0.75 };
   const westEdge = { x: x + w * 0.25, y: y + h * 0.75 };
   const center = { x: cx, y: cy };
+  const edgePoints: TJunctionEdges = { northEdge, eastEdge, southEdge, westEdge, center };
 
   ctx.fillStyle = RAIL_COLORS.TIE;
 
@@ -596,6 +808,23 @@ function drawTies(
 
   const tiesHalf = Math.ceil(TIES_PER_TILE / 2);
 
+  const renderTJunctionTieCurves = (numTies: number) => {
+    const curves = computeTJunctionCurves(trackType, edgePoints);
+    curves.forEach(curve => {
+      drawDoubleCurveTies(
+        curve.from,
+        curve.to,
+        curve.control,
+        curve.fromDir,
+        curve.toDir,
+        curve.fromPerp,
+        curve.toPerp,
+        curve.curvePerp,
+        numTies
+      );
+    });
+  };
+
   switch (trackType) {
     case 'straight_ns':
       drawDoubleTies(northEdge, southEdge, ISO_EW, ISO_EW, TIES_PER_TILE);
@@ -618,18 +847,22 @@ function drawTies(
     case 'junction_t_n':
       drawDoubleTies(eastEdge, westEdge, ISO_NS, ISO_NS, TIES_PER_TILE);
       drawDoubleTies(center, southEdge, ISO_EW, ISO_EW, tiesHalf);
+      renderTJunctionTieCurves(tiesHalf);
       break;
     case 'junction_t_e':
       drawDoubleTies(northEdge, southEdge, ISO_EW, ISO_EW, TIES_PER_TILE);
       drawDoubleTies(center, westEdge, ISO_NS, ISO_NS, tiesHalf);
+      renderTJunctionTieCurves(tiesHalf);
       break;
     case 'junction_t_s':
       drawDoubleTies(eastEdge, westEdge, ISO_NS, ISO_NS, TIES_PER_TILE);
       drawDoubleTies(center, northEdge, ISO_EW, ISO_EW, tiesHalf);
+      renderTJunctionTieCurves(tiesHalf);
       break;
     case 'junction_t_w':
       drawDoubleTies(northEdge, southEdge, ISO_EW, ISO_EW, TIES_PER_TILE);
       drawDoubleTies(center, eastEdge, ISO_NS, ISO_NS, tiesHalf);
+      renderTJunctionTieCurves(tiesHalf);
       break;
     case 'junction_cross':
       drawDoubleTies(northEdge, southEdge, ISO_EW, ISO_EW, TIES_PER_TILE);
@@ -693,6 +926,7 @@ function drawRails(
   const southEdge = { x: x + w * 0.75, y: y + h * 0.75 };
   const westEdge = { x: x + w * 0.25, y: y + h * 0.75 };
   const center = { x: cx, y: cy };
+  const edgePoints: TJunctionEdges = { northEdge, eastEdge, southEdge, westEdge, center };
 
   const halfGauge = railGauge / 2;
 
@@ -817,6 +1051,13 @@ function drawRails(
     drawSingleCurvedRails(from1, to1, ctrl1, fromPerp, toPerp);
   };
 
+  const renderTJunctionRailCurves = () => {
+    const curves = computeTJunctionCurves(trackType, edgePoints);
+    curves.forEach(curve => {
+      drawDoubleCurvedRails(curve.from, curve.to, curve.control, curve.fromPerp, curve.toPerp, curve.curvePerp);
+    });
+  };
+
   switch (trackType) {
     case 'straight_ns':
       drawDoubleStraightRails(northEdge, southEdge, ISO_EW);
@@ -839,18 +1080,22 @@ function drawRails(
     case 'junction_t_n':
       drawDoubleStraightRails(eastEdge, westEdge, ISO_NS);
       drawDoubleStraightRails(center, southEdge, ISO_EW);
+      renderTJunctionRailCurves();
       break;
     case 'junction_t_e':
       drawDoubleStraightRails(northEdge, southEdge, ISO_EW);
       drawDoubleStraightRails(center, westEdge, ISO_NS);
+      renderTJunctionRailCurves();
       break;
     case 'junction_t_s':
       drawDoubleStraightRails(eastEdge, westEdge, ISO_NS);
       drawDoubleStraightRails(center, northEdge, ISO_EW);
+      renderTJunctionRailCurves();
       break;
     case 'junction_t_w':
       drawDoubleStraightRails(northEdge, southEdge, ISO_EW);
       drawDoubleStraightRails(center, eastEdge, ISO_NS);
+      renderTJunctionRailCurves();
       break;
     case 'junction_cross':
       drawDoubleStraightRails(northEdge, southEdge, ISO_EW);

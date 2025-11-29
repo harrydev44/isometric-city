@@ -1,0 +1,4 @@
+Manual UI test attempt:
+- Command: cursor-browser-extension-browser_navigate http://127.0.0.1:3000
+- Result: Playwright could not launch a headed browser because no X server is available (`Missing X server or $DISPLAY`).
+- Follow-up: Installing Playwright browsers via npx playwright@1.56.0-alpha-1758750661000 install chromium did not resolve the display requirement, so UI verification could not proceed in this environment.
