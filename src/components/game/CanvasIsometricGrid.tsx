@@ -281,6 +281,24 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const [dragEndTile, setDragEndTile] = useState<{ x: number; y: number } | null>(null);
   const [cityConnectionDialog, setCityConnectionDialog] = useState<{ direction: 'north' | 'south' | 'east' | 'west' } | null>(null);
   const keysPressedRef = useRef<Set<string>>(new Set());
+  
+  // PERF: Cache gradient background to avoid recreating every frame
+  const gradientCacheRef = useRef<{ height: number; gradient: CanvasGradient | null }>({ height: 0, gradient: null });
+  
+  // PERF: Cache viewport calculations to avoid recomputing when offset/zoom/canvasSize don't change
+  const viewportCacheRef = useRef<{ key: string; values: { viewWidth: number; viewHeight: number; viewLeft: number; viewTop: number; viewRight: number; viewBottom: number; visibleMinSum: number; visibleMaxSum: number } } | null>(null);
+  
+  // PERF: Reuse queue arrays across frames to avoid GC pressure
+  type BuildingDraw = { screenX: number; screenY: number; tile: Tile; depth: number };
+  type OverlayDraw = { screenX: number; screenY: number; tile: Tile };
+  const buildingQueueRef = useRef<BuildingDraw[]>([]);
+  const waterQueueRef = useRef<BuildingDraw[]>([]);
+  const roadQueueRef = useRef<BuildingDraw[]>([]);
+  const railQueueRef = useRef<BuildingDraw[]>([]);
+  const beachQueueRef = useRef<BuildingDraw[]>([]);
+  const baseTileQueueRef = useRef<BuildingDraw[]>([]);
+  const greenBaseTileQueueRef = useRef<BuildingDraw[]>([]);
+  const overlayQueueRef = useRef<OverlayDraw[]>([]);
 
   // Only zoning tools show the grid/rectangle selection visualization
   const showsDragGrid = ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone'].includes(selectedTool);
@@ -1739,12 +1757,15 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       // Disable image smoothing for crisp pixel art
       ctx.imageSmoothingEnabled = false;
     
-      // Clear canvas with gradient background
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      gradient.addColorStop(0, '#0f1419');
-      gradient.addColorStop(0.5, '#141c24');
-      gradient.addColorStop(1, '#1a2a1f');
-      ctx.fillStyle = gradient;
+      // PERF: Cache gradient background - only recreate when canvas height changes
+      if (!gradientCacheRef.current.gradient || gradientCacheRef.current.height !== canvas.height) {
+        gradientCacheRef.current.gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradientCacheRef.current.gradient.addColorStop(0, '#0f1419');
+        gradientCacheRef.current.gradient.addColorStop(0.5, '#141c24');
+        gradientCacheRef.current.gradient.addColorStop(1, '#1a2a1f');
+        gradientCacheRef.current.height = canvas.height;
+      }
+      ctx.fillStyle = gradientCacheRef.current.gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     
       ctx.save();
@@ -1752,42 +1773,55 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       ctx.scale(dpr * zoom, dpr * zoom);
       ctx.translate(offset.x / zoom, offset.y / zoom);
     
-    // Calculate visible tile range for culling (account for DPR in canvas size)
-    const viewWidth = canvas.width / (dpr * zoom);
-    const viewHeight = canvas.height / (dpr * zoom);
-    const viewLeft = -offset.x / zoom - TILE_WIDTH;
-    const viewTop = -offset.y / zoom - TILE_HEIGHT * 2;
-    const viewRight = viewWidth - offset.x / zoom + TILE_WIDTH;
-    const viewBottom = viewHeight - offset.y / zoom + TILE_HEIGHT * 2;
+    // PERF: Memoize viewport calculations - cache when offset/zoom/canvasSize don't change
+    const viewportCacheKey = `${offset.x},${offset.y},${zoom},${canvas.width},${canvas.height},${dpr}`;
+    let viewWidth: number, viewHeight: number, viewLeft: number, viewTop: number, viewRight: number, viewBottom: number;
+    let visibleMinSum: number, visibleMaxSum: number;
     
-    // PERF: Pre-compute visible diagonal range to skip entire rows of tiles
-    // In isometric rendering, screenY = (x + y) * (TILE_HEIGHT / 2), so sum = x + y = screenY * 2 / TILE_HEIGHT
-    // Add padding for tall buildings that may extend above their tile position
-    const visibleMinSum = Math.max(0, Math.floor((viewTop - TILE_HEIGHT * 6) * 2 / TILE_HEIGHT));
-    const visibleMaxSum = Math.min(gridSize * 2 - 2, Math.ceil((viewBottom + TILE_HEIGHT) * 2 / TILE_HEIGHT));
-    
-    type BuildingDraw = {
-      screenX: number;
-      screenY: number;
-      tile: Tile;
-      depth: number;
-    };
-    type OverlayDraw = {
-      screenX: number;
-      screenY: number;
-      tile: Tile;
-    };
+    if (viewportCacheRef.current?.key === viewportCacheKey) {
+      // Reuse cached values
+      ({ viewWidth, viewHeight, viewLeft, viewTop, viewRight, viewBottom, visibleMinSum, visibleMaxSum } = viewportCacheRef.current.values);
+    } else {
+      // Calculate visible tile range for culling (account for DPR in canvas size)
+      viewWidth = canvas.width / (dpr * zoom);
+      viewHeight = canvas.height / (dpr * zoom);
+      viewLeft = -offset.x / zoom - TILE_WIDTH;
+      viewTop = -offset.y / zoom - TILE_HEIGHT * 2;
+      viewRight = viewWidth - offset.x / zoom + TILE_WIDTH;
+      viewBottom = viewHeight - offset.y / zoom + TILE_HEIGHT * 2;
+      
+      // PERF: Pre-compute visible diagonal range to skip entire rows of tiles
+      // In isometric rendering, screenY = (x + y) * (TILE_HEIGHT / 2), so sum = x + y = screenY * 2 / TILE_HEIGHT
+      // Add padding for tall buildings that may extend above their tile position
+      visibleMinSum = Math.max(0, Math.floor((viewTop - TILE_HEIGHT * 6) * 2 / TILE_HEIGHT));
+      visibleMaxSum = Math.min(gridSize * 2 - 2, Math.ceil((viewBottom + TILE_HEIGHT) * 2 / TILE_HEIGHT));
+      
+      // Cache the values
+      viewportCacheRef.current = {
+        key: viewportCacheKey,
+        values: { viewWidth, viewHeight, viewLeft, viewTop, viewRight, viewBottom, visibleMinSum, visibleMaxSum }
+      };
+    }
     
     // PERF: Reuse queue arrays across frames to avoid GC pressure
-    // Arrays are cleared by setting length = 0 which is faster than recreating
-    const buildingQueue: BuildingDraw[] = [];
-    const waterQueue: BuildingDraw[] = [];
-    const roadQueue: BuildingDraw[] = []; // Roads drawn above water
-    const railQueue: BuildingDraw[] = []; // Rail tracks drawn above water
-    const beachQueue: BuildingDraw[] = [];
-    const baseTileQueue: BuildingDraw[] = [];
-    const greenBaseTileQueue: BuildingDraw[] = [];
-    const overlayQueue: OverlayDraw[] = [];
+    // Clear arrays by setting length = 0 (faster than recreating)
+    buildingQueueRef.current.length = 0;
+    waterQueueRef.current.length = 0;
+    roadQueueRef.current.length = 0;
+    railQueueRef.current.length = 0;
+    beachQueueRef.current.length = 0;
+    baseTileQueueRef.current.length = 0;
+    greenBaseTileQueueRef.current.length = 0;
+    overlayQueueRef.current.length = 0;
+    
+    const buildingQueue = buildingQueueRef.current;
+    const waterQueue = waterQueueRef.current;
+    const roadQueue = roadQueueRef.current;
+    const railQueue = railQueueRef.current;
+    const beachQueue = beachQueueRef.current;
+    const baseTileQueue = baseTileQueueRef.current;
+    const greenBaseTileQueue = greenBaseTileQueueRef.current;
+    const overlayQueue = overlayQueueRef.current;
     
     // PERF: Insertion sort for nearly-sorted arrays (O(n) vs O(n log n) for .sort())
     // Since tiles are iterated in diagonal order, queues are already nearly sorted

@@ -544,8 +544,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // Store current state for saving (deep copy)
-    stateToSaveRef.current = JSON.parse(JSON.stringify(state));
+    // PERF: Use structuredClone if available (faster than JSON.parse/stringify), fallback to JSON
+    // structuredClone is faster and preserves more data types, but not available in all environments
+    if (typeof structuredClone !== 'undefined') {
+      stateToSaveRef.current = structuredClone(state);
+    } else {
+      stateToSaveRef.current = JSON.parse(JSON.stringify(state));
+    }
   }, [state]);
   
   // Separate effect that actually performs saves on an interval
