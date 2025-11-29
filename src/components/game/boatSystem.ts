@@ -9,8 +9,17 @@ import {
   WAKE_MAX_AGE,
   WAKE_SPAWN_INTERVAL,
 } from './constants';
-import { gridToScreen } from './utils';
+import { gridToScreen, normalizeAngle } from './utils';
 import { findMarinasAndPiers, findAdjacentWaterTile, isOverWater, generateTourWaypoints } from './gridFinders';
+
+// PERFORMANCE: Pre-compute deck colors for boats to avoid repeated lookups
+const DECK_COLOR_MAP: Record<string, string> = {
+  '#ffffff': 'hsl(0, 0%, 95%)',
+  '#1e3a5f': 'hsl(210, 52%, 35%)',
+  '#8b4513': 'hsl(30, 75%, 40%)',
+  '#2f4f4f': 'hsl(180, 25%, 35%)',
+  '#c41e3a': 'hsl(350, 75%, 50%)',
+};
 
 export interface BoatSystemRefs {
   boatsRef: React.MutableRefObject<Boat[]>;
@@ -147,14 +156,23 @@ export function useBoatSystem(
     for (const boat of boatsRef.current) {
       boat.age += delta;
       
-      // Update wake particles (similar to contrails) - shorter on mobile
+      // PERFORMANCE: Update wake particles in-place and remove old ones efficiently
       const wakeMaxAge = isMobile ? 0.6 : WAKE_MAX_AGE;
-      boat.wake = boat.wake
-        .map(p => ({ ...p, age: p.age + delta, opacity: Math.max(0, 1 - p.age / wakeMaxAge) }))
-        .filter(p => p.age < wakeMaxAge);
+      let writeIdx = 0;
+      for (let i = 0; i < boat.wake.length; i++) {
+        const p = boat.wake[i];
+        p.age += delta;
+        if (p.age < wakeMaxAge) {
+          p.opacity = Math.max(0, 1 - p.age / wakeMaxAge);
+          boat.wake[writeIdx++] = p;
+        }
+      }
+      boat.wake.length = writeIdx;
       
-      // Distance to destination
-      const distToDest = Math.hypot(boat.x - boat.destScreenX, boat.y - boat.destScreenY);
+      // PERFORMANCE: Calculate distance squared for comparisons (avoid sqrt)
+      const dx = boat.x - boat.destScreenX;
+      const dy = boat.y - boat.destScreenY;
+      const distToDestSquared = dx * dx + dy * dy;
       
       // Calculate next position
       let nextX = boat.x;
@@ -189,18 +207,16 @@ export function useBoatSystem(
           const angleToWaypoint = Math.atan2(boat.destScreenY - boat.y, boat.destScreenX - boat.x);
           boat.targetAngle = angleToWaypoint;
           
-          // Smooth turning (slightly slower for leisurely tour)
-          let angleDiff = boat.targetAngle - boat.angle;
-          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          // PERFORMANCE: Use efficient angle normalization
+          const angleDiff = normalizeAngle(boat.targetAngle - boat.angle);
           boat.angle += angleDiff * Math.min(1, delta * 1.8);
           
           // Calculate next position
           nextX = boat.x + Math.cos(boat.angle) * boat.speed * delta * speedMultiplier;
           nextY = boat.y + Math.sin(boat.angle) * boat.speed * delta * speedMultiplier;
           
-          // Check if reached current waypoint
-          if (distToDest < 40) {
+          // Check if reached current waypoint (40^2 = 1600)
+          if (distToDestSquared < 1600) {
             boat.tourWaypointIndex++;
             
             // Check if there are more waypoints
@@ -230,18 +246,16 @@ export function useBoatSystem(
           const angleToDestination = Math.atan2(boat.destScreenY - boat.y, boat.destScreenX - boat.x);
           boat.targetAngle = angleToDestination;
           
-          // Smooth turning
-          let angleDiff = boat.targetAngle - boat.angle;
-          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          // PERFORMANCE: Use efficient angle normalization
+          const angleDiff = normalizeAngle(boat.targetAngle - boat.angle);
           boat.angle += angleDiff * Math.min(1, delta * 2);
           
           // Calculate next position
           nextX = boat.x + Math.cos(boat.angle) * boat.speed * delta * speedMultiplier;
           nextY = boat.y + Math.sin(boat.angle) * boat.speed * delta * speedMultiplier;
           
-          // Check if approaching home dock
-          if (distToDest < 60) {
+          // Check if approaching home dock (60^2 = 3600)
+          if (distToDestSquared < 3600) {
             boat.state = 'arriving';
           }
           
@@ -259,17 +273,15 @@ export function useBoatSystem(
           const angleToDestination = Math.atan2(boat.destScreenY - boat.y, boat.destScreenX - boat.x);
           boat.targetAngle = angleToDestination;
           
-          // Smooth turning
-          let angleDiff = boat.targetAngle - boat.angle;
-          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          // PERFORMANCE: Use efficient angle normalization
+          const angleDiff = normalizeAngle(boat.targetAngle - boat.angle);
           boat.angle += angleDiff * Math.min(1, delta * 3);
           
           nextX = boat.x + Math.cos(boat.angle) * boat.speed * delta * speedMultiplier;
           nextY = boat.y + Math.sin(boat.angle) * boat.speed * delta * speedMultiplier;
           
-          // Check if docked at home
-          if (distToDest < 15) {
+          // Check if docked at home (15^2 = 225)
+          if (distToDestSquared < 225) {
             boat.state = 'docked';
             boat.age = 0; // Reset age for dock timer
             boat.wake = []; // Clear wake when docked
@@ -433,13 +445,8 @@ export function useBoatSystem(
       ctx.lineWidth = 0.5;
       ctx.stroke();
       
-      // Deck (lighter color)
-      const hullHSL = boat.color === '#ffffff' ? 'hsl(0, 0%, 95%)' : 
-                      boat.color === '#1e3a5f' ? 'hsl(210, 52%, 35%)' :
-                      boat.color === '#8b4513' ? 'hsl(30, 75%, 40%)' :
-                      boat.color === '#2f4f4f' ? 'hsl(180, 25%, 35%)' :
-                      boat.color === '#c41e3a' ? 'hsl(350, 75%, 50%)' :
-                      'hsl(210, 80%, 50%)';
+      // PERFORMANCE: Cache deck colors to avoid repeated string comparisons
+      const hullHSL = DECK_COLOR_MAP[boat.color] || 'hsl(210, 80%, 50%)';
       ctx.fillStyle = hullHSL;
       ctx.beginPath();
       ctx.ellipse(0, 0, 5, 2, 0, 0, Math.PI * 2);

@@ -55,6 +55,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 
 /**
  * Filters colors close to the background color from an image, making them transparent
+ * PERFORMANCE OPTIMIZED: Uses squared distance to avoid sqrt, pre-calculates threshold
  * @param img The source image to process
  * @param threshold Maximum color distance to consider as background (default: COLOR_THRESHOLD)
  * @returns A new HTMLImageElement with filtered colors made transparent
@@ -72,7 +73,7 @@ export function filterBackgroundColor(img: HTMLImageElement, threshold: number =
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
       
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         reject(new Error('Could not get canvas context'));
         return;
@@ -87,6 +88,12 @@ export function filterBackgroundColor(img: HTMLImageElement, threshold: number =
       
       console.log(`Processing ${data.length / 4} pixels...`);
       
+      // PERFORMANCE: Pre-calculate squared threshold to avoid sqrt in loop
+      const thresholdSquared = threshold * threshold;
+      const bgR = BACKGROUND_COLOR.r;
+      const bgG = BACKGROUND_COLOR.g;
+      const bgB = BACKGROUND_COLOR.b;
+      
       // Process each pixel
       let filteredCount = 0;
       for (let i = 0; i < data.length; i += 4) {
@@ -94,15 +101,14 @@ export function filterBackgroundColor(img: HTMLImageElement, threshold: number =
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Calculate color distance using Euclidean distance in RGB space
-        const distance = Math.sqrt(
-          Math.pow(r - BACKGROUND_COLOR.r, 2) +
-          Math.pow(g - BACKGROUND_COLOR.g, 2) +
-          Math.pow(b - BACKGROUND_COLOR.b, 2)
-        );
+        // PERFORMANCE: Use squared distance to avoid expensive sqrt operation
+        const dr = r - bgR;
+        const dg = g - bgG;
+        const db = b - bgB;
+        const distanceSquared = dr * dr + dg * dg + db * db;
         
         // If the color is close to the background color, make it transparent
-        if (distance <= threshold) {
+        if (distanceSquared <= thresholdSquared) {
           data[i + 3] = 0; // Set alpha to 0 (transparent)
           filteredCount++;
         }

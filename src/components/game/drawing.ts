@@ -323,10 +323,11 @@ function drawBeachEdge(
 ): void {
   const shortenDist = beachWidth * BEACH_CONFIG.cornerFactor;
 
-  // Calculate edge direction vector
+  // PERFORMANCE: Calculate edge direction vector efficiently
   const edgeDx = endX - startX;
   const edgeDy = endY - startY;
-  const edgeLen = Math.hypot(edgeDx, edgeDy);
+  const edgeLenSquared = edgeDx * edgeDx + edgeDy * edgeDy;
+  const edgeLen = Math.sqrt(edgeLenSquared);
   const edgeDirX = edgeDx / edgeLen;
   const edgeDirY = edgeDy / edgeLen;
 

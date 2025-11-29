@@ -487,29 +487,30 @@ export function useEffectsSystems(
         smog.spawnTimer = 0;
       }
       
-      // Update existing particles
-      smog.particles = smog.particles.filter(particle => {
+      // PERFORMANCE: Update existing particles in-place to avoid array creation
+      let writeIdx = 0;
+      for (let i = 0; i < smog.particles.length; i++) {
+        const particle = smog.particles[i];
         particle.age += adjustedDelta;
         
-        if (particle.age >= particle.maxAge) {
-          return false; // Remove old particles
+        if (particle.age < particle.maxAge) {
+          // Update position with drift
+          particle.x += particle.vx * adjustedDelta;
+          particle.y += particle.vy * adjustedDelta;
+          
+          // Slow down horizontal drift over time
+          particle.vx *= 0.995;
+          
+          // Slow down vertical rise as particle ages
+          particle.vy *= 0.998;
+          
+          // Grow particle size over time
+          particle.size += SMOG_PARTICLE_GROWTH * adjustedDelta;
+          
+          smog.particles[writeIdx++] = particle;
         }
-        
-        // Update position with drift
-        particle.x += particle.vx * adjustedDelta;
-        particle.y += particle.vy * adjustedDelta;
-        
-        // Slow down horizontal drift over time
-        particle.vx *= 0.995;
-        
-        // Slow down vertical rise as particle ages
-        particle.vy *= 0.998;
-        
-        // Grow particle size over time
-        particle.size += SMOG_PARTICLE_GROWTH * adjustedDelta;
-        
-        return true;
-      });
+      }
+      smog.particles.length = writeIdx;
     }
   }, [worldStateRef, gridVersionRef, factorySmogRef, smogLastGridVersionRef, findSmogFactoriesCallback, isMobile]);
 

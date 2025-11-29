@@ -194,3 +194,23 @@ export function screenToGrid(screenX: number, screenY: number, offsetX: number, 
   // Use Math.round for accurate tile selection - this gives us the tile whose center is closest
   return { gridX: Math.round(gridX), gridY: Math.round(gridY) };
 }
+
+/**
+ * PERFORMANCE: Normalize angle to range [-PI, PI] efficiently
+ * This is faster than using while loops and avoids potential infinite loops
+ * @param angle Angle in radians
+ * @returns Normalized angle in range [-PI, PI]
+ */
+export function normalizeAngle(angle: number): number {
+  // Use modulo with adjustment for efficiency
+  const TWO_PI = Math.PI * 2;
+  // Bring angle into [-2PI, 2PI] range first
+  let normalized = angle % TWO_PI;
+  // Adjust to [-PI, PI] range
+  if (normalized > Math.PI) {
+    normalized -= TWO_PI;
+  } else if (normalized < -Math.PI) {
+    normalized += TWO_PI;
+  }
+  return normalized;
+}
