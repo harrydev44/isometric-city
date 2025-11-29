@@ -44,28 +44,28 @@ export interface AdjacentRails {
 /** Rail track visual constants */
 export const RAIL_CONFIG = {
   /** Distance between the two parallel tracks (as fraction of tile width) */
-  TRACK_SPACING: 0.20,
+  TRACK_SPACING: 0.22,
   /** Width of each rail track line */
-  RAIL_WIDTH: 1.5,
+  RAIL_WIDTH: 2.5,
   /** Width of rail ties (sleepers) */
-  TIE_WIDTH: 0.8,
+  TIE_WIDTH: 3,
   /** Spacing between ties (as fraction of tile dimension) */
-  TIE_SPACING: 0.12,
+  TIE_SPACING: 0.10,
   /** Length of ties (perpendicular to tracks) */
-  TIE_LENGTH_RATIO: 0.35,
+  TIE_LENGTH_RATIO: 0.40,
 };
 
 /** Rail track colors */
 export const RAIL_COLORS = {
   /** Ballast/gravel base */
-  BALLAST: '#5c5c5c',
-  BALLAST_DARK: '#4a4a4a',
-  /** Rail track metal */
-  RAIL: '#8a8a8a',
-  RAIL_HIGHLIGHT: '#a0a0a0',
-  /** Wooden ties/sleepers */
-  TIE: '#5d4037',
-  TIE_DARK: '#4e342e',
+  BALLAST: '#6b6b6b',
+  BALLAST_DARK: '#555555',
+  /** Rail track metal - bright silver for visibility */
+  RAIL: '#c0c0c0',
+  RAIL_HIGHLIGHT: '#e0e0e0',
+  /** Wooden ties/sleepers - darker brown for contrast */
+  TIE: '#4a3728',
+  TIE_DARK: '#3d2d20',
 };
 
 // ============================================================================
@@ -412,26 +412,34 @@ function drawBallast(
   // Draw ballast based on track configuration
   const { north, east, south, west, center } = edges;
   
-  // For each direction that has a connection or is part of a dead-end
-  if (config.includes('n') || config === 'ns' || config === 'ne' || config === 'nw' ||
-      config === 'nse' || config === 'nsw' || config === 'new' || config === 'nsew') {
-    drawBallastStrip(north, center);
-  }
-  if (config.includes('s') || config === 'ns' || config === 'se' || config === 'sw' ||
-      config === 'nse' || config === 'nsw' || config === 'sew' || config === 'nsew') {
-    drawBallastStrip(south, center);
-  }
-  if (config.includes('e') || config === 'ew' || config === 'ne' || config === 'se' ||
-      config === 'nse' || config === 'new' || config === 'sew' || config === 'nsew') {
-    drawBallastStrip(east, center);
-  }
-  if (config.includes('w') || config === 'ew' || config === 'nw' || config === 'sw' ||
-      config === 'nsw' || config === 'new' || config === 'sew' || config === 'nsew') {
-    drawBallastStrip(west, center);
+  // Helper to check if config has a specific direction
+  const hasNorth = config === 'n' || config === 'ns' || config === 'ne' || config === 'nw' ||
+                   config === 'nse' || config === 'nsw' || config === 'new' || config === 'nsew';
+  const hasSouth = config === 's' || config === 'ns' || config === 'se' || config === 'sw' ||
+                   config === 'nse' || config === 'nsw' || config === 'sew' || config === 'nsew';
+  const hasEast = config === 'e' || config === 'ew' || config === 'ne' || config === 'se' ||
+                  config === 'nse' || config === 'new' || config === 'sew' || config === 'nsew';
+  const hasWest = config === 'w' || config === 'ew' || config === 'nw' || config === 'sw' ||
+                  config === 'nsw' || config === 'new' || config === 'sew' || config === 'nsew';
+  
+  // For 'none' config, draw a small central ballast pad
+  if (config === 'none') {
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, ballastWidth * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    return;
   }
   
-  // Draw center circle for intersections
-  if (config === 'nsew' || config.length === 3) {
+  // For each direction that has a connection
+  if (hasNorth) drawBallastStrip(north, center);
+  if (hasSouth) drawBallastStrip(south, center);
+  if (hasEast) drawBallastStrip(east, center);
+  if (hasWest) drawBallastStrip(west, center);
+  
+  // Draw center circle for intersections (T-junctions and crossings)
+  if (config === 'nsew' || config === 'nse' || config === 'nsw' || 
+      config === 'new' || config === 'sew') {
     ctx.beginPath();
     ctx.arc(center.x, center.y, ballastWidth * 0.7, 0, Math.PI * 2);
     ctx.fill();
@@ -453,6 +461,9 @@ export function drawRailTracks(
   adj: AdjacentRails,
   _zoom: number
 ): void {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  
   const config = getRailConfiguration(adj);
   const edges = getEdgeMidpoints(screenX, screenY);
   const { north, east, south, west, center } = edges;
@@ -464,10 +475,21 @@ export function drawRailTracks(
   // Draw tracks based on configuration
   switch (config) {
     case 'none':
-      // No connections - draw a small buffer stop
-      ctx.fillStyle = RAIL_COLORS.TIE;
+      // No connections - draw a buffer stop with visible track stub
+      // Draw a short track segment in NS direction as default
+      drawStraightTrack(ctx, 
+        { x: center.x - (north.x - center.x) * 0.3, y: center.y - (north.y - center.y) * 0.3 },
+        { x: center.x + (south.x - center.x) * 0.3, y: center.y + (south.y - center.y) * 0.3 },
+        spacing
+      );
+      // Draw buffer stop marker
+      ctx.fillStyle = RAIL_COLORS.TIE_DARK;
       ctx.beginPath();
-      ctx.arc(center.x, center.y, spacing / 2, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, spacing * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff6600'; // Orange warning color
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, spacing * 0.3, 0, Math.PI * 2);
       ctx.fill();
       break;
       
@@ -550,7 +572,17 @@ export function drawRailTracks(
       drawStraightTrack(ctx, north, south, spacing);
       drawStraightTrack(ctx, east, west, spacing);
       break;
+      
+    default:
+      // Fallback: draw a visible marker for any unhandled configuration
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, spacing, 0, Math.PI * 2);
+      ctx.fill();
+      break;
   }
+  
+  ctx.restore();
 }
 
 /**

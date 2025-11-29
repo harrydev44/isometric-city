@@ -3429,6 +3429,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // Draw rail tracks (above roads)
     insertionSortByDepth(railQueue);
     railQueue.forEach(({ tile, screenX, screenY }) => {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        
         // Draw ballast/gravel base first
         const w = TILE_WIDTH;
         const h = TILE_HEIGHT;
@@ -3446,6 +3449,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         
         // Draw rail tracks
         drawRailTracks(ctx, screenX, screenY, adjRails, zoom);
+        
+        ctx.restore();
       });
     
     // Draw green base tiles for grass/empty tiles adjacent to water (after water, before gray bases)
