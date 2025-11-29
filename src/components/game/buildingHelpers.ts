@@ -132,6 +132,8 @@ export function useBuildingHelpers(grid: Tile[][], gridSize: number) {
           buildingType !== 'empty' &&
           buildingType !== 'water' &&
           buildingType !== 'road' &&
+          buildingType !== 'rail' &&
+          buildingType !== 'rail_station' &&
           buildingType !== 'tree';
         const isPartOfBuilding = buildingType === 'empty' && isPartOfMultiTileBuilding;
         const needsGreyBase = (isDirectBuilding || isPartOfBuilding) && !isPark;

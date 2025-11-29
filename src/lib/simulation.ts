@@ -2222,17 +2222,24 @@ export function placeBuilding(
   // Can't build on water
   if (tile.building.type === 'water') return state;
 
-  // Can't place roads on existing buildings (only allow on grass, tree, or existing roads)
-  // Note: 'empty' tiles are part of multi-tile building footprints, so roads can't be placed there either
-  if (buildingType === 'road') {
-    const allowedTypes: BuildingType[] = ['grass', 'tree', 'road'];
+  // Can't place roads/rails on existing buildings (only allow on grass, tree, or existing infrastructure)
+  // Note: 'empty' tiles are part of multi-tile building footprints, so transit can't be placed there either
+  if (buildingType === 'road' || buildingType === 'rail') {
+    const allowedTypes: BuildingType[] = buildingType === 'road'
+      ? ['grass', 'tree', 'road']
+      : ['grass', 'tree', 'rail'];
     if (!allowedTypes.includes(tile.building.type)) {
-      return state; // Can't place road on existing building
+      return state; // Can't place transit on existing building
     }
   }
 
-  // Only roads can be placed on roads - all other buildings require clearing the road first
-  if (buildingType && buildingType !== 'road' && tile.building.type === 'road') {
+  // Only roads/rails can be placed on their respective tiles - other buildings must clear them first
+  if (
+    buildingType &&
+    buildingType !== 'road' &&
+    buildingType !== 'rail' &&
+    (tile.building.type === 'road' || tile.building.type === 'rail')
+  ) {
     return state;
   }
 
@@ -2277,7 +2284,7 @@ export function placeBuilding(
       // Setting zone
       newGrid[y][x].zone = zone;
     }
-  } else if (buildingType) {
+    } else if (buildingType) {
     const size = getBuildingSize(buildingType);
     
     // Check water adjacency requirement for waterfront buildings (marina, pier)
@@ -2303,9 +2310,17 @@ export function placeBuilding(
     } else {
       // Single tile building - check if tile is available
       // Can't place on water, existing buildings, or 'empty' tiles (part of multi-tile buildings)
-      // Note: 'road' is included here so roads can extend over existing roads,
-      // but non-road buildings are already blocked from roads by the check above
-      const allowedTypes: BuildingType[] = ['grass', 'tree', 'road'];
+      // Note: transit tools can extend over their own type, but other buildings cannot
+      let allowedTypes: BuildingType[];
+      if (buildingType === 'road') {
+        allowedTypes = ['grass', 'tree', 'road'];
+      } else if (buildingType === 'rail') {
+        allowedTypes = ['grass', 'tree', 'rail'];
+      } else if (buildingType === 'rail_station') {
+        allowedTypes = ['rail', 'rail_station'];
+      } else {
+        allowedTypes = ['grass', 'tree', 'road'];
+      }
       if (!allowedTypes.includes(tile.building.type)) {
         return state; // Can't place on existing building or part of multi-tile building
       }

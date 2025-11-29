@@ -17,6 +17,7 @@ import {
   TILE_HEIGHT,
   KEY_PAN_SPEED,
   Car,
+  Train,
   CarDirection,
   Airplane,
   Helicopter,
@@ -76,6 +77,7 @@ import {
 } from '@/components/game/constants';
 import {
   isRoadTile,
+  isRailTile,
   getDirectionOptions,
   pickNextDirection,
   findPathOnRoads,
@@ -177,6 +179,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const carsRef = useRef<Car[]>([]);
   const carIdRef = useRef(0);
   const carSpawnTimerRef = useRef(0);
+  const trainsRef = useRef<Train[]>([]);
+  const trainIdRef = useRef(0);
+  const trainSpawnTimerRef = useRef(0);
   const emergencyVehiclesRef = useRef<EmergencyVehicle[]>([]);
   const emergencyVehicleIdRef = useRef(0);
   const emergencyDispatchTimerRef = useRef(0);
@@ -231,6 +236,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
 
   // Performance: Cache expensive grid calculations
   const cachedRoadTileCountRef = useRef<{ count: number; gridVersion: number }>({ count: 0, gridVersion: -1 });
+  const cachedRailTileCountRef = useRef<{ count: number; gridVersion: number }>({ count: 0, gridVersion: -1 });
   const cachedPopulationRef = useRef<{ count: number; gridVersion: number }>({ count: 0, gridVersion: -1 });
   const gridVersionRef = useRef(0);
   
@@ -273,6 +279,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     carsRef,
     carIdRef,
     carSpawnTimerRef,
+    trainsRef,
+    trainIdRef,
+    trainSpawnTimerRef,
     emergencyVehiclesRef,
     emergencyVehicleIdRef,
     emergencyDispatchTimerRef,
@@ -290,6 +299,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     worldStateRef,
     gridVersionRef,
     cachedRoadTileCountRef,
+    cachedRailTileCountRef,
     state: {
       services: state.services,
       stats: state.stats,
@@ -365,6 +375,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     carsRef.current = [];
     carIdRef.current = 0;
     carSpawnTimerRef.current = 0;
+    trainsRef.current = [];
+    trainIdRef.current = 0;
+    trainSpawnTimerRef.current = 0;
     emergencyVehiclesRef.current = [];
     emergencyVehicleIdRef.current = 0;
     emergencyDispatchTimerRef.current = 0;
@@ -1702,6 +1715,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     const buildingQueue: BuildingDraw[] = [];
     const waterQueue: BuildingDraw[] = [];
     const roadQueue: BuildingDraw[] = []; // Roads drawn above water
+    const railQueue: BuildingDraw[] = []; // Rails drawn above water
     const beachQueue: BuildingDraw[] = [];
     const baseTileQueue: BuildingDraw[] = [];
     const greenBaseTileQueue: BuildingDraw[] = [];
@@ -1738,6 +1752,12 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     function hasRoad(gridX: number, gridY: number): boolean {
       if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
       return grid[gridY][gridX].building.type === 'road';
+    }
+    
+    function hasRail(gridX: number, gridY: number): boolean {
+      if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
+      const type = grid[gridY][gridX].building.type;
+      return type === 'rail' || type === 'rail_station';
     }
     
     // Helper function to check if a tile has a marina dock or pier (no beaches next to these)
@@ -2382,6 +2402,87 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       }
     }
     
+    function drawRail(ctx: CanvasRenderingContext2D, x: number, y: number, gridX: number, gridY: number) {
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      
+      const north = hasRail(gridX - 1, gridY);
+      const east = hasRail(gridX, gridY - 1);
+      const south = hasRail(gridX + 1, gridY);
+      const west = hasRail(gridX, gridY + 1);
+      
+      const northEdgeX = x + w * 0.25;
+      const northEdgeY = y + h * 0.25;
+      const eastEdgeX = x + w * 0.75;
+      const eastEdgeY = y + h * 0.25;
+      const southEdgeX = x + w * 0.75;
+      const southEdgeY = y + h * 0.75;
+      const westEdgeX = x + w * 0.25;
+      const westEdgeY = y + h * 0.75;
+      
+      const segments = [
+        { active: north, edgeX: northEdgeX, edgeY: northEdgeY },
+        { active: east, edgeX: eastEdgeX, edgeY: eastEdgeY },
+        { active: south, edgeX: southEdgeX, edgeY: southEdgeY },
+        { active: west, edgeX: westEdgeX, edgeY: westEdgeY },
+      ];
+      
+      const spacing = w * 0.065;
+      const railWidth = Math.max(1, w * 0.015);
+      const tieSpacing = w * 0.09;
+      const tieLength = w * 0.35;
+      const edgeStop = 0.94;
+      
+      // Draw wooden ties below rails
+      ctx.strokeStyle = '#8b5e34';
+      ctx.lineWidth = Math.max(1, w * 0.018);
+      ctx.lineCap = 'round';
+      for (let i = -2; i <= 2; i++) {
+        const offset = i * tieSpacing;
+        ctx.beginPath();
+        ctx.moveTo(cx - tieLength + offset * 0.15, cy + offset);
+        ctx.lineTo(cx + tieLength - offset * 0.15, cy - offset);
+        ctx.stroke();
+      }
+      
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = railWidth;
+      ctx.lineCap = 'round';
+      
+      segments.forEach(segment => {
+        if (!segment.active) return;
+        const stopX = cx + (segment.edgeX - cx) * edgeStop;
+        const stopY = cy + (segment.edgeY - cy) * edgeStop;
+        const dirX = stopX - cx;
+        const dirY = stopY - cy;
+        const len = Math.hypot(dirX, dirY) || 1;
+        const unitX = dirX / len;
+        const unitY = dirY / len;
+        const perpX = -unitY;
+        const perpY = unitX;
+        
+        [-spacing, spacing].forEach(offset => {
+          ctx.beginPath();
+          ctx.moveTo(cx + perpX * offset, cy + perpY * offset);
+          ctx.lineTo(stopX + perpX * offset, stopY + perpY * offset);
+          ctx.stroke();
+        });
+      });
+      
+      // Central plate for intersections to soften overlaps
+      const centerSize = w * 0.08;
+      ctx.fillStyle = '#1f2937';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - centerSize);
+      ctx.lineTo(cx + centerSize, cy);
+      ctx.lineTo(cx, cy + centerSize);
+      ctx.lineTo(cx - centerSize, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
     // Draw isometric tile base
     function drawIsometricTile(ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile, highlight: boolean, currentZoom: number, skipGreyBase: boolean = false, skipGreenBase: boolean = false) {
       const w = TILE_WIDTH;
@@ -2414,6 +2515,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         leftColor = '#3a3a3a';
         rightColor = '#5a5a5a';
         strokeColor = '#333';
+      } else if (tile.building.type === 'rail' || tile.building.type === 'rail_station') {
+        topColor = '#3f3f46';
+        leftColor = '#2f2f35';
+        rightColor = '#4f4f57';
+        strokeColor = '#26262c';
       } else if (isPark) {
         topColor = '#4a7c3f';
         leftColor = '#3d6634';
@@ -2524,6 +2630,21 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       // Handle roads separately with adjacency
       if (buildingType === 'road') {
         drawRoad(ctx, x, y, tile.x, tile.y, zoom);
+        return;
+      }
+      
+      if (buildingType === 'rail') {
+        drawRail(ctx, x, y, tile.x, tile.y);
+        return;
+      }
+      
+      if (buildingType === 'rail_station') {
+        drawRail(ctx, x, y, tile.x, tile.y);
+        const stationTile: Tile = {
+          ...tile,
+          building: { ...tile.building, type: 'subway_station' as BuildingType },
+        };
+        drawBuilding(ctx, x, y, stationTile);
         return;
       }
       
@@ -3247,6 +3368,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           const depth = x + y;
           roadQueue.push({ screenX, screenY, tile, depth });
         }
+        else if (tile.building.type === 'rail' || tile.building.type === 'rail_station') {
+          const depth = x + y;
+          railQueue.push({ screenX, screenY, tile, depth });
+        }
         // Check for beach tiles (grass/empty tiles adjacent to water) - use pre-computed metadata
         else if ((tile.building.type === 'grass' || tile.building.type === 'empty') &&
                  (tileMetadata?.isAdjacentToWater ?? false)) {
@@ -3270,7 +3395,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
             ? tile.building.type !== 'water'  // For subway mode, show all non-water tiles
             : (tile.building.type !== 'grass' &&
                tile.building.type !== 'water' &&
-               tile.building.type !== 'road'));
+               tile.building.type !== 'road' &&
+               tile.building.type !== 'rail'));
         if (showOverlay) {
           overlayQueue.push({ screenX, screenY, tile });
         }
@@ -3343,6 +3469,23 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         ctx.fill();
         
         // Draw road markings and sidewalks
+        drawBuilding(ctx, screenX, screenY, tile);
+      });
+    
+    // Draw rails (above water/base, similar ordering to roads)
+    insertionSortByDepth(railQueue);
+    railQueue.forEach(({ tile, screenX, screenY }) => {
+        const w = TILE_WIDTH;
+        const h = TILE_HEIGHT;
+        ctx.fillStyle = '#2f2f2f';
+        ctx.beginPath();
+        ctx.moveTo(screenX + w / 2, screenY);
+        ctx.lineTo(screenX + w, screenY + h / 2);
+        ctx.lineTo(screenX + w / 2, screenY + h);
+        ctx.lineTo(screenX, screenY + h / 2);
+        ctx.closePath();
+        ctx.fill();
+        
         drawBuilding(ctx, screenX, screenY, tile);
       });
     
@@ -3655,7 +3798,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     };
     
     // Set for building types that are not lit
-    const nonLitTypes = new Set(['grass', 'empty', 'water', 'road', 'tree', 'park', 'park_large', 'tennis']);
+    const nonLitTypes = new Set(['grass', 'empty', 'water', 'road', 'rail', 'tree', 'park', 'park_large', 'tennis']);
     const residentialTypes = new Set(['house_small', 'house_medium', 'mansion', 'apartment_low', 'apartment_high']);
     const commercialTypes = new Set(['shop_small', 'shop_medium', 'office_low', 'office_high', 'mall']);
     
@@ -3681,7 +3824,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         const tile = grid[y][x];
         const buildingType = tile.building.type;
         
-        if (buildingType === 'road') {
+        if (buildingType === 'road' || buildingType === 'rail') {
           lightCutouts.push({ x, y, type: 'road' });
           coloredGlows.push({ x, y, type: 'road' });
         } else if (!nonLitTypes.has(buildingType) && tile.building.powered) {
@@ -3863,7 +4006,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
             // Place immediately on first click
             placeAtTile(gridX, gridY);
             // Track initial tile for roads and subways
-            if (selectedTool === 'road' || selectedTool === 'subway') {
+            if (selectedTool === 'road' || selectedTool === 'rail' || selectedTool === 'subway') {
               placedRoadTilesRef.current.add(`${gridX},${gridY}`);
             }
           }
@@ -3981,7 +4124,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           setDragEndTile({ x: gridX, y: gridY });
         }
         // For roads and subways, use straight-line snapping
-        else if (isDragging && (selectedTool === 'road' || selectedTool === 'subway') && dragStartTile) {
+        else if (isDragging && (selectedTool === 'road' || selectedTool === 'rail' || selectedTool === 'subway') && dragStartTile) {
           const dx = Math.abs(gridX - dragStartTile.x);
           const dy = Math.abs(gridY - dragStartTile.y);
           

@@ -119,6 +119,25 @@ export function findStations(
 }
 
 /**
+ * Find all rail stations on the surface network
+ */
+export function findRailStations(
+  grid: Tile[][],
+  gridSize: number
+): { x: number; y: number }[] {
+  if (!grid || gridSize <= 0) return [];
+  const stations: { x: number; y: number }[] = [];
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      if (grid[y][x].building.type === 'rail_station') {
+        stations.push({ x, y });
+      }
+    }
+  }
+  return stations;
+}
+
+/**
  * Find all active fires in the grid
  */
 export function findFires(
@@ -461,6 +480,27 @@ export function countRoadTiles(
   for (let y = 0; y < gridSize; y++) {
     for (let x = 0; x < gridSize; x++) {
       if (grid[y][x].building.type === 'road') {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * Count rail tiles (including stations) in the grid
+ */
+export function countRailTiles(
+  grid: Tile[][],
+  gridSize: number
+): number {
+  if (!grid || gridSize <= 0) return 0;
+
+  let count = 0;
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      const type = grid[y][x].building.type;
+      if (type === 'rail' || type === 'rail_station') {
         count++;
       }
     }
