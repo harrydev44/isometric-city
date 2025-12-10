@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import NextImage from 'next/image';
 import { Button } from '@/components/ui/button';
 import { GameProvider } from '@/context/GameContext';
 import Game from '@/components/Game';
 import { useMobile } from '@/hooks/useMobile';
 import { getSpritePack, getSpriteCoords, DEFAULT_SPRITE_PACK_ID } from '@/lib/renderConfig';
 import { SavedCityMeta } from '@/types/game';
+import { Building2, Map, Play, Sparkles, FolderOpen } from 'lucide-react';
 
 const STORAGE_KEY = 'isocity-game-state';
 const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
@@ -56,6 +58,42 @@ function shuffleArray<T>(array: T[]): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
+}
+
+// Animated city skyline background component
+function CityBackground() {
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      {/* Dark gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-slate-950/70 z-10" />
+      
+      {/* City image */}
+      <div className="absolute inset-0 opacity-40">
+        <NextImage 
+          src="/games/IMG_6902.PNG" 
+          alt="City preview"
+          fill
+          className="object-cover object-center scale-110"
+          style={{ filter: 'blur(1px) saturate(0.8)' }}
+          priority
+        />
+      </div>
+      
+      {/* Animated gradient orbs */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '2s' }} />
+    </div>
+  );
+}
+
+// Feature badge component
+function FeatureBadge({ icon: Icon, text }: { icon: React.ComponentType<{ className?: string }>; text: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-white/60 text-sm">
+      <Icon className="w-4 h-4" />
+      <span>{text}</span>
+    </div>
+  );
 }
 
 // Check if there's a saved game in localStorage
@@ -216,14 +254,24 @@ function SavedCityCard({ city, onLoad }: { city: SavedCityMeta; onLoad: () => vo
   return (
     <button
       onClick={onLoad}
-      className="w-full text-left p-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-none transition-all duration-200 group"
+      className="w-full text-left p-4 bg-gradient-to-br from-white/5 to-white/[0.02] hover:from-white/10 hover:to-white/5 border border-white/10 hover:border-blue-500/30 rounded-lg transition-all duration-300 group hover:shadow-lg hover:shadow-blue-500/5"
     >
-      <h3 className="text-white font-medium truncate group-hover:text-white/90 text-sm">
-        {city.cityName}
-      </h3>
-      <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
-        <span>Pop: {city.population.toLocaleString()}</span>
-        <span>${city.money.toLocaleString()}</span>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-white font-medium truncate group-hover:text-blue-300 transition-colors text-sm">
+            {city.cityName}
+          </h3>
+          <div className="flex items-center gap-3 mt-1.5 text-xs text-white/50">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 bg-green-400/60 rounded-full" />
+              {city.population.toLocaleString()}
+            </span>
+            <span className="text-emerald-400/70">${city.money.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <Play className="w-4 h-4 text-blue-400" />
+        </div>
       </div>
     </button>
   );
@@ -291,77 +339,38 @@ export default function HomePage() {
   // Mobile landing page
   if (isMobile) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 safe-area-top safe-area-bottom overflow-y-auto">
-        {/* Title */}
-        <h1 className="text-5xl sm:text-6xl font-light tracking-wider text-white/90 mb-6">
-          IsoCity
-        </h1>
+      <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 safe-area-top safe-area-bottom overflow-y-auto relative">
+        <CityBackground />
         
-        {/* Sprite Gallery - keep visible even when saves exist */}
-        <div className="mb-6">
-          <SpriteGallery count={9} cols={3} cellSize={72} />
-        </div>
-        
-        {/* Buttons */}
-        <div className="flex flex-col gap-3 w-full max-w-xs">
-          <Button 
-            onClick={() => setShowGame(true)}
-            className="w-full py-6 text-xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
-          >
-            Start
-          </Button>
-          
-          <Button 
-            onClick={async () => {
-              const { default: exampleState } = await import('@/resources/example_state_8.json');
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(exampleState));
-              setShowGame(true);
-            }}
-            variant="outline"
-            className="w-full py-6 text-xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
-          >
-            Load Example
-          </Button>
-        </div>
-        
-        {/* Saved Cities */}
-        {savedCities.length > 0 && (
-          <div className="w-full max-w-xs mt-4">
-            <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
-              Saved Cities
-            </h2>
-            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-              {savedCities.slice(0, 5).map((city) => (
-                <SavedCityCard
-                  key={city.id}
-                  city={city}
-                  onLoad={() => loadSavedCity(city.id)}
-                />
-              ))}
-            </div>
+        <div className="relative z-20 flex flex-col items-center w-full max-w-sm">
+          {/* Logo and Title */}
+          <div className="flex items-center gap-3 mb-2">
+            <Building2 className="w-10 h-10 text-blue-400" />
+            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">
+              IsoCity
+            </h1>
           </div>
-        )}
-      </main>
-    );
-  }
-
-  // Desktop landing page
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-8">
-      <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
-        
-        {/* Left - Title and Start Button */}
-        <div className="flex flex-col items-center lg:items-start justify-center space-y-12">
-          <h1 className="text-8xl font-light tracking-wider text-white/90">
-            IsoCity
-          </h1>
-          <div className="flex flex-col gap-3">
+          
+          {/* Tagline */}
+          <p className="text-white/50 text-sm mb-6 text-center">
+            Build your dream metropolis
+          </p>
+          
+          {/* Sprite Gallery */}
+          <div className="mb-6 p-3 bg-black/30 rounded-xl border border-white/5 backdrop-blur-sm">
+            <SpriteGallery count={9} cols={3} cellSize={72} />
+          </div>
+          
+          {/* Buttons */}
+          <div className="flex flex-col gap-3 w-full">
             <Button 
               onClick={() => setShowGame(true)}
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
+              className="w-full py-6 text-xl font-semibold tracking-wide bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-0 rounded-xl transition-all duration-300 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98]"
             >
-              Start
+              <Play className="w-5 h-5 mr-2" />
+              New City
             </Button>
+            
             <Button 
               onClick={async () => {
                 const { default: exampleState } = await import('@/resources/example_state_8.json');
@@ -369,19 +378,23 @@ export default function HomePage() {
                 setShowGame(true);
               }}
               variant="outline"
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+              className="w-full py-6 text-lg font-medium tracking-wide bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all duration-300"
             >
-              Load Example
+              <Map className="w-5 h-5 mr-2" />
+              Explore Demo City
             </Button>
           </div>
           
           {/* Saved Cities */}
           {savedCities.length > 0 && (
-            <div className="w-64">
-              <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
-                Saved Cities
-              </h2>
-              <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+            <div className="w-full mt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <FolderOpen className="w-4 h-4 text-white/40" />
+                <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider">
+                  Your Cities
+                </h2>
+              </div>
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                 {savedCities.slice(0, 5).map((city) => (
                   <SavedCityCard
                     key={city.id}
@@ -393,10 +406,103 @@ export default function HomePage() {
             </div>
           )}
         </div>
+      </main>
+    );
+  }
 
-        {/* Right - Sprite Gallery */}
-        <div className="flex justify-center lg:justify-end">
-          <SpriteGallery count={16} />
+  // Desktop landing page
+  return (
+    <main className="min-h-screen bg-slate-950 flex items-center justify-center p-8 relative overflow-hidden">
+      <CityBackground />
+      
+      <div className="relative z-20 max-w-6xl w-full">
+        {/* Main content card */}
+        <div className="grid lg:grid-cols-5 gap-8 items-center">
+          
+          {/* Left - Title and Buttons (3 cols) */}
+          <div className="lg:col-span-3 flex flex-col items-center lg:items-start justify-center">
+            {/* Logo and Title */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="p-3 bg-blue-500/20 rounded-2xl border border-blue-500/30">
+                <Building2 className="w-12 h-12 text-blue-400" />
+              </div>
+              <div>
+                <h1 className="text-7xl lg:text-8xl font-bold tracking-tight bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">
+                  IsoCity
+                </h1>
+              </div>
+            </div>
+            
+            {/* Tagline */}
+            <p className="text-white/60 text-xl mb-4 text-center lg:text-left max-w-md">
+              Design and build your dream metropolis in stunning isometric style
+            </p>
+            
+            {/* Feature badges */}
+            <div className="flex flex-wrap gap-2 mb-8 justify-center lg:justify-start">
+              <FeatureBadge icon={Building2} text="100+ Buildings" />
+              <FeatureBadge icon={Map} text="Dynamic Simulation" />
+              <FeatureBadge icon={Sparkles} text="Beautiful Graphics" />
+            </div>
+            
+            {/* Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+              <Button 
+                onClick={() => setShowGame(true)}
+                className="px-8 py-7 text-xl font-semibold tracking-wide bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-0 rounded-xl transition-all duration-300 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] min-w-[200px]"
+              >
+                <Play className="w-6 h-6 mr-2" />
+                New City
+              </Button>
+              <Button 
+                onClick={async () => {
+                  const { default: exampleState } = await import('@/resources/example_state_8.json');
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(exampleState));
+                  setShowGame(true);
+                }}
+                variant="outline"
+                className="px-8 py-7 text-xl font-medium tracking-wide bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all duration-300 min-w-[200px]"
+              >
+                <Map className="w-6 h-6 mr-2" />
+                Demo City
+              </Button>
+            </div>
+            
+            {/* Saved Cities */}
+            {savedCities.length > 0 && (
+              <div className="w-full max-w-md mt-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <FolderOpen className="w-4 h-4 text-white/40" />
+                  <h2 className="text-sm font-medium text-white/40 uppercase tracking-wider">
+                    Your Cities
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2">
+                  {savedCities.slice(0, 6).map((city) => (
+                    <SavedCityCard
+                      key={city.id}
+                      city={city}
+                      onLoad={() => loadSavedCity(city.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right - Sprite Gallery (2 cols) */}
+          <div className="lg:col-span-2 flex justify-center lg:justify-end">
+            <div className="p-4 bg-black/40 rounded-2xl border border-white/5 backdrop-blur-sm shadow-2xl">
+              <SpriteGallery count={16} cols={4} cellSize={100} />
+            </div>
+          </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="mt-12 text-center">
+          <p className="text-white/30 text-sm">
+            Press <kbd className="px-2 py-1 bg-white/5 rounded text-white/50">Esc</kbd> at any time to access menu • Use <kbd className="px-2 py-1 bg-white/5 rounded text-white/50">B</kbd> for bulldozer
+          </p>
         </div>
       </div>
     </main>
