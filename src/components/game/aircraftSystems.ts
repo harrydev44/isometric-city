@@ -77,6 +77,7 @@ export function useAircraftSystems(
     } else {
       // Recalculate and cache - this avoids expensive population calculations every frame
       totalPopulation = 0;
+      // Iterate through all grid tiles and sum up building populations
       for (let y = 0; y < currentGridSize; y++) {
         for (let x = 0; x < currentGridSize; x++) {
           totalPopulation += currentGrid[y][x].building.population || 0;
