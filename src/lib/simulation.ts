@@ -18,12 +18,34 @@ import {
   RESIDENTIAL_BUILDINGS,
   COMMERCIAL_BUILDINGS,
   INDUSTRIAL_BUILDINGS,
+  Player,
+  Unit,
+  UnitType,
+  FogOfWarState,
+  ResourceNode,
+  ResourceType,
 } from '@/types/game';
 import { generateCityName, generateWaterName } from './names';
 import { isMobile } from 'react-device-detect';
 
 // Default grid size for new games
 export const DEFAULT_GRID_SIZE = isMobile ? 50 : 70;
+export const DEFAULT_COMPETITIVE_GRID_SIZE = 120;
+const COMPETITIVE_STARTING_MONEY = 15000;
+const COMPETITIVE_STARTING_RESOURCES = 12000;
+const COMPETITIVE_SUPPLY_CAP = 60;
+const COMPETITIVE_AI_COUNT_DEFAULT = 2;
+const COMPETITIVE_PLAYER_COLORS = ['blue', 'red', 'green', 'yellow', 'purple'];
+const COMPETITIVE_UNIT_COSTS: Record<UnitType, number> = {
+  infantry: 400,
+  tank: 900,
+  helicopter: 1400,
+};
+const COMPETITIVE_UNIT_STATS: Record<UnitType, { hp: number; attack: number; range: number; speed: number; vision: number; cooldown: number }> = {
+  infantry: { hp: 120, attack: 8, range: 1.5, speed: 2.2, vision: 7, cooldown: 1.2 },
+  tank: { hp: 320, attack: 28, range: 2.2, speed: 1.4, vision: 6, cooldown: 1.6 },
+  helicopter: { hp: 240, attack: 22, range: 3.4, speed: 3.0, vision: 8, cooldown: 1.4 },
+};
 
 // Check if a factory_small at this position would render as a farm
 // This matches the deterministic logic in Game.tsx for farm variant selection
@@ -795,6 +817,256 @@ function createServiceCoverage(size: number): ServiceCoverage {
   };
 }
 
+function createFogLayer(size: number) {
+  const discovered: boolean[][] = new Array(size);
+  const visible: boolean[][] = new Array(size);
+  for (let y = 0; y < size; y++) {
+    discovered[y] = new Array(size).fill(false);
+    visible[y] = new Array(size).fill(false);
+  }
+  return { discovered, visible };
+}
+
+function createFogOfWar(size: number, playerIds: string[]): FogOfWarState {
+  const byPlayer: Record<string, { discovered: boolean[][]; visible: boolean[][] }> = {};
+  for (const id of playerIds) {
+    byPlayer[id] = createFogLayer(size);
+  }
+  return { byPlayer };
+}
+
+function revealRadius(layer: { discovered: boolean[][]; visible: boolean[][] }, x: number, y: number, radius: number, size: number) {
+  const rSq = radius * radius;
+  const minY = Math.max(0, Math.floor(y - radius));
+  const maxY = Math.min(size - 1, Math.ceil(y + radius));
+  const minX = Math.max(0, Math.floor(x - radius));
+  const maxX = Math.min(size - 1, Math.ceil(x + radius));
+  for (let yy = minY; yy <= maxY; yy++) {
+    for (let xx = minX; xx <= maxX; xx++) {
+      const dx = xx - x;
+      const dy = yy - y;
+      if (dx * dx + dy * dy <= rSq) {
+        layer.visible[yy][xx] = true;
+        layer.discovered[yy][xx] = true;
+      }
+    }
+  }
+}
+
+function clearVisibility(layer: { visible: boolean[][] }) {
+  for (let y = 0; y < layer.visible.length; y++) {
+    const row = layer.visible[y];
+    for (let x = 0; x < row.length; x++) {
+      row[x] = false;
+    }
+  }
+}
+
+function getBaseBuildingHp(type: BuildingType): number {
+  switch (type) {
+    case 'city_hall':
+      return 1500;
+    case 'power_plant':
+      return 900;
+    case 'fire_station':
+    case 'police_station':
+    case 'hospital':
+      return 600;
+    default:
+      return 400;
+  }
+}
+
+function assignOwnership(tile: Tile, ownerId: string) {
+  tile.ownerId = ownerId;
+  tile.building.ownerId = ownerId;
+  const baseHp = getBaseBuildingHp(tile.building.type);
+  tile.building.hp = baseHp;
+  tile.building.maxHp = baseHp;
+}
+
+function findNearestGrass(grid: Tile[][], size: number, startX: number, startY: number): { x: number; y: number } {
+  if (startX >= 0 && startY >= 0 && startX < size && startY < size && grid[startY][startX].building.type !== 'water') {
+    return { x: startX, y: startY };
+  }
+  const maxRadius = Math.max(size, size);
+  for (let r = 1; r < maxRadius; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const nx = startX + dx;
+        const ny = startY + dy;
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+        if (grid[ny][nx].building.type !== 'water') {
+          return { x: nx, y: ny };
+        }
+      }
+    }
+  }
+  return { x: Math.max(0, Math.min(size - 1, startX)), y: Math.max(0, Math.min(size - 1, startY)) };
+}
+
+function placeCityCore(grid: Tile[][], size: number, x: number, y: number, ownerId: string) {
+  const { x: gx, y: gy } = findNearestGrass(grid, size, x, y);
+  grid[gy][gx].building = createBuilding('city_hall');
+  assignOwnership(grid[gy][gx], ownerId);
+
+  const offsets = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  offsets.forEach(([dx, dy]) => {
+    const nx = gx + dx;
+    const ny = gy + dy;
+    if (nx >= 0 && ny >= 0 && nx < size && ny < size) {
+      grid[ny][nx].building = createBuilding('road');
+      grid[ny][nx].ownerId = ownerId;
+    }
+  });
+
+  return { x: gx, y: gy };
+}
+
+function generateResourceNodes(grid: Tile[][], size: number, count: number): { x: number; y: number; node: ResourceNode }[] {
+  const nodes: { x: number; y: number; node: ResourceNode }[] = [];
+  const types: ResourceType[] = ['iron', 'oil', 'gold'];
+  let attempts = 0;
+  while (nodes.length < count && attempts < count * 20) {
+    attempts++;
+    const x = Math.floor(Math.random() * size);
+    const y = Math.floor(Math.random() * size);
+    const tile = grid[y][x];
+    if (tile.building.type !== 'grass' || tile.resourceNode) continue;
+    const type = types[Math.floor(Math.random() * types.length)];
+    const richness = 0.6 + Math.random() * 0.8;
+    const incomePerTick = Math.round(8 + richness * 10);
+    const node: ResourceNode = { type, richness, incomePerTick };
+    tile.resourceNode = node;
+    nodes.push({ x, y, node });
+  }
+  return nodes;
+}
+
+function generateSpawnPoints(size: number, playerCount: number) {
+  const margin = Math.floor(size * 0.15);
+  const points = [
+    { x: margin, y: margin },
+    { x: size - margin - 1, y: size - margin - 1 },
+    { x: margin, y: size - margin - 1 },
+    { x: size - margin - 1, y: margin },
+  ];
+  return points.slice(0, playerCount);
+}
+
+export function createCompetitiveGameState(size: number = DEFAULT_COMPETITIVE_GRID_SIZE, aiCount: number = COMPETITIVE_AI_COUNT_DEFAULT): GameState {
+  const totalPlayers = Math.min(aiCount + 1, COMPETITIVE_PLAYER_COLORS.length);
+  const { grid, waterBodies } = generateTerrain(size);
+  const playerList: Player[] = [];
+  const spawnPoints = generateSpawnPoints(size, totalPlayers);
+  for (let i = 0; i < totalPlayers; i++) {
+    const color = COMPETITIVE_PLAYER_COLORS[i % COMPETITIVE_PLAYER_COLORS.length];
+    const isAI = i !== 0;
+    playerList.push({
+      id: `p${i}`,
+      name: isAI ? `AI ${i}` : 'You',
+      color,
+      isAI,
+      resources: COMPETITIVE_STARTING_RESOURCES,
+      income: 0,
+      supplyUsed: 0,
+      supplyCap: COMPETITIVE_SUPPLY_CAP,
+      score: 0,
+      eliminated: false,
+    });
+  }
+
+  const cityCenters: Record<string, { x: number; y: number }> = {};
+  playerList.forEach((player, idx) => {
+    const spawn = spawnPoints[idx] || { x: Math.floor(size / 2), y: Math.floor(size / 2) };
+    const center = placeCityCore(grid, size, spawn.x, spawn.y, player.id);
+    cityCenters[player.id] = center;
+    player.cityCenter = center;
+  });
+
+  const resourceSpots = generateResourceNodes(grid, size, Math.max(8, Math.floor(size / 12)));
+
+  const fogOfWar = createFogOfWar(size, playerList.map(p => p.id));
+  for (const player of playerList) {
+    const center = cityCenters[player.id];
+    const layer = fogOfWar.byPlayer[player.id];
+    revealRadius(layer, center.x, center.y, 8, size);
+  }
+
+  const units: Unit[] = [];
+  for (const player of playerList) {
+    const center = cityCenters[player.id];
+    const spawnX = Math.min(size - 1, Math.max(0, center.x + 1));
+    const spawnY = center.y;
+    const stats = COMPETITIVE_UNIT_STATS.infantry;
+    units.push({
+      id: `u-${player.id}-0`,
+      ownerId: player.id,
+      type: 'infantry',
+      x: spawnX,
+      y: spawnY,
+      path: [],
+      pathIndex: 0,
+      targetId: undefined,
+      targetType: undefined,
+      hp: stats.hp,
+      maxHp: stats.hp,
+      attack: stats.attack,
+      range: stats.range,
+      vision: stats.vision,
+      cooldown: stats.cooldown,
+      cooldownTimer: 0,
+      speed: stats.speed,
+      state: 'idle',
+    });
+    player.supplyUsed += 1;
+  }
+
+  const stats = createInitialStats();
+  stats.money = COMPETITIVE_STARTING_MONEY;
+  stats.income = 0;
+  stats.expenses = 0;
+
+  return {
+    id: generateUUID(),
+    grid,
+    gridSize: size,
+    cityName: 'Competitive City',
+    year: 2024,
+    month: 1,
+    day: 1,
+    hour: 12,
+    tick: 0,
+    speed: 1,
+    selectedTool: 'select',
+    taxRate: 9,
+    effectiveTaxRate: 9,
+    stats,
+    budget: createInitialBudget(),
+    services: createServiceCoverage(size),
+    notifications: [],
+    advisorMessages: [],
+    history: [],
+    activePanel: 'none',
+    disastersEnabled: true,
+    adjacentCities: [],
+    waterBodies,
+    gameVersion: 0,
+    mode: 'competitive',
+    players: playerList,
+    currentPlayerId: playerList[0]?.id,
+    units,
+    fogOfWar,
+    resourceSpots,
+    eliminatedPlayerIds: [],
+  };
+}
+
 
 // Generate a UUID v4
 function generateUUID(): string {
@@ -838,6 +1110,7 @@ export function createInitialGameState(size: number = DEFAULT_GRID_SIZE, cityNam
     adjacentCities,
     waterBodies,
     gameVersion: 0,
+    mode: 'sandbox',
   };
 }
 
@@ -1970,6 +2243,219 @@ export function simulateTick(state: GameState): GameState {
     notifications: newNotifications,
     history,
   };
+}
+
+export function simulateCompetitiveSystems(state: GameState, deltaSeconds: number = 0.5): GameState {
+  if (state.mode !== 'competitive' || !state.fogOfWar || !state.players) {
+    return state;
+  }
+
+  const fog = state.fogOfWar;
+  const size = state.gridSize;
+  const players = state.players;
+  const updatedPlayers = players.map((p) => ({ ...p }));
+  let playersChanged = false;
+  const playerMap = new Map(players.map((p) => [p.id, p] as const));
+
+  // Clear visibility each tick; discovered remains
+  for (const player of players) {
+    const layer = fog.byPlayer[player.id];
+    if (layer) {
+      clearVisibility(layer);
+    }
+  }
+
+  // Collect vision sources (city centers + units)
+  const visionSources: Record<string, { x: number; y: number; radius: number }[]> = {};
+  for (const player of players) {
+    visionSources[player.id] = [];
+    if (player.cityCenter) {
+      visionSources[player.id].push({ x: player.cityCenter.x, y: player.cityCenter.y, radius: 8 });
+    }
+  }
+
+  const modifiedRows = new Set<number>();
+  const newGrid = state.grid.slice();
+  const getTile = (x: number, y: number): Tile | null => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return null;
+    if (!modifiedRows.has(y)) {
+      newGrid[y] = state.grid[y].map(t => ({ ...t, building: { ...t.building } }));
+      modifiedRows.add(y);
+    }
+    return newGrid[y][x];
+  };
+
+  let gridChanged = false;
+  let unitsChanged = false;
+  const updatedUnits: Unit[] = (state.units || []).map((u) => ({ ...u, path: [...u.path] }));
+
+  updatedPlayers.forEach((p) => {
+    const income = 6 * deltaSeconds + (p.isAI ? 4 : 0);
+    p.resources += income;
+    playersChanged = true;
+  });
+
+  const unitCounts = new Map<string, number>();
+  updatedUnits.forEach((u) => {
+    unitCounts.set(u.ownerId, (unitCounts.get(u.ownerId) || 0) + 1);
+  });
+
+  // Simple AI production loop
+  updatedPlayers.forEach((player) => {
+    if (!player.isAI) return;
+    const currentUnits = unitCounts.get(player.id) || 0;
+    if (currentUnits > 18) return;
+    if (player.supplyUsed + 1 > player.supplyCap) return;
+    const canBuildInfantry = player.resources >= COMPETITIVE_UNIT_COSTS.infantry;
+    if (!canBuildInfantry) return;
+    const unitType: UnitType =
+      player.resources >= COMPETITIVE_UNIT_COSTS.helicopter && Math.random() > 0.6
+        ? 'helicopter'
+        : player.resources >= COMPETITIVE_UNIT_COSTS.tank && Math.random() > 0.4
+          ? 'tank'
+          : 'infantry';
+    const cost = COMPETITIVE_UNIT_COSTS[unitType];
+    if (player.resources < cost) return;
+    const stats = COMPETITIVE_UNIT_STATS[unitType];
+    const center = player.cityCenter || { x: Math.floor(size / 2), y: Math.floor(size / 2) };
+    const spawnX = Math.max(0, Math.min(size - 1, center.x + (Math.random() > 0.5 ? 1 : -1)));
+    const spawnY = Math.max(0, Math.min(size - 1, center.y + (Math.random() > 0.5 ? 1 : -1)));
+    updatedUnits.push({
+      id: `ai-${player.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      ownerId: player.id,
+      type: unitType,
+      x: spawnX,
+      y: spawnY,
+      path: [],
+      pathIndex: 0,
+      targetId: undefined,
+      targetType: undefined,
+      hp: stats.hp,
+      maxHp: stats.hp,
+      attack: stats.attack,
+      range: stats.range,
+      vision: stats.vision,
+      cooldown: stats.cooldown,
+      cooldownTimer: 0,
+      speed: stats.speed,
+      state: 'idle',
+    });
+    unitCounts.set(player.id, currentUnits + 1);
+    player.resources -= cost;
+    player.supplyUsed += 1;
+    playersChanged = true;
+    unitsChanged = true;
+  });
+
+  updatedUnits.forEach((unit) => {
+    // Movement
+    if (unit.path.length > 0 && unit.pathIndex < unit.path.length) {
+      const target = unit.path[unit.pathIndex];
+      const dx = target.x - unit.x;
+      const dy = target.y - unit.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.001) {
+        const step = unit.speed * deltaSeconds * 0.6;
+        if (dist <= step) {
+          unit.x = target.x;
+          unit.y = target.y;
+          unit.pathIndex += 1;
+        } else {
+          unit.x += (dx / dist) * step;
+          unit.y += (dy / dist) * step;
+        }
+        unitsChanged = true;
+      } else {
+        unit.pathIndex += 1;
+      }
+      if (unit.pathIndex >= unit.path.length) {
+        unit.path = [];
+        unit.pathIndex = 0;
+        unit.state = unit.targetType ? 'attacking' : 'idle';
+      } else {
+        unit.state = 'moving';
+      }
+    }
+
+    // Combat against buildings
+    unit.cooldownTimer = Math.max(0, unit.cooldownTimer - deltaSeconds);
+    if (unit.targetType === 'building' && unit.targetId) {
+      const [txStr, tyStr] = unit.targetId.split(',');
+      const tx = parseInt(txStr, 10);
+      const ty = parseInt(tyStr, 10);
+      const targetTile = getTile(tx, ty);
+      if (targetTile && targetTile.building.type !== 'grass' && targetTile.building.type !== 'water') {
+        const distToTarget = Math.hypot(tx + 0.5 - unit.x, ty + 0.5 - unit.y);
+        if (distToTarget <= unit.range) {
+          unit.state = 'attacking';
+          if (unit.cooldownTimer <= 0) {
+            const hp = targetTile.building.hp ?? getBaseBuildingHp(targetTile.building.type);
+            const newHp = hp - unit.attack;
+            targetTile.building.hp = Math.max(0, newHp);
+            targetTile.building.maxHp = targetTile.building.maxHp ?? hp;
+            targetTile.building.onFire = true;
+            gridChanged = true;
+            unit.cooldownTimer = unit.cooldown;
+            if (newHp <= 0) {
+              targetTile.building = createBuilding('grass');
+              targetTile.zone = 'none';
+              targetTile.ownerId = undefined;
+              unit.targetId = undefined;
+              unit.targetType = undefined;
+            }
+          }
+        }
+      } else {
+        // Target destroyed
+        unit.targetId = undefined;
+        unit.targetType = undefined;
+      }
+    }
+
+    // Simple AI behavior: march toward an enemy city center
+    const owner = playerMap.get(unit.ownerId);
+    if (owner?.isAI && unit.state === 'idle') {
+      const enemyCities = updatedPlayers.filter((p) => p.id !== owner.id && !p.eliminated && p.cityCenter);
+      if (enemyCities.length > 0) {
+        const targetCity = enemyCities[Math.floor(Math.random() * enemyCities.length)];
+        if (targetCity.cityCenter) {
+          unit.path = [{ x: targetCity.cityCenter.x, y: targetCity.cityCenter.y }];
+          unit.pathIndex = 0;
+          unit.targetType = 'building';
+          unit.targetId = `${targetCity.cityCenter.x},${targetCity.cityCenter.y}`;
+          unit.state = 'moving';
+          unitsChanged = true;
+        }
+      }
+    }
+  });
+
+  updatedUnits.forEach((unit) => {
+    const radius = Math.max(4, unit.vision || 6);
+    if (!visionSources[unit.ownerId]) {
+      visionSources[unit.ownerId] = [];
+    }
+    visionSources[unit.ownerId].push({ x: unit.x, y: unit.y, radius });
+  });
+
+  for (const player of players) {
+    const layer = fog.byPlayer[player.id];
+    if (!layer) continue;
+    const sources = visionSources[player.id] || [];
+    sources.forEach((src) => revealRadius(layer, src.x, src.y, src.radius, size));
+  }
+
+  const nextState: GameState = { ...state, fogOfWar: fog };
+  if (gridChanged) {
+    nextState.grid = newGrid;
+  }
+  if (unitsChanged) {
+    nextState.units = updatedUnits;
+  }
+  if (playersChanged) {
+    nextState.players = updatedPlayers;
+  }
+  return nextState;
 }
 
 // Building sizes for multi-tile buildings (width x height)

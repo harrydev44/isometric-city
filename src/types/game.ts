@@ -214,6 +214,9 @@ export interface Building {
   constructionProgress: number; // 0-100, building is under construction until 100
   abandoned: boolean; // Building is abandoned due to low demand, produces nothing
   flipped?: boolean; // Horizontally mirror the sprite (used for waterfront buildings to face water)
+  hp?: number; // Competitive mode building health
+  maxHp?: number;
+  ownerId?: string;
 }
 
 export interface Tile {
@@ -227,6 +230,8 @@ export interface Tile {
   traffic: number;
   hasSubway: boolean;
   hasRailOverlay?: boolean; // Rail tracks overlaid on road (road base with rail tracks on top)
+  ownerId?: string; // For competitive mode ownership
+  resourceNode?: ResourceNode | null; // Optional resource node on this tile
 }
 
 export interface Stats {
@@ -313,6 +318,65 @@ export interface WaterBody {
   centerY: number;
 }
 
+// Competitive mode types
+export type PlayerColor = 'blue' | 'red' | 'green' | 'yellow' | 'purple';
+
+export interface Player {
+  id: string;
+  name: string;
+  color: PlayerColor | string;
+  isAI: boolean;
+  resources: number;
+  income: number;
+  supplyUsed: number;
+  supplyCap: number;
+  score: number;
+  eliminated: boolean;
+  cityCenter?: { x: number; y: number };
+}
+
+export type UnitType = 'infantry' | 'tank' | 'helicopter';
+
+export type UnitState = 'idle' | 'moving' | 'attacking' | 'dead';
+
+export interface Unit {
+  id: string;
+  ownerId: string;
+  type: UnitType;
+  x: number; // tile X (float for interpolation)
+  y: number; // tile Y (float for interpolation)
+  path: { x: number; y: number }[];
+  pathIndex: number;
+  targetId?: string;
+  targetType?: 'unit' | 'building';
+  hp: number;
+  maxHp: number;
+  attack: number;
+  range: number;
+  vision: number;
+  cooldown: number;
+  cooldownTimer: number;
+  speed: number;
+  state: UnitState;
+}
+
+export type ResourceType = 'iron' | 'oil' | 'gold';
+
+export interface ResourceNode {
+  type: ResourceType;
+  richness: number; // influences income
+  incomePerTick: number;
+}
+
+export interface FogLayer {
+  discovered: boolean[][];
+  visible: boolean[][];
+}
+
+export interface FogOfWarState {
+  byPlayer: Record<string, FogLayer>;
+}
+
 export interface GameState {
   id: string; // Unique UUID for this game
   grid: Tile[][];
@@ -338,6 +402,14 @@ export interface GameState {
   adjacentCities: AdjacentCity[];
   waterBodies: WaterBody[];
   gameVersion: number; // Increments when a new game starts - used to clear transient state like vehicles
+  // Competitive mode fields (optional so sandbox remains compatible)
+  mode?: 'sandbox' | 'competitive';
+  players?: Player[];
+  currentPlayerId?: string;
+  units?: Unit[];
+  fogOfWar?: FogOfWarState;
+  resourceSpots?: { x: number; y: number; node: ResourceNode }[];
+  eliminatedPlayerIds?: string[];
 }
 
 // Saved city metadata for the multi-save system

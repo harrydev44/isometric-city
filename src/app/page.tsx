@@ -235,6 +235,7 @@ export default function HomePage() {
   const [showGame, setShowGame] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [savedCities, setSavedCities] = useState<SavedCityMeta[]>([]);
+  const [startMode, setStartMode] = useState<'sandbox' | 'competitive'>('sandbox');
   const { isMobileDevice, isSmallScreen } = useMobile();
   const isMobile = isMobileDevice || isSmallScreen;
 
@@ -244,6 +245,7 @@ export default function HomePage() {
       setIsChecking(false);
       setSavedCities(loadSavedCities());
       if (hasSavedGame()) {
+        setStartMode('sandbox');
         setShowGame(true);
       }
     };
@@ -255,6 +257,7 @@ export default function HomePage() {
   const handleExitGame = () => {
     setShowGame(false);
     setSavedCities(loadSavedCities());
+    setStartMode('sandbox');
   };
 
   // Load a saved city
@@ -282,7 +285,7 @@ export default function HomePage() {
     return (
       <GameProvider>
         <main className="h-screen w-screen overflow-hidden">
-          <Game onExit={handleExitGame} />
+          <Game onExit={handleExitGame} startMode={startMode} />
         </main>
       </GameProvider>
     );
@@ -305,10 +308,22 @@ export default function HomePage() {
         {/* Buttons */}
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button 
-            onClick={() => setShowGame(true)}
+            onClick={() => {
+              setStartMode('sandbox');
+              setShowGame(true);
+            }}
             className="w-full py-6 text-xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
           >
             Start
+          </Button>
+          <Button 
+            onClick={() => {
+              setStartMode('competitive');
+              setShowGame(true);
+            }}
+            className="w-full py-6 text-xl font-light tracking-wide bg-emerald-600/70 hover:bg-emerald-500 text-white border border-white/20 rounded-none transition-all duration-300"
+          >
+            Start Competitive
           </Button>
           
           <Button 
@@ -357,11 +372,23 @@ export default function HomePage() {
           </h1>
           <div className="flex flex-col gap-3">
             <Button 
-              onClick={() => setShowGame(true)}
+            onClick={() => {
+              setStartMode('sandbox');
+              setShowGame(true);
+            }}
               className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
             >
               Start
             </Button>
+          <Button 
+            onClick={() => {
+              setStartMode('competitive');
+              setShowGame(true);
+            }}
+            className="w-64 py-8 text-2xl font-light tracking-wide bg-emerald-600/70 hover:bg-emerald-500 text-white border border-white/20 rounded-none transition-all duration-300"
+          >
+            Start Competitive
+          </Button>
             <Button 
               onClick={async () => {
                 const { default: exampleState } = await import('@/resources/example_state_8.json');

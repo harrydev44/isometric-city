@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useGame } from '@/context/GameContext';
-import { Tool, TOOL_INFO } from '@/types/game';
+import { Tool, TOOL_INFO, UnitType } from '@/types/game';
 import {
   BudgetIcon,
   ChartIcon,
@@ -20,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+const MILITARY_COSTS: Record<UnitType, number> = {
+  infantry: 400,
+  tank: 900,
+  helicopter: 1400,
+};
 
 // Hover Submenu Component for collapsible tool categories
 // Implements triangle-rule safe zone for forgiving cursor navigation
@@ -267,10 +273,10 @@ function ExitDialog({
   );
 }
 
-// Memoized Sidebar Component
-export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => void }) {
-  const { state, setTool, setActivePanel, saveCity } = useGame();
+export const Sidebar = function Sidebar({ onExit }: { onExit?: () => void }) {
+  const { state, setTool, setActivePanel, saveCity, produceUnit } = useGame();
   const { selectedTool, stats, activePanel } = state;
+  const currentPlayer = state.players?.find((p) => p.id === state.currentPlayerId);
   const [showExitDialog, setShowExitDialog] = useState(false);
   
   const handleSaveAndExit = useCallback(() => {
@@ -381,6 +387,34 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
       </div>
       
       <ScrollArea className="flex-1 py-2">
+        {state.mode === 'competitive' && (
+          <div className="px-4 pb-4">
+            <div className="text-[10px] font-bold tracking-widest text-muted-foreground mb-2">MILITARY</div>
+            <div className="flex flex-col gap-1">
+              {( ['infantry', 'tank', 'helicopter'] as UnitType[]).map((unit) => {
+                const cost = MILITARY_COSTS[unit];
+                const canAfford = (currentPlayer?.resources ?? 0) >= cost;
+                const hasSupply = currentPlayer ? currentPlayer.supplyUsed + 1 <= currentPlayer.supplyCap : false;
+                return (
+                  <Button
+                    key={unit}
+                    variant="secondary"
+                    onClick={() => produceUnit(unit)}
+                    disabled={!canAfford || !hasSupply}
+                    className="w-full justify-between"
+                  >
+                    <span className="capitalize">{unit}</span>
+                    <span className="text-xs text-muted-foreground">${cost}</span>
+                  </Button>
+                );
+              })}
+              <div className="text-[10px] text-muted-foreground mt-1">
+                Resources: ${currentPlayer?.resources?.toLocaleString() ?? 0} • Supply {currentPlayer?.supplyUsed ?? 0}/{currentPlayer?.supplyCap ?? 0}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Direct categories (TOOLS, ZONES) */}
         {Object.entries(directCategories).map(([category, tools]) => (
           <div key={category} className="mb-1">
@@ -470,6 +504,6 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
       />
     </div>
   );
-});
+};
 
 export default Sidebar;

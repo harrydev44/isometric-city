@@ -10,16 +10,21 @@ import {
   Tool,
   TOOL_INFO,
   ZoneType,
+  Unit,
+  UnitType,
 } from '@/types/game';
 import {
   bulldozeTile,
   createInitialGameState,
   DEFAULT_GRID_SIZE,
+  DEFAULT_COMPETITIVE_GRID_SIZE,
   placeBuilding,
   placeSubway,
   simulateTick,
+  simulateCompetitiveSystems,
   checkForDiscoverableCities,
   generateRandomAdvancedCity,
+  createCompetitiveGameState,
 } from '@/lib/simulation';
 import {
   SPRITE_PACKS,
@@ -30,11 +35,23 @@ import {
 } from '@/lib/renderConfig';
 
 const STORAGE_KEY = 'isocity-game-state';
+const COMPETITIVE_STORAGE_KEY = 'isocity-competitive-state';
+const LAST_MODE_STORAGE_KEY = 'isocity-last-mode';
 const SAVED_CITY_STORAGE_KEY = 'isocity-saved-city'; // For restoring after viewing shared city
 const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index'; // Index of all saved cities
 const SAVED_CITY_PREFIX = 'isocity-city-'; // Prefix for individual saved city states
 const SPRITE_PACK_STORAGE_KEY = 'isocity-sprite-pack';
 const DAY_NIGHT_MODE_STORAGE_KEY = 'isocity-day-night-mode';
+const UNIT_COSTS: Record<UnitType, number> = {
+  infantry: 400,
+  tank: 900,
+  helicopter: 1400,
+};
+const UNIT_STATS: Record<UnitType, { hp: number; attack: number; range: number; speed: number; vision: number; cooldown: number }> = {
+  infantry: { hp: 120, attack: 8, range: 1.5, speed: 2.2, vision: 7, cooldown: 1.2 },
+  tank: { hp: 320, attack: 28, range: 2.2, speed: 1.4, vision: 6, cooldown: 1.6 },
+  helicopter: { hp: 240, attack: 22, range: 3.4, speed: 3.0, vision: 8, cooldown: 1.4 },
+};
 
 export type DayNightMode = 'auto' | 'day' | 'night';
 
@@ -53,12 +70,15 @@ type GameContextValue = {
   setTaxRate: (rate: number) => void;
   setActivePanel: (panel: GameState['activePanel']) => void;
   setBudgetFunding: (key: keyof Budget, funding: number) => void;
+  mutateState: (updater: (prev: GameState) => GameState) => void;
   placeAtTile: (x: number, y: number) => void;
+  produceUnit: (type: UnitType) => void;
   connectToCity: (cityId: string) => void;
   discoverCity: (cityId: string) => void;
   checkAndDiscoverCities: (onDiscover?: (city: { id: string; direction: 'north' | 'south' | 'east' | 'west'; name: string }) => void) => void;
   setDisastersEnabled: (enabled: boolean) => void;
   newGame: (name?: string, size?: number) => void;
+  newCompetitiveGame: (size?: number, aiCount?: number) => void;
   loadState: (stateString: string) => boolean;
   exportState: () => string;
   generateRandomCity: () => void;
@@ -153,10 +173,10 @@ const toolZoneMap: Partial<Record<Tool, ZoneType>> = {
 };
 
 // Load game state from localStorage
-function loadGameState(): GameState | null {
+function loadGameState(storageKey: string = STORAGE_KEY): GameState | null {
   if (typeof window === 'undefined') return null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
       const parsed = JSON.parse(saved);
       // Validate it has essential properties
@@ -228,14 +248,14 @@ function loadGameState(): GameState | null {
         }
         return parsed as GameState;
       } else {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(storageKey);
       }
     }
   } catch (e) {
     console.error('Failed to load game state:', e);
     // Clear corrupted data
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     } catch (clearError) {
       console.error('Failed to clear corrupted game state:', clearError);
     }
@@ -260,7 +280,9 @@ function saveGameState(state: GameState): void {
       return;
     }
     
-    localStorage.setItem(STORAGE_KEY, serialized);
+    const storageKey = state.mode === 'competitive' ? COMPETITIVE_STORAGE_KEY : STORAGE_KEY;
+    localStorage.setItem(storageKey, serialized);
+    localStorage.setItem(LAST_MODE_STORAGE_KEY, state.mode ?? 'sandbox');
   } catch (e) {
     // Handle quota exceeded errors
     if (e instanceof DOMException && (e.code === 22 || e.code === 1014)) {
@@ -272,10 +294,18 @@ function saveGameState(state: GameState): void {
 }
 
 // Clear saved game state
-function clearGameState(): void {
+function clearGameState(mode: 'sandbox' | 'competitive' | 'all' = 'sandbox'): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    if (mode === 'sandbox' || mode === 'all') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    if (mode === 'competitive' || mode === 'all') {
+      localStorage.removeItem(COMPETITIVE_STORAGE_KEY);
+    }
+    if (mode === 'all') {
+      localStorage.removeItem(LAST_MODE_STORAGE_KEY);
+    }
   } catch (e) {
     console.error('Failed to clear game state:', e);
   }
@@ -317,6 +347,17 @@ function loadDayNightMode(): DayNightMode {
     console.error('Failed to load day/night mode preference:', e);
   }
   return 'auto';
+}
+
+function loadLastMode(): 'sandbox' | 'competitive' {
+  if (typeof window === 'undefined') return 'sandbox';
+  try {
+    const saved = localStorage.getItem(LAST_MODE_STORAGE_KEY);
+    if (saved === 'competitive') return 'competitive';
+  } catch (e) {
+    console.error('Failed to load last mode preference:', e);
+  }
+  return 'sandbox';
 }
 
 // Save day/night mode to localStorage
@@ -514,9 +555,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const cities = loadSavedCitiesIndex();
     setSavedCities(cities);
     
-    // Load game state
-    const saved = loadGameState();
+    // Load game state (respect last used mode)
+    const lastMode = loadLastMode();
+    const primaryKey = lastMode === 'competitive' ? COMPETITIVE_STORAGE_KEY : STORAGE_KEY;
+    let saved = loadGameState(primaryKey);
+    // Fallback to sandbox save if competitive missing
+    if (!saved && lastMode === 'competitive') {
+      saved = loadGameState(STORAGE_KEY);
+    }
     if (saved) {
+      if (!saved.mode) saved.mode = 'sandbox';
       skipNextSaveRef.current = true; // Set skip flag BEFORE updating state
       setState(saved);
       setHasExistingGame(true);
@@ -621,7 +669,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         : (state.speed === 1 ? 500 : state.speed === 2 ? 220 : 50);
         
       timer = setInterval(() => {
-        setState((prev) => simulateTick(prev));
+        setState((prev) => simulateCompetitiveSystems(simulateTick(prev), interval / 1000));
       }, interval);
     }
 
@@ -650,6 +698,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  const mutateState = useCallback((updater: (prev: GameState) => GameState) => {
+    setState((prev) => updater(prev));
+  }, []);
 
   const setBudgetFunding = useCallback(
     (key: keyof Budget, funding: number) => {
@@ -726,6 +778,54 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
 
       return nextState;
+    });
+  }, []);
+
+  const produceUnit = useCallback((type: UnitType) => {
+    setState((prev) => {
+      if (prev.mode !== 'competitive' || !prev.players || !prev.currentPlayerId) return prev;
+      const cost = UNIT_COSTS[type];
+      const playerIndex = prev.players.findIndex((p) => p.id === prev.currentPlayerId);
+      if (playerIndex === -1) return prev;
+      const player = prev.players[playerIndex];
+      if (player.resources < cost) return prev;
+      if (player.supplyUsed + 1 > player.supplyCap) return prev;
+
+      const stats = UNIT_STATS[type];
+      const center = player.cityCenter || { x: Math.floor(prev.gridSize / 2), y: Math.floor(prev.gridSize / 2) };
+      const spawnX = Math.max(0, Math.min(prev.gridSize - 1, center.x + (Math.random() > 0.5 ? 1 : -1)));
+      const spawnY = Math.max(0, Math.min(prev.gridSize - 1, center.y + (Math.random() > 0.5 ? 1 : -1)));
+
+      const newUnit: Unit = {
+        id: `u-${player.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        ownerId: player.id,
+        type,
+        x: spawnX,
+        y: spawnY,
+        path: [],
+        pathIndex: 0,
+        targetId: undefined,
+        targetType: undefined,
+        hp: stats.hp,
+        maxHp: stats.hp,
+        attack: stats.attack,
+        range: stats.range,
+        vision: stats.vision,
+        cooldown: stats.cooldown,
+        cooldownTimer: 0,
+        speed: stats.speed,
+        state: 'idle',
+      };
+
+      const updatedPlayers = prev.players.slice();
+      updatedPlayers[playerIndex] = {
+        ...player,
+        resources: player.resources - cost,
+        supplyUsed: player.supplyUsed + 1,
+      };
+
+      const units = prev.units ? [...prev.units, newUnit] : [newUnit];
+      return { ...prev, players: updatedPlayers, units };
     });
   }, []);
 
@@ -850,13 +950,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       : 22; // Night time
 
   const newGame = useCallback((name?: string, size?: number) => {
-    clearGameState(); // Clear saved state when starting fresh
+    clearGameState('sandbox'); // Clear saved state when starting fresh
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LAST_MODE_STORAGE_KEY, 'sandbox');
+    }
     const fresh = createInitialGameState(size ?? DEFAULT_GRID_SIZE, name || 'IsoCity');
     // Increment gameVersion from current state to ensure vehicles/entities are cleared
     setState((prev) => ({
       ...fresh,
       gameVersion: (prev.gameVersion ?? 0) + 1,
     }));
+  }, []);
+
+  const newCompetitiveGame = useCallback((size?: number, aiCount?: number) => {
+    clearGameState('competitive');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LAST_MODE_STORAGE_KEY, 'competitive');
+    }
+    const fresh = createCompetitiveGameState(size ?? DEFAULT_COMPETITIVE_GRID_SIZE, aiCount ?? 2);
+    setState((prev) => ({
+      ...fresh,
+      gameVersion: (prev.gameVersion ?? 0) + 1,
+    }));
+    setHasExistingGame(true);
   }, []);
 
   const loadState = useCallback((stateString: string): boolean => {
@@ -1125,12 +1241,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setTaxRate,
     setActivePanel,
     setBudgetFunding,
+    mutateState,
     placeAtTile,
+    produceUnit,
     connectToCity,
     discoverCity,
     checkAndDiscoverCities,
     setDisastersEnabled,
     newGame,
+    newCompetitiveGame,
     loadState,
     exportState,
     generateRandomCity,

@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useGame } from '@/context/GameContext';
-import { TOOL_INFO, Tile, BuildingType, AdjacentCity } from '@/types/game';
+import { TOOL_INFO, Tile, BuildingType, AdjacentCity, Unit, UnitState } from '@/types/game';
 import { getBuildingSize, requiresWaterAdjacency, getWaterAdjacency, getRoadAdjacency } from '@/lib/simulation';
 import { FireIcon, SafetyIcon } from '@/components/ui/Icons';
 import { getSpriteCoords, BUILDING_TO_SPRITE, SPRITE_VERTICAL_OFFSETS, SPRITE_HORIZONTAL_OFFSETS, getActiveSpritePack } from '@/lib/renderConfig';
@@ -118,7 +118,7 @@ export interface CanvasIsometricGridProps {
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
 export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false, navigationTarget, onNavigationComplete, onViewportChange, onBargeDelivery }: CanvasIsometricGridProps) {
-  const { state, placeAtTile, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour } = useGame();
+  const { state, placeAtTile, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour, mutateState } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, gameVersion } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCanvasRef = useRef<HTMLCanvasElement>(null); // PERF: Separate canvas for hover/selection highlights
@@ -126,6 +126,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const buildingsCanvasRef = useRef<HTMLCanvasElement>(null); // Buildings rendered on top of cars/trains
   const airCanvasRef = useRef<HTMLCanvasElement>(null); // Aircraft + fireworks rendered above buildings
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fogCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderPendingRef = useRef<number | null>(null); // PERF: Track pending render frame
   const [offset, setOffset] = useState({ x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 });
@@ -145,6 +146,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     screenY: number;
   } | null>(null);
   const [zoom, setZoom] = useState(isMobile ? 0.6 : 1);
+  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
+  const [unitSelectStart, setUnitSelectStart] = useState<{ x: number; y: number } | null>(null);
+  const [unitSelectEnd, setUnitSelectEnd] = useState<{ x: number; y: number } | null>(null);
+  const [containerOrigin, setContainerOrigin] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const carsRef = useRef<Car[]>([]);
   const carIdRef = useRef(0);
   const carSpawnTimerRef = useRef(0);
@@ -422,6 +427,96 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     updateSmog,
     drawSmog,
   } = useEffectsSystems(effectsSystemRefs, effectsSystemState);
+
+  const computeGroundPath = useCallback(
+    (gridData: Tile[][], gridSizeValue: number, startX: number, startY: number, targetX: number, targetY: number) => {
+      const passable = (x: number, y: number) => {
+        const tile = gridData[y]?.[x];
+        if (!tile) return false;
+        return tile.building.type !== 'water';
+      };
+
+      const clampCoord = (n: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(n)));
+      const sx = clampCoord(startX, gridSizeValue);
+      const sy = clampCoord(startY, gridSizeValue);
+      const tx = clampCoord(targetX, gridSizeValue);
+      const ty = clampCoord(targetY, gridSizeValue);
+
+      if (!passable(tx, ty)) {
+        const dirs = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ];
+        let found = false;
+        for (const [dx, dy] of dirs) {
+          if (passable(tx + dx, ty + dy)) {
+            targetX = tx + dx;
+            targetY = ty + dy;
+            found = true;
+            break;
+          }
+        }
+        if (!found && !passable(tx, ty)) {
+          return [] as { x: number; y: number }[];
+        }
+      }
+
+      const queue: { x: number; y: number; path: { x: number; y: number }[] }[] = [{ x: sx, y: sy, path: [] }];
+      const visited = new Set<number>();
+      const key = (x: number, y: number) => y * gridSizeValue + x;
+      visited.add(key(sx, sy));
+      const directions = [
+        { dx: 1, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: 0, dy: -1 },
+      ];
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current.x === targetX && current.y === targetY) {
+          return current.path.length > 0 ? current.path : [{ x: targetX, y: targetY }];
+        }
+        for (const dir of directions) {
+          const nx = current.x + dir.dx;
+          const ny = current.y + dir.dy;
+          if (nx < 0 || ny < 0 || nx >= gridSizeValue || ny >= gridSizeValue) continue;
+          if (!passable(nx, ny)) continue;
+          const k = key(nx, ny);
+          if (visited.has(k)) continue;
+          visited.add(k);
+          queue.push({ x: nx, y: ny, path: [...current.path, { x: nx, y: ny }] });
+        }
+      }
+
+      return [];
+    },
+    []
+  );
+
+  const issueUnitOrder = useCallback(
+    (targetX: number, targetY: number, attackTarget?: { type: 'building'; id: string }) => {
+      mutateState((prev) => {
+        if (prev.mode !== 'competitive' || !prev.units) return prev;
+        const nextUnits: Unit[] = prev.units.map((unit) => {
+          if (!selectedUnits.includes(unit.id)) return unit;
+          const path = computeGroundPath(prev.grid, prev.gridSize, Math.round(unit.x), Math.round(unit.y), targetX, targetY);
+          return {
+            ...unit,
+            path,
+            pathIndex: 0,
+            targetType: attackTarget?.type,
+            targetId: attackTarget?.id,
+            state: 'moving' as UnitState,
+          };
+        });
+        return { ...prev, units: nextUnits };
+      });
+    },
+    [mutateState, selectedUnits, computeGroundPath]
+  );
   
   useEffect(() => {
     worldStateRef.current.grid = grid;
@@ -447,6 +542,39 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   useEffect(() => {
     worldStateRef.current.canvasSize = canvasSize;
   }, [canvasSize]);
+
+  useEffect(() => {
+    const canvas = fogCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (state.mode !== 'competitive' || !state.fogOfWar || !state.currentPlayerId) return;
+    const layer = state.fogOfWar.byPlayer[state.currentPlayerId];
+    if (!layer) return;
+
+    const zoomScale = zoom;
+    const offX = offset.x;
+    const offY = offset.y;
+
+    for (let y = 0; y < gridSize; y++) {
+      const visRow = layer.visible[y];
+      const discRow = layer.discovered[y];
+      for (let x = 0; x < gridSize; x++) {
+        const visible = visRow?.[x];
+        const discovered = discRow?.[x];
+        if (visible) continue;
+        const pos = gridToScreen(x, y, offX / zoomScale, offY / zoomScale);
+        const sx = pos.screenX * zoomScale;
+        const sy = pos.screenY * zoomScale;
+        ctx.fillStyle = discovered ? 'rgba(5,10,20,0.55)' : 'rgba(2,4,9,0.82)';
+        ctx.fillRect(sx - (TILE_WIDTH / 2) * zoomScale, sy - (TILE_HEIGHT / 2) * zoomScale, TILE_WIDTH * zoomScale, TILE_HEIGHT * zoomScale);
+      }
+    }
+  }, [state.mode, state.fogOfWar, state.currentPlayerId, gridSize, offset, zoom]);
 
   // Clear all vehicles/entities when game version changes (new game, load state, etc.)
   useEffect(() => {
@@ -856,12 +984,17 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           lightingCanvasRef.current.style.width = `${rect.width}px`;
           lightingCanvasRef.current.style.height = `${rect.height}px`;
         }
+        if (fogCanvasRef.current) {
+          fogCanvasRef.current.style.width = `${rect.width}px`;
+          fogCanvasRef.current.style.height = `${rect.height}px`;
+        }
         
         // Set actual size in memory (scaled for DPI)
         setCanvasSize({
           width: Math.round(rect.width * dpr),
           height: Math.round(rect.height * dpr),
         });
+        setContainerOrigin({ left: rect.left, top: rect.top });
       }
     };
     updateSize();
@@ -3428,6 +3561,15 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       return;
     }
     
+    if (state.mode === 'competitive' && selectedTool === 'select' && e.button === 0) {
+      setUnitSelectStart({ x: e.clientX, y: e.clientY });
+      setUnitSelectEnd({ x: e.clientX, y: e.clientY });
+      setHoveredIncident(null);
+      setHoveredTile(null);
+      e.preventDefault();
+      return;
+    }
+    
     if (e.button === 0) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
@@ -3467,7 +3609,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
-  }, [offset, gridSize, selectedTool, placeAtTile, zoom, showsDragGrid, supportsDragPlace, setSelectedTile, findBuildingOrigin]);
+  }, [offset, gridSize, selectedTool, placeAtTile, zoom, showsDragGrid, supportsDragPlace, setSelectedTile, findBuildingOrigin, state.mode]);
   
   // Calculate camera bounds based on grid size
   const getMapBounds = useCallback((currentZoom: number, canvasW: number, canvasH: number) => {
@@ -3515,7 +3657,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     
     // Clamp and set the new offset - this is a legitimate use case for responding to navigation requests
     const bounds = getMapBounds(zoom, canvasSize.width, canvasSize.height);
-    setOffset({ // eslint-disable-line
+    setOffset({
       x: Math.max(bounds.minOffsetX, Math.min(bounds.maxOffsetX, newOffset.x)),
       y: Math.max(bounds.minOffsetY, Math.min(bounds.maxOffsetY, newOffset.y)),
     });
@@ -3532,6 +3674,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       };
       setOffset(clampOffset(newOffset, zoom));
       return;
+    }
+
+    if (unitSelectStart) {
+      setUnitSelectEnd({ x: e.clientX, y: e.clientY });
     }
     
     const rect = containerRef.current?.getBoundingClientRect();
@@ -3623,9 +3769,54 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
-  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, clampOffset, grid]);
+  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, clampOffset, grid, unitSelectStart]);
   
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e?: React.MouseEvent) => {
+    if (unitSelectStart && unitSelectEnd && state.mode === 'competitive' && selectedTool === 'select') {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const startGrid = screenToGrid((unitSelectStart.x - rect.left) / zoom, (unitSelectStart.y - rect.top) / zoom, offset.x / zoom, offset.y / zoom);
+        const endGrid = screenToGrid((unitSelectEnd.x - rect.left) / zoom, (unitSelectEnd.y - rect.top) / zoom, offset.x / zoom, offset.y / zoom);
+        const minX = Math.max(0, Math.min(gridSize - 1, Math.min(startGrid.gridX, endGrid.gridX)));
+        const maxX = Math.max(0, Math.min(gridSize - 1, Math.max(startGrid.gridX, endGrid.gridX)));
+        const minY = Math.max(0, Math.min(gridSize - 1, Math.min(startGrid.gridY, endGrid.gridY)));
+        const maxY = Math.max(0, Math.min(gridSize - 1, Math.max(startGrid.gridY, endGrid.gridY)));
+
+        const ownedUnits: Unit[] = (state.units || []).filter(
+          (u): u is Unit => !!u && (!state.currentPlayerId || u.ownerId === state.currentPlayerId)
+        );
+        let nextSelection: string[] = [];
+        const boxW = Math.abs(unitSelectStart.x - unitSelectEnd.x);
+        const boxH = Math.abs(unitSelectStart.y - unitSelectEnd.y);
+        if (boxW < 6 && boxH < 6) {
+          let nearest: { id: string; dist: number } | null = null;
+          ownedUnits.forEach((u) => {
+            const dist = Math.hypot(u.x - startGrid.gridX, u.y - startGrid.gridY);
+            if (dist < 2.5 && (!nearest || dist < nearest.dist)) {
+              nearest = { id: u.id, dist };
+            }
+          });
+          const nearestUnit = nearest as { id: string; dist: number } | null;
+          if (nearestUnit) {
+            nextSelection = [nearestUnit.id];
+          }
+        } else {
+          nextSelection = ownedUnits
+            .filter((u) => u.x >= minX - 0.1 && u.x <= maxX + 0.9 && u.y >= minY - 0.1 && u.y <= maxY + 0.9)
+            .map((u) => u.id);
+        }
+
+        if (nextSelection.length > 0) {
+          setSelectedUnits((prev) => (e?.shiftKey ? Array.from(new Set([...prev, ...nextSelection])) : nextSelection));
+        } else if (!e?.shiftKey) {
+          setSelectedUnits([]);
+        }
+      }
+      setUnitSelectStart(null);
+      setUnitSelectEnd(null);
+      return;
+    }
+
     // Fill the drag rectangle when mouse is released (only for zoning tools)
     if (isDragging && dragStartTile && dragEndTile && showsDragGrid) {
       const minX = Math.min(dragStartTile.x, dragEndTile.x);
@@ -3659,13 +3850,44 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     setIsPanning(false);
     setRoadDrawDirection(null);
     placedRoadTilesRef.current.clear();
+    setUnitSelectStart(null);
+    setUnitSelectEnd(null);
     
     // Clear hovered tile when mouse leaves
     if (!containerRef.current) {
       setHoveredTile(null);
     }
-  }, [isDragging, showsDragGrid, dragStartTile, placeAtTile, selectedTool, dragEndTile, checkAndDiscoverCities]);
+  }, [isDragging, showsDragGrid, dragStartTile, placeAtTile, selectedTool, dragEndTile, checkAndDiscoverCities, unitSelectStart, unitSelectEnd, state.mode, gridSize, offset, zoom]);
   
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (state.mode !== 'competitive') return;
+    e.preventDefault();
+    if (selectedUnits.length === 0) return;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = (e.clientX - rect.left) / zoom;
+    const mouseY = (e.clientY - rect.top) / zoom;
+    const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
+    const tx = Math.max(0, Math.min(gridSize - 1, gridX));
+    const ty = Math.max(0, Math.min(gridSize - 1, gridY));
+    const tile = grid[ty]?.[tx];
+    const currentPlayerId = state.currentPlayerId;
+    const isEnemyBuilding =
+      tile &&
+      tile.building.type !== 'grass' &&
+      tile.building.type !== 'water' &&
+      tile.ownerId &&
+      tile.ownerId !== currentPlayerId;
+
+    if (isEnemyBuilding) {
+      issueUnitOrder(tx, ty, { type: 'building', id: `${tx},${ty}` });
+    } else {
+      issueUnitOrder(tx, ty);
+    }
+  }, [state.mode, selectedUnits, zoom, offset, gridSize, grid, issueUnitOrder, state.currentPlayerId, state.units]);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     
@@ -3845,6 +4067,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onContextMenu={handleContextMenu}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -3889,6 +4112,102 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         className="absolute top-0 left-0 pointer-events-none"
         style={{ mixBlendMode: 'multiply' }}
       />
+      <canvas
+        ref={fogCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute top-0 left-0 pointer-events-none"
+      />
+
+      {state.mode === 'competitive' && state.units && state.units.length > 0 && state.players && state.fogOfWar && (
+        <React.Fragment>
+          {state.units.map((unit) => {
+            const owner = state.players?.find((p) => p.id === unit.ownerId);
+            const color = owner?.color || '#22d3ee';
+            const world = gridToScreen(unit.x, unit.y, offset.x / zoom, offset.y / zoom);
+            const left = world.screenX * zoom - 6;
+            const top = world.screenY * zoom - 6;
+            const isSelected = selectedUnits.includes(unit.id);
+            const layer = state.currentPlayerId && state.fogOfWar ? state.fogOfWar.byPlayer[state.currentPlayerId] : null;
+            const isVisible =
+              !layer || unit.ownerId === state.currentPlayerId
+                ? true
+                : !!layer.visible[Math.floor(unit.y)]?.[Math.floor(unit.x)];
+            if (!isVisible) return null;
+            const hpPct = Math.max(0, Math.min(100, (unit.hp / (unit.maxHp || unit.hp || 1)) * 100));
+            return (
+              <div
+                key={unit.id}
+                className="absolute pointer-events-none"
+                style={{ left, top }}
+              >
+                <div
+                  className="rounded-full"
+                  style={{
+                    width: 12,
+                    height: 12,
+                    background: typeof color === 'string' ? color : '#22d3ee',
+                    border: isSelected ? '2px solid #38bdf8' : '1px solid #0f172a',
+                    boxShadow: isSelected ? '0 0 12px rgba(56,189,248,0.8)' : '0 0 6px rgba(15,23,42,0.6)',
+                  }}
+                />
+                <div className="w-12 h-1 bg-slate-900/70 mt-1 rounded-sm overflow-hidden">
+                  <div className="h-full bg-emerald-400" style={{ width: `${hpPct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </React.Fragment>
+      )}
+
+      {unitSelectStart && unitSelectEnd && (
+        (() => {
+          const left = Math.min(unitSelectStart.x, unitSelectEnd.x) - containerOrigin.left;
+          const top = Math.min(unitSelectStart.y, unitSelectEnd.y) - containerOrigin.top;
+          const width = Math.abs(unitSelectStart.x - unitSelectEnd.x);
+          const height = Math.abs(unitSelectStart.y - unitSelectEnd.y);
+          return (
+            <div
+              className="absolute pointer-events-none border border-cyan-400/80 bg-cyan-400/10"
+              style={{ left, top, width, height }}
+            />
+          );
+        })()
+      )}
+
+      {state.mode === 'competitive' && state.players && (
+        <div className="absolute top-3 right-3 bg-slate-900/80 border border-white/10 rounded-md p-3 text-xs min-w-[220px] backdrop-blur">
+          <div className="flex justify-between items-center mb-2 text-white font-semibold">
+            <span>Scoreboard</span>
+            <span className="text-[10px] text-white/60">Money / Units / Score</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {state.players.map((player) => {
+              const unitCount = (state.units || []).filter((u) => u.ownerId === player.id).length;
+              return (
+                <div
+                  key={player.id}
+                  className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${player.eliminated ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-full border border-white/30"
+                      style={{ background: typeof player.color === 'string' ? player.color : '#22d3ee' }}
+                    />
+                    <span className="text-white/90 font-medium">{player.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-white/80 font-mono">
+                    <span className="text-emerald-300">${(player.resources ?? 0).toLocaleString()}</span>
+                    <span className="text-cyan-300">U:{unitCount}</span>
+                    <span className="text-amber-300">S:{player.score ?? 0}</span>
+                  </div>
+                  {player.eliminated && <span className="text-red-400 text-[10px] uppercase">Eliminated</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       {selectedTile && selectedTool === 'select' && !isMobile && (
         <TileInfoPanel

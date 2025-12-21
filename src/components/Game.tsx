@@ -31,8 +31,8 @@ import { CanvasIsometricGrid } from '@/components/game/CanvasIsometricGrid';
 // Cargo type names for notifications
 const CARGO_TYPE_NAMES = ['containers', 'bulk materials', 'oil'];
 
-export default function Game({ onExit }: { onExit?: () => void }) {
-  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed } = useGame();
+export default function Game({ onExit, startMode }: { onExit?: () => void; startMode?: 'sandbox' | 'competitive' }) {
+  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed, newCompetitiveGame } = useGame();
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('none');
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
@@ -203,6 +203,13 @@ export default function Game({ onExit }: { onExit?: () => void }) {
       );
     }
   }, [addMoney, addNotification]);
+
+  // Auto-start competitive mode when requested from entry point
+  useEffect(() => {
+    if (startMode === 'competitive' && state.mode !== 'competitive') {
+      newCompetitiveGame();
+    }
+  }, [startMode, state.mode, newCompetitiveGame]);
 
   // Mobile layout
   if (isMobile) {
