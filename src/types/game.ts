@@ -77,6 +77,8 @@ export type BuildingType =
 
 export type ZoneType = 'none' | 'residential' | 'commercial' | 'industrial';
 
+export type GameMode = 'sandbox' | 'competitive';
+
 export type Tool =
   | 'select'
   | 'bulldoze'
@@ -213,6 +215,7 @@ export interface Building {
   age: number;
   constructionProgress: number; // 0-100, building is under construction until 100
   abandoned: boolean; // Building is abandoned due to low demand, produces nothing
+  ownerId?: string; // Competitive mode: player ownership
   flipped?: boolean; // Horizontally mirror the sprite (used for waterfront buildings to face water)
 }
 
@@ -313,6 +316,64 @@ export interface WaterBody {
   centerY: number;
 }
 
+// ============================================================================
+// Competitive / RTS extensions
+// ============================================================================
+
+export type MilitaryUnitKind = 'infantry' | 'tank' | 'helicopter';
+export type MilitaryOrderType = 'idle' | 'move' | 'attack';
+
+export interface MilitaryOrder {
+  type: MilitaryOrderType;
+  targetX?: number;
+  targetY?: number;
+  targetBuildingOwnerId?: string;
+}
+
+export interface MilitaryUnit {
+  id: string;
+  ownerId: string;
+  kind: MilitaryUnitKind;
+  tileX: number;
+  tileY: number;
+  // For tile-to-tile movement
+  path: { x: number; y: number }[];
+  pathIndex: number;
+  progress: number; // 0-1 progress to next tile
+  // Combat
+  order: MilitaryOrder;
+  attackCooldown: number; // seconds until next attack tick
+  hp: number;
+  maxHp: number;
+}
+
+export type CompetitiveAge = 1 | 2 | 3;
+
+export interface CompetitivePlayer {
+  id: string;
+  name: string;
+  color: string;
+  isAI: boolean;
+  eliminated: boolean;
+  // Economy / score
+  money: number;
+  score: number;
+  age: CompetitiveAge;
+  popCap: number;
+  // Base location (used for spawning/training and elimination checks)
+  baseX: number;
+  baseY: number;
+  // Simple AI pacing (used only for AI players)
+  aiNextActionTick?: number;
+}
+
+export interface CompetitiveState {
+  localPlayerId: string;
+  players: CompetitivePlayer[];
+  selectedUnitIds: string[];
+  winnerId?: string;
+}
+
 export interface GameState {
   id: string; // Unique UUID for this game
   grid: Tile[][];
@@ -338,6 +399,10 @@ export interface GameState {
   adjacentCities: AdjacentCity[];
   waterBodies: WaterBody[];
   gameVersion: number; // Increments when a new game starts - used to clear transient state like vehicles
+  // Game mode + RTS state
+  gameMode: GameMode;
+  competitive?: CompetitiveState;
+  militaryUnits: MilitaryUnit[];
 }
 
 // Saved city metadata for the multi-save system

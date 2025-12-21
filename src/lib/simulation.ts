@@ -838,6 +838,9 @@ export function createInitialGameState(size: number = DEFAULT_GRID_SIZE, cityNam
     adjacentCities,
     waterBodies,
     gameVersion: 0,
+    gameMode: 'sandbox',
+    competitive: undefined,
+    militaryUnits: [],
   };
 }
 
@@ -1853,7 +1856,8 @@ export function simulateTick(state: GameState): GameState {
       tile.pollution = Math.max(0, tile.pollution * 0.95 + (buildingStats?.pollution || 0));
 
       // Fire simulation
-      if (state.disastersEnabled && tile.building.onFire) {
+      // In competitive mode, fire is primarily driven by combat (we still want it to progress even if "disasters" are off)
+      if ((state.disastersEnabled || state.gameMode === 'competitive') && tile.building.onFire) {
         const fireCoverage = services.fire[y][x];
         const fightingChance = fireCoverage / 300;
         
@@ -1870,7 +1874,8 @@ export function simulateTick(state: GameState): GameState {
       }
 
       // Random fire start
-      if (state.disastersEnabled && !tile.building.onFire && 
+      // Competitive mode disables random fires (combat handles ignition)
+      if (state.disastersEnabled && state.gameMode !== 'competitive' && !tile.building.onFire && 
           tile.building.type !== 'grass' && tile.building.type !== 'water' && 
           tile.building.type !== 'road' && tile.building.type !== 'tree' &&
           tile.building.type !== 'empty' &&

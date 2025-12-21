@@ -6,6 +6,8 @@ import {
   Budget,
   BuildingType,
   GameState,
+  MilitaryOrder,
+  MilitaryUnitKind,
   SavedCityMeta,
   Tool,
   TOOL_INFO,
@@ -22,6 +24,14 @@ import {
   generateRandomAdvancedCity,
 } from '@/lib/simulation';
 import {
+  simulateCompetitiveTick,
+  createCompetitiveGameState,
+  setSelectedUnits as setSelectedUnitsState,
+  issueOrder as issueOrderState,
+  trainUnit as trainUnitState,
+  upgradeAge as upgradeAgeState,
+} from '@/lib/competitive';
+import {
   SPRITE_PACKS,
   DEFAULT_SPRITE_PACK_ID,
   getSpritePack,
@@ -35,6 +45,7 @@ const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index'; // Index of all sav
 const SAVED_CITY_PREFIX = 'isocity-city-'; // Prefix for individual saved city states
 const SPRITE_PACK_STORAGE_KEY = 'isocity-sprite-pack';
 const DAY_NIGHT_MODE_STORAGE_KEY = 'isocity-day-night-mode';
+const START_MODE_KEY = 'isocity-start-mode';
 
 export type DayNightMode = 'auto' | 'day' | 'night';
 
@@ -66,6 +77,11 @@ type GameContextValue = {
   isSaving: boolean;
   addMoney: (amount: number) => void;
   addNotification: (title: string, description: string, icon: string) => void;
+  // Competitive / RTS controls
+  trainMilitaryUnit: (kind: MilitaryUnitKind) => void;
+  setSelectedUnits: (unitIds: string[]) => void;
+  issueUnitsOrder: (unitIds: string[], order: MilitaryOrder) => void;
+  upgradeCompetitiveAge: () => void;
   // Sprite pack management
   currentSpritePack: SpritePack;
   availableSpritePacks: SpritePack[];
@@ -221,6 +237,26 @@ function loadGameState(): GameState | null {
         // Ensure gameVersion exists for backward compatibility
         if (parsed.gameVersion === undefined) {
           parsed.gameVersion = 0;
+        }
+        // Ensure gameMode exists (defaults to sandbox)
+        if (parsed.gameMode === undefined) {
+          parsed.gameMode = 'sandbox';
+        }
+        // Ensure militaryUnits exists
+        if (!Array.isArray(parsed.militaryUnits)) {
+          parsed.militaryUnits = [];
+        }
+        // Ensure competitive state shape exists/clears appropriately
+        if (parsed.gameMode !== 'competitive') {
+          parsed.competitive = undefined;
+        } else if (!parsed.competitive) {
+          parsed.competitive = {
+            localPlayerId: parsed.id,
+            players: [],
+            selectedUnitIds: [],
+          };
+        } else if (!Array.isArray(parsed.competitive.selectedUnitIds)) {
+          parsed.competitive.selectedUnitIds = [];
         }
         // Migrate to include UUID if missing
         if (!parsed.id) {
@@ -514,6 +550,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const cities = loadSavedCitiesIndex();
     setSavedCities(cities);
     
+    // Handle "start mode" requests from the home screen (e.g., Competitive match)
+    // IMPORTANT: Competitive states are large; we avoid storing them in localStorage.
+    try {
+      const startMode = localStorage.getItem(START_MODE_KEY);
+      if (startMode === 'competitive') {
+        localStorage.removeItem(START_MODE_KEY);
+        const competitiveState = createCompetitiveGameState({ opponentCount: 3, cityName: 'Warfront' });
+        skipNextSaveRef.current = true;
+        setState((prev) => ({
+          ...competitiveState,
+          gameVersion: (prev.gameVersion ?? 0) + 1,
+        }));
+        setHasExistingGame(false);
+        hasLoadedRef.current = true;
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to read start mode:', e);
+    }
+
     // Load game state
     const saved = loadGameState();
     if (saved) {
@@ -621,7 +677,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         : (state.speed === 1 ? 500 : state.speed === 2 ? 220 : 50);
         
       timer = setInterval(() => {
-        setState((prev) => simulateTick(prev));
+        setState((prev) => {
+          const afterSim = simulateTick(prev);
+          if (afterSim.gameMode === 'competitive' && afterSim.speed > 0) {
+            return simulateCompetitiveTick(afterSim);
+          }
+          return afterSim;
+        });
       }, interval);
     }
 
@@ -889,6 +951,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9;
         }
+        // Ensure gameMode exists (defaults to sandbox)
+        if (parsed.gameMode === undefined) {
+          parsed.gameMode = 'sandbox';
+        }
+        // Ensure militaryUnits exists
+        if (!Array.isArray(parsed.militaryUnits)) {
+          parsed.militaryUnits = [];
+        }
+        // Ensure competitive state shape exists/clears appropriately
+        if (parsed.gameMode !== 'competitive') {
+          parsed.competitive = undefined;
+        } else if (!parsed.competitive) {
+          parsed.competitive = {
+            localPlayerId: parsed.id || generateUUID(),
+            players: [],
+            selectedUnitIds: [],
+          };
+        } else if (!Array.isArray(parsed.competitive.selectedUnitIds)) {
+          parsed.competitive.selectedUnitIds = [];
+        }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -963,6 +1045,35 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Competitive / RTS actions
+  const trainMilitaryUnit = useCallback((kind: MilitaryUnitKind) => {
+    setState((prev) => {
+      if (prev.gameMode !== 'competitive' || !prev.competitive) return prev;
+      return trainUnitState(prev, prev.competitive.localPlayerId, kind);
+    });
+  }, []);
+
+  const setSelectedUnits = useCallback((unitIds: string[]) => {
+    setState((prev) => {
+      if (prev.gameMode !== 'competitive' || !prev.competitive) return prev;
+      return setSelectedUnitsState(prev, unitIds);
+    });
+  }, []);
+
+  const issueUnitsOrder = useCallback((unitIds: string[], order: MilitaryOrder) => {
+    setState((prev) => {
+      if (prev.gameMode !== 'competitive' || !prev.competitive) return prev;
+      return issueOrderState(prev, unitIds, order);
+    });
+  }, []);
+
+  const upgradeCompetitiveAge = useCallback(() => {
+    setState((prev) => {
+      if (prev.gameMode !== 'competitive' || !prev.competitive) return prev;
+      return upgradeAgeState(prev, prev.competitive.localPlayerId);
+    });
+  }, []);
+
   // Save current city for restore (when viewing shared cities)
   const saveCurrentCityForRestore = useCallback(() => {
     saveCityForRestore(state);
@@ -972,6 +1083,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const restoreSavedCity = useCallback((): boolean => {
     const savedState = loadSavedCityState();
     if (savedState) {
+      // Competitive/RTS migrations (shared links / older saves)
+      if ((savedState as any).gameMode === undefined) {
+        (savedState as any).gameMode = 'sandbox';
+      }
+      if (!Array.isArray((savedState as any).militaryUnits)) {
+        (savedState as any).militaryUnits = [];
+      }
+      if ((savedState as any).gameMode !== 'competitive') {
+        (savedState as any).competitive = undefined;
+      } else if (!(savedState as any).competitive) {
+        (savedState as any).competitive = {
+          localPlayerId: savedState.id,
+          players: [],
+          selectedUnitIds: [],
+        };
+      } else if (!Array.isArray((savedState as any).competitive.selectedUnitIds)) {
+        (savedState as any).competitive.selectedUnitIds = [];
+      }
+
       skipNextSaveRef.current = true;
       setState(savedState);
       clearSavedCityStorage();
@@ -1056,6 +1186,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (cityState.effectiveTaxRate === undefined) {
       cityState.effectiveTaxRate = cityState.taxRate ?? 9;
     }
+    if ((cityState as any).gameMode === undefined) {
+      (cityState as any).gameMode = 'sandbox';
+    }
+    if (!Array.isArray((cityState as any).militaryUnits)) {
+      (cityState as any).militaryUnits = [];
+    }
+    if ((cityState as any).gameMode !== 'competitive') {
+      (cityState as any).competitive = undefined;
+    } else if (!(cityState as any).competitive) {
+      (cityState as any).competitive = {
+        localPlayerId: cityState.id,
+        players: [],
+        selectedUnitIds: [],
+      };
+    } else if (!Array.isArray((cityState as any).competitive.selectedUnitIds)) {
+      (cityState as any).competitive.selectedUnitIds = [];
+    }
     if (cityState.grid) {
       for (let y = 0; y < cityState.grid.length; y++) {
         for (let x = 0; x < cityState.grid[y].length; x++) {
@@ -1138,6 +1285,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     isSaving,
     addMoney,
     addNotification,
+    trainMilitaryUnit,
+    setSelectedUnits,
+    issueUnitsOrder,
+    upgradeCompetitiveAge,
     // Sprite pack management
     currentSpritePack,
     availableSpritePacks: SPRITE_PACKS,

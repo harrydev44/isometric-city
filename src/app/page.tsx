@@ -10,6 +10,7 @@ import { SavedCityMeta } from '@/types/game';
 
 const STORAGE_KEY = 'isocity-game-state';
 const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
+const START_MODE_KEY = 'isocity-start-mode';
 
 // Background color to filter from sprite sheets (red)
 const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
@@ -310,6 +311,19 @@ export default function HomePage() {
           >
             Start
           </Button>
+
+          <Button 
+            onClick={async () => {
+              // Don't write the full competitive state to localStorage (it can exceed quota).
+              // Instead, signal the GameProvider to start a fresh competitive match.
+              localStorage.setItem(START_MODE_KEY, 'competitive');
+              setShowGame(true);
+            }}
+            variant="outline"
+            className="w-full py-6 text-xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/80 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+          >
+            Start Competitive
+          </Button>
           
           <Button 
             onClick={async () => {
@@ -361,6 +375,19 @@ export default function HomePage() {
               className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
             >
               Start
+            </Button>
+
+            <Button 
+              onClick={async () => {
+                // Don't write the full competitive state to localStorage (it can exceed quota).
+                // Instead, signal the GameProvider to start a fresh competitive match.
+                localStorage.setItem(START_MODE_KEY, 'competitive');
+                setShowGame(true);
+              }}
+              variant="outline"
+              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/80 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+            >
+              Start Competitive
             </Button>
             <Button 
               onClick={async () => {

@@ -3,6 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useGame } from '@/context/GameContext';
 import { Tool, TOOL_INFO } from '@/types/game';
+import { AGE_UP_COST, UNIT_COST, UNIT_POP } from '@/lib/competitive';
 import {
   BudgetIcon,
   ChartIcon,
@@ -269,7 +270,7 @@ function ExitDialog({
 
 // Memoized Sidebar Component
 export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => void }) {
-  const { state, setTool, setActivePanel, saveCity } = useGame();
+  const { state, setTool, setActivePanel, saveCity, trainMilitaryUnit, upgradeCompetitiveAge } = useGame();
   const { selectedTool, stats, activePanel } = state;
   const [showExitDialog, setShowExitDialog] = useState(false);
   
@@ -381,6 +382,81 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
       </div>
       
       <ScrollArea className="flex-1 py-2">
+        {/* Competitive RTS: Military menu */}
+        {state.gameMode === 'competitive' && state.competitive && (() => {
+          const localId = state.competitive.localPlayerId;
+          const localPlayer = state.competitive.players.find(p => p.id === localId);
+          const popUsed = state.militaryUnits
+            .filter(u => u.ownerId === localId)
+            .reduce((sum, u) => sum + (UNIT_POP[u.kind] ?? 1), 0);
+          const popCap = localPlayer?.popCap ?? 0;
+          const age = localPlayer?.age ?? 1;
+          const canAgeUp = age < 3 && stats.money >= (age === 1 ? AGE_UP_COST[2] : AGE_UP_COST[3]);
+
+          return (
+            <div className="mb-2">
+              <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground">
+                MILITARY
+              </div>
+              <div className="px-2 flex flex-col gap-1">
+                <div className="px-2 py-1 text-xs text-muted-foreground flex items-center justify-between">
+                  <span>Age {age}</span>
+                  <span>{popUsed}/{popCap} pop</span>
+                </div>
+                <Button
+                  onClick={upgradeCompetitiveAge}
+                  disabled={age >= 3 || !canAgeUp}
+                  variant="outline"
+                  className="w-full justify-start gap-2 px-3 py-2 h-auto text-sm"
+                  title={age >= 3 ? 'Max age reached' : `Upgrade to Age ${age + 1} (Cost: $${(age === 1 ? AGE_UP_COST[2] : AGE_UP_COST[3]).toLocaleString()})`}
+                >
+                  <span className="flex-1 text-left">Advance Age</span>
+                  <span className="text-xs opacity-70">
+                    ${((age === 1 ? AGE_UP_COST[2] : AGE_UP_COST[3]) ?? 0).toLocaleString()}
+                  </span>
+                </Button>
+
+                <div className="mx-2 my-1 h-px bg-sidebar-border/50" />
+
+                <Button
+                  onClick={() => trainMilitaryUnit('infantry')}
+                  disabled={stats.money < UNIT_COST.infantry}
+                  variant="ghost"
+                  className="w-full justify-start gap-2 px-3 py-2 h-auto text-sm"
+                  title={`Train Infantry (Cost: $${UNIT_COST.infantry.toLocaleString()})`}
+                >
+                  <span className="flex-1 text-left">Infantry</span>
+                  <span className="text-xs opacity-60">${UNIT_COST.infantry.toLocaleString()}</span>
+                </Button>
+
+                <Button
+                  onClick={() => trainMilitaryUnit('helicopter')}
+                  disabled={age < 2 || stats.money < UNIT_COST.helicopter}
+                  variant="ghost"
+                  className="w-full justify-start gap-2 px-3 py-2 h-auto text-sm"
+                  title={age < 2 ? 'Requires Age 2' : `Train Helicopter (Cost: $${UNIT_COST.helicopter.toLocaleString()})`}
+                >
+                  <span className="flex-1 text-left">Helicopter</span>
+                  <span className="text-xs opacity-60">${UNIT_COST.helicopter.toLocaleString()}</span>
+                </Button>
+
+                <Button
+                  onClick={() => trainMilitaryUnit('tank')}
+                  disabled={age < 3 || stats.money < UNIT_COST.tank}
+                  variant="ghost"
+                  className="w-full justify-start gap-2 px-3 py-2 h-auto text-sm"
+                  title={age < 3 ? 'Requires Age 3' : `Train Tank (Cost: $${UNIT_COST.tank.toLocaleString()})`}
+                >
+                  <span className="flex-1 text-left">Tank</span>
+                  <span className="text-xs opacity-60">${UNIT_COST.tank.toLocaleString()}</span>
+                </Button>
+              </div>
+
+              <div className="mx-4 my-2 h-px bg-sidebar-border/50" />
+            </div>
+          );
+        })()}
+
         {/* Direct categories (TOOLS, ZONES) */}
         {Object.entries(directCategories).map(([category, tools]) => (
           <div key={category} className="mb-1">

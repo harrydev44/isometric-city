@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useGame } from '@/context/GameContext';
-import { TOOL_INFO, Tile, BuildingType, AdjacentCity } from '@/types/game';
+import { TOOL_INFO, Tile, BuildingType, AdjacentCity, MilitaryUnit, MilitaryUnitKind } from '@/types/game';
 import { getBuildingSize, requiresWaterAdjacency, getWaterAdjacency, getRoadAdjacency } from '@/lib/simulation';
 import { FireIcon, SafetyIcon } from '@/components/ui/Icons';
 import { getSpriteCoords, BUILDING_TO_SPRITE, SPRITE_VERTICAL_OFFSETS, SPRITE_HORIZONTAL_OFFSETS, getActiveSpritePack } from '@/lib/renderConfig';
@@ -118,14 +118,24 @@ export interface CanvasIsometricGridProps {
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
 export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false, navigationTarget, onNavigationComplete, onViewportChange, onBargeDelivery }: CanvasIsometricGridProps) {
-  const { state, placeAtTile, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour } = useGame();
+  const { state, placeAtTile, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour, setSelectedUnits, issueUnitsOrder } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, gameVersion } = state;
+  // Keep competitive state in refs for animation loop access (avoid restarting rAF loop)
+  const gameModeRef = useRef(state.gameMode);
+  const competitiveStateRef = useRef(state.competitive);
+  const militaryUnitsStateRef = useRef<MilitaryUnit[]>(state.militaryUnits);
+  useEffect(() => {
+    gameModeRef.current = state.gameMode;
+    competitiveStateRef.current = state.competitive;
+    militaryUnitsStateRef.current = state.militaryUnits;
+  }, [state.gameMode, state.competitive, state.militaryUnits]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCanvasRef = useRef<HTMLCanvasElement>(null); // PERF: Separate canvas for hover/selection highlights
   const carsCanvasRef = useRef<HTMLCanvasElement>(null);
   const buildingsCanvasRef = useRef<HTMLCanvasElement>(null); // Buildings rendered on top of cars/trains
   const airCanvasRef = useRef<HTMLCanvasElement>(null); // Aircraft + fireworks rendered above buildings
   const lightingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fogCanvasRef = useRef<HTMLCanvasElement>(null); // Competitive mode fog-of-war overlay
   const containerRef = useRef<HTMLDivElement>(null);
   const renderPendingRef = useRef<number | null>(null); // PERF: Track pending render frame
   const [offset, setOffset] = useState({ x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 });
@@ -136,6 +146,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const zoomRef = useRef(isMobile ? 0.6 : 1); // Ref for animation loop to check zoom level
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
+  // Competitive unit selection box (screen pixels)
+  const [isUnitBoxSelecting, setIsUnitBoxSelecting] = useState(false);
+  const [unitBoxStartPx, setUnitBoxStartPx] = useState<{ x: number; y: number } | null>(null);
+  const [unitBoxEndPx, setUnitBoxEndPx] = useState<{ x: number; y: number } | null>(null);
   const [hoveredIncident, setHoveredIncident] = useState<{
     x: number;
     y: number;
@@ -855,6 +869,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         if (lightingCanvasRef.current) {
           lightingCanvasRef.current.style.width = `${rect.width}px`;
           lightingCanvasRef.current.style.height = `${rect.height}px`;
+        }
+        if (fogCanvasRef.current) {
+          fogCanvasRef.current.style.width = `${rect.width}px`;
+          fogCanvasRef.current.style.height = `${rect.height}px`;
         }
         
         // Set actual size in memory (scaled for DPI)
@@ -3023,25 +3041,225 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
+
+    // Competitive mode: draw unit markers + selection box (in world/screen space)
+    if (state.gameMode === 'competitive' && state.competitive) {
+      const localId = state.competitive.localPlayerId;
+      const selectedIds = new Set(state.competitive.selectedUnitIds);
+      const playerColor = state.competitive.players.find(p => p.id === localId)?.color ?? '#60a5fa';
+
+      // Draw local units (small dots); selected units get a ring
+      for (const u of state.militaryUnits) {
+        if (u.ownerId !== localId) continue;
+        const { screenX, screenY } = gridToScreen(u.tileX, u.tileY, 0, 0);
+        const cx = screenX + TILE_WIDTH / 2;
+        const cy = screenY + TILE_HEIGHT / 2;
+        const isSelectedUnit = selectedIds.has(u.id);
+
+        ctx.save();
+        ctx.globalAlpha = isSelectedUnit ? 0.95 : 0.7;
+        ctx.fillStyle = playerColor;
+        ctx.beginPath();
+        ctx.arc(cx, cy, isSelectedUnit ? 4.5 : 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (isSelectedUnit) {
+          ctx.globalAlpha = 0.9;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Draw box-select rectangle
+      if (isUnitBoxSelecting && unitBoxStartPx && unitBoxEndPx && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const sx = unitBoxStartPx.x - rect.left;
+        const sy = unitBoxStartPx.y - rect.top;
+        const ex = unitBoxEndPx.x - rect.left;
+        const ey = unitBoxEndPx.y - rect.top;
+        const startWorldX = (sx - offset.x) / zoom;
+        const startWorldY = (sy - offset.y) / zoom;
+        const endWorldX = (ex - offset.x) / zoom;
+        const endWorldY = (ey - offset.y) / zoom;
+        const minX = Math.min(startWorldX, endWorldX);
+        const minY = Math.min(startWorldY, endWorldY);
+        const w = Math.abs(endWorldX - startWorldX);
+        const h = Math.abs(endWorldY - startWorldY);
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(96, 165, 250, 0.95)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(minX, minY, w, h);
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
     
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [hoveredTile, selectedTile, offset, zoom, gridSize, grid]);
+  }, [hoveredTile, selectedTile, offset, zoom, gridSize, grid, state.gameMode, state.competitive, state.militaryUnits, isUnitBoxSelecting, unitBoxStartPx, unitBoxEndPx]);
   
   // Animate decorative car traffic AND emergency vehicles on top of the base canvas
   useEffect(() => {
     const canvas = carsCanvasRef.current;
     const airCanvas = airCanvasRef.current;
-    if (!canvas || !airCanvas) return;
+    const fogCanvas = fogCanvasRef.current;
+    if (!canvas || !airCanvas || !fogCanvas) return;
     const ctx = canvas.getContext('2d');
     const airCtx = airCanvas.getContext('2d');
-    if (!ctx || !airCtx) return;
+    const fogCtx = fogCanvas.getContext('2d');
+    if (!ctx || !airCtx || !fogCtx) return;
     
     ctx.imageSmoothingEnabled = false;
     airCtx.imageSmoothingEnabled = false;
+    fogCtx.imageSmoothingEnabled = false;
     
     const clearAirCanvas = () => {
       airCtx.setTransform(1, 0, 0, 1, 0, 0);
       airCtx.clearRect(0, 0, airCanvas.width, airCanvas.height);
+    };
+    
+    const clearFogCanvas = () => {
+      fogCtx.setTransform(1, 0, 0, 1, 0, 0);
+      fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
+    };
+
+    const drawMilitaryUnits = () => {
+      if (gameModeRef.current !== 'competitive') return;
+      const comp = competitiveStateRef.current;
+      if (!comp) return;
+      const units = militaryUnitsStateRef.current;
+      if (!units.length) return;
+
+      const { offset: currentOffset, zoom: currentZoom } = worldStateRef.current;
+      const dpr = window.devicePixelRatio || 1;
+
+      const playerColors = new Map<string, string>();
+      for (const p of comp.players) {
+        playerColors.set(p.id, p.color);
+      }
+      const selected = new Set(comp.selectedUnitIds);
+
+      airCtx.save();
+      airCtx.scale(dpr * currentZoom, dpr * currentZoom);
+      airCtx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+
+      for (const u of units) {
+        const { screenX, screenY } = gridToScreen(u.tileX, u.tileY, 0, 0);
+        const cx = screenX + TILE_WIDTH / 2;
+        const cy = screenY + TILE_HEIGHT / 2;
+        const color = playerColors.get(u.ownerId) ?? '#ffffff';
+        const isSelected = selected.has(u.id);
+
+        // Simple silhouettes for now (no new sprites yet)
+        airCtx.save();
+        airCtx.globalAlpha = 0.95;
+        airCtx.fillStyle = color;
+        airCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+        airCtx.lineWidth = 1.5;
+
+        if (u.kind === 'infantry') {
+          airCtx.beginPath();
+          airCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+          airCtx.fill();
+          airCtx.stroke();
+        } else if (u.kind === 'tank') {
+          airCtx.beginPath();
+          airCtx.roundRect(cx - 7, cy - 4, 14, 8, 2);
+          airCtx.fill();
+          airCtx.stroke();
+          airCtx.beginPath();
+          airCtx.moveTo(cx, cy - 1);
+          airCtx.lineTo(cx + 10, cy - 3);
+          airCtx.stroke();
+        } else {
+          // helicopter
+          airCtx.beginPath();
+          airCtx.moveTo(cx, cy - 7);
+          airCtx.lineTo(cx + 7, cy + 5);
+          airCtx.lineTo(cx - 7, cy + 5);
+          airCtx.closePath();
+          airCtx.fill();
+          airCtx.stroke();
+          airCtx.beginPath();
+          airCtx.moveTo(cx - 10, cy - 9);
+          airCtx.lineTo(cx + 10, cy - 9);
+          airCtx.stroke();
+        }
+
+        if (isSelected) {
+          airCtx.globalAlpha = 0.85;
+          airCtx.strokeStyle = '#ffffff';
+          airCtx.lineWidth = 2;
+          airCtx.beginPath();
+          airCtx.arc(cx, cy + 1, 12, 0, Math.PI * 2);
+          airCtx.stroke();
+        }
+
+        airCtx.restore();
+      }
+
+      airCtx.restore();
+    };
+
+    const drawFogOfWar = () => {
+      if (gameModeRef.current !== 'competitive') {
+        clearFogCanvas();
+        return;
+      }
+      const comp = competitiveStateRef.current;
+      if (!comp) {
+        clearFogCanvas();
+        return;
+      }
+
+      const { offset: currentOffset, zoom: currentZoom } = worldStateRef.current;
+      const dpr = window.devicePixelRatio || 1;
+
+      // Clear + fill full fog
+      fogCtx.setTransform(1, 0, 0, 1, 0, 0);
+      fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
+      fogCtx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+      fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
+
+      // Punch holes where the local player has vision
+      const localId = comp.localPlayerId;
+      const localPlayer = comp.players.find(p => p.id === localId);
+      const sources: Array<{ x: number; y: number; r: number }> = [];
+      if (localPlayer) {
+        sources.push({ x: localPlayer.baseX, y: localPlayer.baseY, r: 12 });
+      }
+      for (const u of militaryUnitsStateRef.current) {
+        if (u.ownerId !== localId) continue;
+        sources.push({ x: u.tileX, y: u.tileY, r: u.kind === 'infantry' ? 8 : u.kind === 'tank' ? 9 : 10 });
+      }
+
+      if (sources.length === 0) return;
+
+      fogCtx.save();
+      fogCtx.globalCompositeOperation = 'destination-out';
+      fogCtx.scale(dpr * currentZoom, dpr * currentZoom);
+      fogCtx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+
+      for (const s of sources) {
+        const { screenX, screenY } = gridToScreen(s.x, s.y, 0, 0);
+        const cx = screenX + TILE_WIDTH / 2;
+        const cy = screenY + TILE_HEIGHT / 2;
+        const radius = s.r * TILE_WIDTH * 0.5;
+        const g = fogCtx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        fogCtx.fillStyle = g;
+        fogCtx.beginPath();
+        fogCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+        fogCtx.fill();
+      }
+
+      fogCtx.restore();
+      fogCtx.globalCompositeOperation = 'source-over';
     };
     
     let animationFrameId: number;
@@ -3147,7 +3365,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
         drawAirplanes(airCtx); // Draw airplanes above everything
         drawFireworks(airCtx); // Draw fireworks above everything (nighttime only)
+        drawMilitaryUnits(); // Competitive units (above buildings)
       }
+
+      // Fog-of-war should always be updated (follows camera)
+      drawFogOfWar();
     };
     
     animationFrameId = requestAnimationFrame(render);
@@ -3429,6 +3651,15 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     }
     
     if (e.button === 0) {
+      // Competitive: start unit box-select when using Select tool
+      if (state.gameMode === 'competitive' && state.competitive && selectedTool === 'select') {
+        setIsUnitBoxSelecting(true);
+        setUnitBoxStartPx({ x: e.clientX, y: e.clientY });
+        setUnitBoxEndPx({ x: e.clientX, y: e.clientY });
+        // Don't select a tile yet; we'll resolve click vs drag on mouse up
+        return;
+      }
+
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
         const mouseX = (e.clientX - rect.left) / zoom;
@@ -3467,7 +3698,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
-  }, [offset, gridSize, selectedTool, placeAtTile, zoom, showsDragGrid, supportsDragPlace, setSelectedTile, findBuildingOrigin]);
+  }, [offset, gridSize, selectedTool, placeAtTile, zoom, showsDragGrid, supportsDragPlace, setSelectedTile, findBuildingOrigin, state.gameMode, state.competitive]);
   
   // Calculate camera bounds based on grid size
   const getMapBounds = useCallback((currentZoom: number, canvasW: number, canvasH: number) => {
@@ -3532,6 +3763,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       };
       setOffset(clampOffset(newOffset, zoom));
       return;
+    }
+
+    // Competitive: update unit box-select
+    if (isUnitBoxSelecting) {
+      setUnitBoxEndPx({ x: e.clientX, y: e.clientY });
     }
     
     const rect = containerRef.current?.getBoundingClientRect();
@@ -3623,9 +3859,86 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
-  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, clampOffset, grid]);
+  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, clampOffset, grid, isUnitBoxSelecting]);
   
   const handleMouseUp = useCallback(() => {
+    // Competitive: resolve unit box-select (drag vs click)
+    if (isUnitBoxSelecting && unitBoxStartPx && unitBoxEndPx && containerRef.current && state.gameMode === 'competitive' && state.competitive) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const sx = unitBoxStartPx.x - rect.left;
+      const sy = unitBoxStartPx.y - rect.top;
+      const ex = unitBoxEndPx.x - rect.left;
+      const ey = unitBoxEndPx.y - rect.top;
+      const dxPx = Math.abs(ex - sx);
+      const dyPx = Math.abs(ey - sy);
+
+      const startWorldX = (sx - offset.x) / zoom;
+      const startWorldY = (sy - offset.y) / zoom;
+      const endWorldX = (ex - offset.x) / zoom;
+      const endWorldY = (ey - offset.y) / zoom;
+
+      const localId = state.competitive.localPlayerId;
+
+      // Small movement → treat as click
+      if (dxPx < 6 && dyPx < 6) {
+        const clickWorldX = endWorldX;
+        const clickWorldY = endWorldY;
+
+        // Find nearest local unit under cursor
+        let best: { id: string; dist: number } | null = null;
+        for (const u of state.militaryUnits) {
+          if (u.ownerId !== localId) continue;
+          const { screenX, screenY } = gridToScreen(u.tileX, u.tileY, 0, 0);
+          const ux = screenX + TILE_WIDTH / 2;
+          const uy = screenY + TILE_HEIGHT / 2;
+          const d = Math.hypot(ux - clickWorldX, uy - clickWorldY);
+          if (d < 14 && (!best || d < best.dist)) {
+            best = { id: u.id, dist: d };
+          }
+        }
+
+        if (best) {
+          setSelectedUnits([best.id]);
+          setSelectedTile(null);
+        } else {
+          // No unit: fall back to tile selection behavior
+          const { gridX, gridY } = screenToGrid(clickWorldX, clickWorldY, 0, 0);
+          if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+            const origin = findBuildingOrigin(gridX, gridY);
+            if (origin) {
+              setSelectedTile({ x: origin.originX, y: origin.originY });
+            } else {
+              setSelectedTile({ x: gridX, y: gridY });
+            }
+          }
+          setSelectedUnits([]);
+        }
+      } else {
+        const minX = Math.min(startWorldX, endWorldX);
+        const maxX = Math.max(startWorldX, endWorldX);
+        const minY = Math.min(startWorldY, endWorldY);
+        const maxY = Math.max(startWorldY, endWorldY);
+
+        const selected: string[] = [];
+        for (const u of state.militaryUnits) {
+          if (u.ownerId !== localId) continue;
+          const { screenX, screenY } = gridToScreen(u.tileX, u.tileY, 0, 0);
+          const ux = screenX + TILE_WIDTH / 2;
+          const uy = screenY + TILE_HEIGHT / 2;
+          if (ux >= minX && ux <= maxX && uy >= minY && uy <= maxY) {
+            selected.push(u.id);
+          }
+        }
+        setSelectedUnits(selected);
+        setSelectedTile(null);
+      }
+
+      setIsUnitBoxSelecting(false);
+      setUnitBoxStartPx(null);
+      setUnitBoxEndPx(null);
+      return;
+    }
+
     // Fill the drag rectangle when mouse is released (only for zoning tools)
     if (isDragging && dragStartTile && dragEndTile && showsDragGrid) {
       const minX = Math.min(dragStartTile.x, dragEndTile.x);
@@ -3664,7 +3977,37 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     if (!containerRef.current) {
       setHoveredTile(null);
     }
-  }, [isDragging, showsDragGrid, dragStartTile, placeAtTile, selectedTool, dragEndTile, checkAndDiscoverCities]);
+  }, [isUnitBoxSelecting, unitBoxStartPx, unitBoxEndPx, state.gameMode, state.competitive, state.militaryUnits, offset.x, offset.y, zoom, gridSize, findBuildingOrigin, setSelectedTile, setSelectedUnits, isDragging, showsDragGrid, dragStartTile, placeAtTile, selectedTool, dragEndTile, checkAndDiscoverCities]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (state.gameMode !== 'competitive' || !state.competitive) return;
+    const selectedIds = state.competitive.selectedUnitIds;
+    if (!selectedIds || selectedIds.length === 0) return;
+
+    e.preventDefault();
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = (e.clientX - rect.left) / zoom;
+    const mouseY = (e.clientY - rect.top) / zoom;
+    const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
+    if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return;
+
+    // Determine if we clicked an enemy building
+    const origin = findBuildingOrigin(gridX, gridY);
+    const tx = origin ? origin.originX : gridX;
+    const ty = origin ? origin.originY : gridY;
+    const targetTile = grid[ty]?.[tx];
+    const targetOwner = targetTile?.building?.ownerId;
+    const localId = state.competitive.localPlayerId;
+
+    if (targetOwner && targetOwner !== localId && targetTile?.building.type !== 'grass' && targetTile?.building.type !== 'water') {
+      issueUnitsOrder(selectedIds, { type: 'attack', targetX: tx, targetY: ty, targetBuildingOwnerId: targetOwner });
+    } else {
+      issueUnitsOrder(selectedIds, { type: 'move', targetX: gridX, targetY: gridY });
+    }
+  }, [state.gameMode, state.competitive, gridSize, grid, zoom, offset.x, offset.y, findBuildingOrigin, issueUnitsOrder]);
   
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -3845,6 +4188,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onContextMenu={handleContextMenu}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -3888,6 +4232,12 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         height={canvasSize.height}
         className="absolute top-0 left-0 pointer-events-none"
         style={{ mixBlendMode: 'multiply' }}
+      />
+      <canvas
+        ref={fogCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute top-0 left-0 pointer-events-none"
       />
       
       {selectedTile && selectedTool === 'select' && !isMobile && (
