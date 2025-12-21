@@ -389,6 +389,17 @@ export function SubwayStationIcon({ size = 18, className }: IconProps) {
   );
 }
 
+export function MilitaryIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className}>
+      {/* Shield */}
+      <path {...baseStroke} d="M12 3l8 4v5c0 4.5-3.5 7.8-8 9-4.5-1.2-8-4.5-8-9V7z" />
+      {/* Sword */}
+      <path {...baseStroke} d="M12 8v6M10 10h4M10 12h4" />
+    </svg>
+  );
+}
+
 function ZoneIcon({ color, size = 18, className }: IconProps & { color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className}>

@@ -23,7 +23,10 @@ import {
   StatisticsPanel,
   SettingsPanel,
   AdvisorsPanel,
+  Scoreboard,
+  MilitaryPanel,
 } from '@/components/game/panels';
+import { MilitaryUnitType, COMPETITIVE_SETTINGS } from '@/types/competitive';
 import { MiniMap } from '@/components/game/MiniMap';
 import { TopBar, StatsPanel } from '@/components/game/TopBar';
 import { CanvasIsometricGrid } from '@/components/game/CanvasIsometricGrid';
@@ -32,7 +35,7 @@ import { CanvasIsometricGrid } from '@/components/game/CanvasIsometricGrid';
 const CARGO_TYPE_NAMES = ['containers', 'bulk materials', 'oil'];
 
 export default function Game({ onExit }: { onExit?: () => void }) {
-  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed } = useGame();
+  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed, competitiveState, produceUnit, selectUnits, commandSelectedUnits } = useGame();
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('none');
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
@@ -275,6 +278,23 @@ export default function Game({ onExit }: { onExit?: () => void }) {
         {state.activePanel === 'statistics' && <StatisticsPanel />}
         {state.activePanel === 'advisors' && <AdvisorsPanel />}
         {state.activePanel === 'settings' && <SettingsPanel />}
+        {state.activePanel === 'military' && (
+          <MilitaryPanel
+            competitiveState={competitiveState}
+            money={state.stats.money}
+            onProduceUnit={produceUnit}
+            onClose={() => setActivePanel('none')}
+          />
+        )}
+        
+        {/* Scoreboard for competitive mode */}
+        {competitiveState.enabled && (
+          <Scoreboard
+            competitiveState={competitiveState}
+            playerScore={competitiveState.players.find(p => p.id === 'player')?.score || 0}
+            playerMoney={state.stats.money}
+          />
+        )}
         
         <VinnieDialog open={showVinnieDialog} onOpenChange={setShowVinnieDialog} />
         <CommandMenu />

@@ -59,6 +59,7 @@ import {
 import { drawPlaceholderBuilding } from '@/components/game/placeholders';
 import { loadImage, loadSpriteImage, onImageLoaded, getCachedImage } from '@/components/game/imageLoader';
 import { TileInfoPanel } from '@/components/game/panels';
+import { CompetitiveOverlay } from './CompetitiveOverlay';
 import {
   findMarinasAndPiers,
   findAdjacentWaterTile,
@@ -3888,6 +3889,14 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         height={canvasSize.height}
         className="absolute top-0 left-0 pointer-events-none"
         style={{ mixBlendMode: 'multiply' }}
+      />
+      
+      {/* Competitive Mode Overlay for unit selection and fog of war */}
+      <CompetitiveOverlay
+        offset={offset}
+        zoom={zoom}
+        canvasWidth={canvasSize.width}
+        canvasHeight={canvasSize.height}
       />
       
       {selectedTile && selectedTool === 'select' && !isMobile && (

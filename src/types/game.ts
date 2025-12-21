@@ -73,7 +73,9 @@ export type BuildingType =
   | 'pond_park'
   | 'park_gate'
   | 'mountain_lodge'
-  | 'mountain_trailhead';
+  | 'mountain_trailhead'
+  // Military buildings
+  | 'barracks';
 
 export type ZoneType = 'none' | 'residential' | 'commercial' | 'industrial';
 
@@ -133,7 +135,9 @@ export type Tool =
   | 'pond_park'
   | 'park_gate'
   | 'mountain_lodge'
-  | 'mountain_trailhead';
+  | 'mountain_trailhead'
+  // Military buildings
+  | 'barracks';
 
 export interface ToolInfo {
   name: string;
@@ -199,6 +203,8 @@ export const TOOL_INFO: Record<Tool, ToolInfo> = {
   park_gate: { name: 'Park Gate', cost: 150, description: 'Decorative park entrance', size: 1 },
   mountain_lodge: { name: 'Mountain Lodge', cost: 1500, description: 'Nature retreat lodge (2x2)', size: 2 },
   mountain_trailhead: { name: 'Trailhead', cost: 400, description: 'Hiking trail entrance (3x3)', size: 3 },
+  // Military buildings
+  barracks: { name: 'Barracks', cost: 2000, description: 'Train military units (2x2)', size: 2 },
 };
 
 export interface Building {
@@ -313,6 +319,8 @@ export interface WaterBody {
   centerY: number;
 }
 
+export type GameMode = 'sandbox' | 'competitive';
+
 export interface GameState {
   id: string; // Unique UUID for this game
   grid: Tile[][];
@@ -333,11 +341,13 @@ export interface GameState {
   notifications: Notification[];
   advisorMessages: AdvisorMessage[];
   history: HistoryPoint[];
-  activePanel: 'none' | 'budget' | 'statistics' | 'advisors' | 'settings';
+  activePanel: 'none' | 'budget' | 'statistics' | 'advisors' | 'settings' | 'military';
   disastersEnabled: boolean;
   adjacentCities: AdjacentCity[];
   waterBodies: WaterBody[];
   gameVersion: number; // Increments when a new game starts - used to clear transient state like vehicles
+  // Competitive mode
+  gameMode: GameMode;
 }
 
 // Saved city metadata for the multi-save system
@@ -424,4 +434,6 @@ export const BUILDING_STATS: Record<BuildingType, { maxPop: number; maxJobs: num
   park_gate: { maxPop: 0, maxJobs: 1, pollution: -2, landValue: 8 },
   mountain_lodge: { maxPop: 0, maxJobs: 15, pollution: -5, landValue: 35 },
   mountain_trailhead: { maxPop: 0, maxJobs: 2, pollution: -10, landValue: 15 },
+  // Military buildings
+  barracks: { maxPop: 0, maxJobs: 30, pollution: 5, landValue: -10 },
 };

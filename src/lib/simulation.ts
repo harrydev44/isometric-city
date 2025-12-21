@@ -838,6 +838,7 @@ export function createInitialGameState(size: number = DEFAULT_GRID_SIZE, cityNam
     adjacentCities,
     waterBodies,
     gameVersion: 0,
+    gameMode: 'sandbox',
   };
 }
 
