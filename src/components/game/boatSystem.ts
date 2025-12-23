@@ -145,6 +145,7 @@ export function useBoatSystem(
     const updatedBoats: Boat[] = [];
     
     for (const boat of boatsRef.current) {
+      // eslint-disable-next-line react-hooks/immutability -- boats are stored in refs; mutation is intentional for perf
       boat.age += delta;
       
       // Update wake particles (similar to contrails) - shorter on mobile

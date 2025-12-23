@@ -695,6 +695,7 @@ export function useVehicleSystems(
     return options.length >= 3;
   }, []);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- this callback is intentionally memoized for perf; refs are stable by design
   const updateCars = useCallback((delta: number) => {
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed, zoom: currentZoom } = worldStateRef.current;
     
