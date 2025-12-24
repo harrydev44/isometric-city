@@ -71,8 +71,8 @@ isocity/
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/isocity.git
-    cd isocity
+    git clone https://github.com/truncgil/isometric-city.git
+    cd isometric-city
     ```
 
 2.  **Install dependencies:**
@@ -98,13 +98,9 @@ isocity/
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Whether it's reporting a bug, proposing a new feature, or submitting a pull request, your input is valued.
 
-1.  Fork the project.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
+Please ensure your code follows the existing style and conventions.
 
 ## 📄 License
 
