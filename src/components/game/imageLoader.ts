@@ -8,8 +8,36 @@ const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
 // Color distance threshold - pixels within this distance will be made transparent
 const COLOR_THRESHOLD = 155; // Adjust this value to be more/less aggressive
 
+// Image optimization settings
+// Set to true to use Next.js image optimization API for compressed WebP/AVIF images
+const USE_IMAGE_OPTIMIZATION = true;
+// Quality setting for optimized images (0-100, lower = smaller files, faster loading)
+const IMAGE_QUALITY = 75;
+
 // Image cache for building sprites
 const imageCache = new Map<string, HTMLImageElement>();
+
+/**
+ * Gets the optimized image URL using Next.js image optimization API
+ * This converts images to WebP/AVIF format with compression for faster loading
+ * @param src Original image source path
+ * @returns Optimized image URL
+ */
+function getOptimizedImageUrl(src: string): string {
+  if (!USE_IMAGE_OPTIMIZATION) {
+    return src;
+  }
+  
+  // Only optimize local images (starting with /)
+  if (!src.startsWith('/')) {
+    return src;
+  }
+  
+  // Use Next.js image optimization API
+  // Using a large width (3840) to get full resolution but still benefit from format conversion
+  const encodedUrl = encodeURIComponent(src);
+  return `/_next/image?url=${encodedUrl}&w=3840&q=${IMAGE_QUALITY}`;
+}
 
 // Event emitter for image loading progress (to trigger re-renders)
 type ImageLoadCallback = () => void;
@@ -33,6 +61,7 @@ function notifyImageLoaded() {
 
 /**
  * Load an image from a source URL
+ * Uses Next.js image optimization API for compressed WebP/AVIF images
  * @param src The image source path
  * @returns Promise resolving to the loaded image
  */
@@ -49,7 +78,8 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
       resolve(img);
     };
     img.onerror = reject;
-    img.src = src;
+    // Use optimized image URL for faster loading (WebP/AVIF with compression)
+    img.src = getOptimizedImageUrl(src);
   });
 }
 
