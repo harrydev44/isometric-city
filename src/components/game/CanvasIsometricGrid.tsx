@@ -263,7 +263,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     canvasSize: { width: 1200, height: 800 },
   });
   const [roadDrawDirection, setRoadDrawDirection] = useState<'h' | 'v' | null>(null);
-  const placedRoadTilesRef = useRef<Set<string>>(new Set());
+  // Track tiles already placed during a click+drag gesture (prevents repeated placement/spend)
+  const placedDragTilesRef = useRef<Set<string>>(new Set());
   // Track progressive image loading - start true to render immediately with placeholders
   const [imagesLoaded, setImagesLoaded] = useState(true);
   // Counter to trigger re-renders when new images become available
@@ -274,8 +275,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const [cityConnectionDialog, setCityConnectionDialog] = useState<{ direction: 'north' | 'south' | 'east' | 'west' } | null>(null);
   const keysPressedRef = useRef<Set<string>>(new Set());
 
-  // Only zoning tools show the grid/rectangle selection visualization
-  const showsDragGrid = ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone', 'zone_water'].includes(selectedTool);
+  // Only zoning tools show the grid/rectangle selection visualization.
+  // Note: `zone_water` behaves like a paint tool (click/drag applies immediately), not an area fill.
+  const showsDragGrid = ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone'].includes(selectedTool);
   
   // Roads, bulldoze, and other tools support drag-to-place but don't show the grid
   const supportsDragPlace = selectedTool !== 'select';
@@ -3588,13 +3590,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           setIsDragging(true);
           // Reset road drawing state for new drag
           setRoadDrawDirection(null);
-          placedRoadTilesRef.current.clear();
+          placedDragTilesRef.current.clear();
           // Place immediately on first click
           placeAtTile(gridX, gridY);
-          // Track initial tile for roads, rail, and subways
-          if (selectedTool === 'road' || selectedTool === 'rail' || selectedTool === 'subway') {
-            placedRoadTilesRef.current.add(`${gridX},${gridY}`);
-          }
+          placedDragTilesRef.current.add(`${gridX},${gridY}`);
         }
       }
     }
@@ -3758,16 +3757,20 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           for (let x = minX; x <= maxX; x++) {
             for (let y = minY; y <= maxY; y++) {
               const key = `${x},${y}`;
-              if (!placedRoadTilesRef.current.has(key)) {
+              if (!placedDragTilesRef.current.has(key)) {
                 placeAtTile(x, y);
-                placedRoadTilesRef.current.add(key);
+                placedDragTilesRef.current.add(key);
               }
             }
           }
         }
         // For other drag-to-place tools, place continuously
         else if (isDragging && supportsDragPlace && dragStartTile) {
-          placeAtTile(gridX, gridY);
+          const key = `${gridX},${gridY}`;
+          if (!placedDragTilesRef.current.has(key)) {
+            placeAtTile(gridX, gridY);
+            placedDragTilesRef.current.add(key);
+          }
         }
       }
     }
@@ -3818,7 +3821,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     setDragEndTile(null);
     setIsPanning(false);
     setRoadDrawDirection(null);
-    placedRoadTilesRef.current.clear();
+    placedDragTilesRef.current.clear();
     
     // Clear hovered tile when mouse leaves
     if (!containerRef.current) {
