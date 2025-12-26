@@ -62,7 +62,7 @@ import {
 } from '@/components/game/overlays';
 import { SERVICE_CONFIG } from '@/lib/simulation';
 import { drawPlaceholderBuilding } from '@/components/game/placeholders';
-import { loadImage, loadSpriteImage, onImageLoaded, getCachedImage } from '@/components/game/imageLoader';
+import { loadImage, loadSpriteImage, onImageLoaded, getCachedImage, preloadImages } from '@/components/game/imageLoader';
 import { TileInfoPanel } from '@/components/game/panels';
 import {
   findMarinasAndPiers,
@@ -783,53 +783,50 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   
   // Load sprite sheets on mount and when sprite pack changes
   // This now runs in background - rendering starts immediately with placeholders
+  // Images are loaded with priority: critical (main sprite), high (commonly used), low (variants)
   useEffect(() => {
-    // Load images progressively - each will trigger a re-render when ready
-    // Priority: main sprite sheet first, then water, then secondary sheets
-    
-    // High priority - main sprite sheet
+    // CRITICAL: Main sprite sheet - load immediately
     loadSpriteImage(currentSpritePack.src, true).catch(console.error);
     
-    // High priority - water texture
+    // CRITICAL: Water texture - load immediately
     loadImage(WATER_ASSET_PATH).catch(console.error);
     
-    // Medium priority - load secondary sheets after a small delay
-    // This allows the main content to render first
-    const loadSecondarySheets = () => {
-      if (currentSpritePack.constructionSrc) {
-        loadSpriteImage(currentSpritePack.constructionSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.abandonedSrc) {
-        loadSpriteImage(currentSpritePack.abandonedSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.denseSrc) {
-        loadSpriteImage(currentSpritePack.denseSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.parksSrc) {
-        loadSpriteImage(currentSpritePack.parksSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.parksConstructionSrc) {
-        loadSpriteImage(currentSpritePack.parksConstructionSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.farmsSrc) {
-        loadSpriteImage(currentSpritePack.farmsSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.shopsSrc) {
-        loadSpriteImage(currentSpritePack.shopsSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.stationsSrc) {
-        loadSpriteImage(currentSpritePack.stationsSrc, true).catch(console.error);
-      }
-      if (currentSpritePack.modernSrc) {
-        loadSpriteImage(currentSpritePack.modernSrc, true).catch(console.error);
-      }
-      // Load airplane sprite sheet (always loaded, not dependent on sprite pack)
-      loadSpriteImage(AIRPLANE_SPRITE_SRC, false).catch(console.error);
+    // HIGH PRIORITY: Commonly used secondary sheets (construction, dense)
+    // These are often visible in active gameplay
+    const highPrioritySheets: string[] = [];
+    if (currentSpritePack.constructionSrc) highPrioritySheets.push(currentSpritePack.constructionSrc);
+    if (currentSpritePack.denseSrc) highPrioritySheets.push(currentSpritePack.denseSrc);
+    if (currentSpritePack.parksSrc) highPrioritySheets.push(currentSpritePack.parksSrc);
+    
+    // LOW PRIORITY: Variant sheets (abandoned, modern, farms, shops, stations)
+    // These are less commonly needed immediately
+    const lowPrioritySheets: string[] = [];
+    if (currentSpritePack.abandonedSrc) lowPrioritySheets.push(currentSpritePack.abandonedSrc);
+    if (currentSpritePack.parksConstructionSrc) lowPrioritySheets.push(currentSpritePack.parksConstructionSrc);
+    if (currentSpritePack.farmsSrc) lowPrioritySheets.push(currentSpritePack.farmsSrc);
+    if (currentSpritePack.shopsSrc) lowPrioritySheets.push(currentSpritePack.shopsSrc);
+    if (currentSpritePack.stationsSrc) lowPrioritySheets.push(currentSpritePack.stationsSrc);
+    if (currentSpritePack.modernSrc) lowPrioritySheets.push(currentSpritePack.modernSrc);
+    lowPrioritySheets.push(AIRPLANE_SPRITE_SRC);
+    
+    // Load high priority sheets after main content (small delay for first paint)
+    const loadHighPriority = () => {
+      highPrioritySheets.forEach(src => loadSpriteImage(src, true).catch(console.error));
     };
     
-    // Load secondary sheets after 50ms to prioritize first paint
-    const timer = setTimeout(loadSecondarySheets, 50);
-    return () => clearTimeout(timer);
+    // Load low priority sheets using idle callback (doesn't block interaction)
+    const loadLowPriority = () => {
+      preloadImages(lowPrioritySheets, 'low').catch(console.error);
+    };
+    
+    // Stagger loading to prioritize user interaction
+    const highPriorityTimer = setTimeout(loadHighPriority, 100);
+    const lowPriorityTimer = setTimeout(loadLowPriority, 500);
+    
+    return () => {
+      clearTimeout(highPriorityTimer);
+      clearTimeout(lowPriorityTimer);
+    };
   }, [currentSpritePack]);
   
   // Building helper functions moved to buildingHelpers.ts

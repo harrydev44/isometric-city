@@ -2,6 +2,7 @@
 // IMAGE LOADING UTILITIES
 // ============================================================================
 // Handles loading and caching of sprite images with optional background filtering
+// Supports WebP with PNG fallback for optimal performance
 
 // Background color to filter from sprite sheets
 const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
@@ -11,9 +12,42 @@ const COLOR_THRESHOLD = 155; // Adjust this value to be more/less aggressive
 // Image cache for building sprites
 const imageCache = new Map<string, HTMLImageElement>();
 
+// Track WebP support (detected once)
+let webpSupported: boolean | null = null;
+
 // Event emitter for image loading progress (to trigger re-renders)
 type ImageLoadCallback = () => void;
 const imageLoadCallbacks = new Set<ImageLoadCallback>();
+
+// Loading state tracking
+type LoadingStateCallback = (loaded: number, total: number) => void;
+const loadingStateCallbacks = new Set<LoadingStateCallback>();
+let totalImagesLoading = 0;
+let imagesLoaded = 0;
+
+/**
+ * Check if the browser supports WebP format
+ */
+async function checkWebPSupport(): Promise<boolean> {
+  if (webpSupported !== null) return webpSupported;
+  
+  return new Promise((resolve) => {
+    const webP = new Image();
+    webP.onload = webP.onerror = () => {
+      webpSupported = webP.height === 2;
+      resolve(webpSupported);
+    };
+    // Tiny WebP image
+    webP.src = 'data:image/webp;base64,UklGRjoAAABXRUJQVlA4IC4AAACyAgCdASoCAAIALmk0mk0iIiIiIgBoSygABc6WWgAA/veff/0PP8bA//LwYAAA';
+  });
+}
+
+/**
+ * Convert a PNG path to WebP path
+ */
+function toWebPPath(src: string): string {
+  return src.replace(/\.png$/i, '.webp');
+}
 
 /**
  * Register a callback to be notified when images are loaded
@@ -25,6 +59,26 @@ export function onImageLoaded(callback: ImageLoadCallback): () => void {
 }
 
 /**
+ * Register a callback to track loading progress
+ * @returns Cleanup function to unregister the callback
+ */
+export function onLoadingProgress(callback: LoadingStateCallback): () => void {
+  loadingStateCallbacks.add(callback);
+  return () => { loadingStateCallbacks.delete(callback); };
+}
+
+/**
+ * Get current loading state
+ */
+export function getLoadingState(): { loaded: number; total: number; isLoading: boolean } {
+  return {
+    loaded: imagesLoaded,
+    total: totalImagesLoading,
+    isLoading: imagesLoaded < totalImagesLoading,
+  };
+}
+
+/**
  * Notify all registered callbacks that an image has loaded
  */
 function notifyImageLoaded() {
@@ -32,8 +86,15 @@ function notifyImageLoaded() {
 }
 
 /**
- * Load an image from a source URL
- * @param src The image source path
+ * Notify loading progress callbacks
+ */
+function notifyLoadingProgress() {
+  loadingStateCallbacks.forEach(cb => cb(imagesLoaded, totalImagesLoading));
+}
+
+/**
+ * Load an image from a source URL, preferring WebP if available
+ * @param src The image source path (PNG path - WebP version will be tried first)
  * @returns Promise resolving to the loaded image
  */
 export function loadImage(src: string): Promise<HTMLImageElement> {
@@ -41,16 +102,72 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
     return Promise.resolve(imageCache.get(src)!);
   }
   
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      imageCache.set(src, img);
-      notifyImageLoaded(); // Notify listeners that a new image is available
-      resolve(img);
+  totalImagesLoading++;
+  notifyLoadingProgress();
+  
+  return new Promise(async (resolve, reject) => {
+    const supportsWebP = await checkWebPSupport();
+    const webpSrc = toWebPPath(src);
+    
+    // Try WebP first if supported and it's a PNG file
+    const tryWebP = supportsWebP && src.toLowerCase().endsWith('.png');
+    
+    const loadFromSrc = (imageSrc: string, fallback?: string) => {
+      const img = new Image();
+      img.onload = () => {
+        // Cache under original PNG path for consistency
+        imageCache.set(src, img);
+        imagesLoaded++;
+        notifyLoadingProgress();
+        notifyImageLoaded();
+        resolve(img);
+      };
+      img.onerror = () => {
+        if (fallback) {
+          // Try fallback (PNG)
+          loadFromSrc(fallback);
+        } else {
+          imagesLoaded++;
+          notifyLoadingProgress();
+          reject(new Error(`Failed to load image: ${imageSrc}`));
+        }
+      };
+      img.src = imageSrc;
     };
-    img.onerror = reject;
-    img.src = src;
+    
+    if (tryWebP) {
+      loadFromSrc(webpSrc, src); // Try WebP, fallback to PNG
+    } else {
+      loadFromSrc(src); // Just load the original
+    }
   });
+}
+
+/**
+ * Preload multiple images with priority support
+ * @param sources Array of image paths to preload
+ * @param priority 'high' for critical images, 'low' for background loading
+ * @returns Promise resolving when all images are loaded
+ */
+export function preloadImages(sources: string[], priority: 'high' | 'low' = 'high'): Promise<HTMLImageElement[]> {
+  if (priority === 'low') {
+    // Use requestIdleCallback for low priority images
+    return new Promise((resolve) => {
+      const loadLowPriority = () => {
+        Promise.all(sources.map(src => loadImage(src).catch(() => null)))
+          .then(images => resolve(images.filter((img): img is HTMLImageElement => img !== null)));
+      };
+      
+      if ('requestIdleCallback' in window) {
+        (window as typeof window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => void })
+          .requestIdleCallback(loadLowPriority, { timeout: 5000 });
+      } else {
+        setTimeout(loadLowPriority, 100);
+      }
+    });
+  }
+  
+  return Promise.all(sources.map(src => loadImage(src)));
 }
 
 /**
