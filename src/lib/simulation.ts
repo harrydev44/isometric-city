@@ -713,12 +713,13 @@ function createTile(x: number, y: number, buildingType: BuildingType = 'grass'):
 // Building types that don't require construction (already complete when placed)
 const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'empty', 'water', 'road', 'tree'];
 
-function createBuilding(type: BuildingType): Building {
+function createBuilding(type: BuildingType, cityId: string = 'unassigned'): Building {
   // Buildings that don't require construction start at 100% complete
   const constructionProgress = NO_CONSTRUCTION_TYPES.includes(type) ? 100 : 0;
   
   return {
     type,
+    cityId,
     level: type === 'grass' || type === 'empty' || type === 'water' ? 0 : 1,
     population: 0,
     jobs: 0,
@@ -810,14 +811,24 @@ function generateUUID(): string {
 }
 
 export function createInitialGameState(size: number = DEFAULT_GRID_SIZE, cityName: string = 'New City'): GameState {
+  const id = generateUUID();
   const { grid, waterBodies } = generateTerrain(size);
   const adjacentCities = generateAdjacentCities();
+  
+  // Assign all tiles/buildings to the default city for this map.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      grid[y][x].building.cityId = id;
+    }
+  }
 
   return {
-    id: generateUUID(),
+    id,
     grid,
     gridSize: size,
     cityName,
+    cities: [{ id, name: cityName }],
+    activeCityId: id,
     year: 2024,
     month: 1,
     day: 1,
@@ -1143,7 +1154,7 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
             for (let dx = 0; dx < size.width; dx++) {
               const clearTile = grid[y + dy]?.[x + dx];
               if (clearTile) {
-                const clearedBuilding = createBuilding('grass');
+                const clearedBuilding = createBuilding('grass', clearTile.building.cityId || building.cityId || 'unassigned');
                 clearedBuilding.powered = services.power[y + dy]?.[x + dx] ?? false;
                 clearedBuilding.watered = services.water[y + dy]?.[x + dx] ?? false;
                 clearTile.building = clearedBuilding;
@@ -1152,7 +1163,7 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
           }
         }
         // Return grass for the origin tile
-        const clearedBuilding = createBuilding('grass');
+        const clearedBuilding = createBuilding('grass', building.cityId || 'unassigned');
         clearedBuilding.powered = building.powered;
         clearedBuilding.watered = building.watered;
         return clearedBuilding;
@@ -1272,7 +1283,8 @@ function evolveBuilding(grid: Tile[][], x: number, y: number, services: ServiceC
     const footprint = findFootprintIncludingTile(grid, x, y, size.width, size.height, zone, grid.length, allowBuildingConsolidation);
 
     if (footprint) {
-      const anchor = applyBuildingFootprint(grid, footprint.originX, footprint.originY, targetType, zone, targetLevel, services);
+      const cityId = grid[footprint.originY]?.[footprint.originX]?.building.cityId || building.cityId || 'unassigned';
+      const anchor = applyBuildingFootprint(grid, footprint.originX, footprint.originY, targetType, zone, targetLevel, cityId, services);
       anchor.level = targetLevel;
       anchorX = footprint.originX;
       anchorY = footprint.originY;
@@ -1795,7 +1807,7 @@ export function simulateTick(state: GameState): GameState {
       if (tile.building.type === 'empty') {
         const origin = findBuildingOrigin(newGrid, x, y, size);
         if (!origin) {
-          tile.building = createBuilding('grass');
+          tile.building = createBuilding('grass', tile.building.cityId || state.activeCityId || state.id);
           tile.building.powered = newPowered;
           tile.building.watered = newWatered;
         }
@@ -1840,7 +1852,7 @@ export function simulateTick(state: GameState): GameState {
                 modifiedRows.add(y + dy);
               }
             }
-            applyBuildingFootprint(newGrid, x, y, candidate, tile.zone, 1, services);
+            applyBuildingFootprint(newGrid, x, y, candidate, tile.zone, 1, tile.building.cityId || state.activeCityId || state.id, services);
           }
         }
       } else if (tile.zone !== 'none' && tile.building.type !== 'grass') {
@@ -1864,7 +1876,7 @@ export function simulateTick(state: GameState): GameState {
         } else {
           tile.building.fireProgress += 2/3; // Reduced from 1 to make fires last ~50% longer
           if (tile.building.fireProgress >= 100) {
-            tile.building = createBuilding('grass');
+            tile.building = createBuilding('grass', tile.building.cityId || state.activeCityId || state.id);
             tile.zone = 'none';
           }
         }
@@ -2203,6 +2215,7 @@ function applyBuildingFootprint(
   buildingType: BuildingType,
   zone: ZoneType,
   level: number,
+  cityId: string,
   services?: ServiceCoverage
 ): Building {
   const size = getBuildingSize(buildingType);
@@ -2212,7 +2225,7 @@ function applyBuildingFootprint(
     for (let dx = 0; dx < size.width; dx++) {
       const cell = grid[originY + dy][originX + dx];
       if (dx === 0 && dy === 0) {
-        cell.building = createBuilding(buildingType);
+        cell.building = createBuilding(buildingType, cityId);
         cell.building.level = level;
         cell.building.age = 0;
         if (services) {
@@ -2220,7 +2233,7 @@ function applyBuildingFootprint(
           cell.building.watered = services.water[originY + dy][originX + dx];
         }
       } else {
-        cell.building = createBuilding('empty');
+        cell.building = createBuilding('empty', cityId);
         cell.building.level = 0;
       }
       cell.zone = zone;
@@ -2241,6 +2254,7 @@ export function placeBuilding(
 ): GameState {
   const tile = state.grid[y]?.[x];
   if (!tile) return state;
+  const defaultCityId = state.activeCityId || state.id;
 
   // Can't build on water
   if (tile.building.type === 'water') return state;
@@ -2282,12 +2296,13 @@ export function placeBuilding(
       if (origin) {
         // Dezone the entire multi-tile building
         const size = getBuildingSize(origin.buildingType);
+        const originCityId = newGrid[origin.originY]?.[origin.originX]?.building.cityId || defaultCityId;
         for (let dy = 0; dy < size.height; dy++) {
           for (let dx = 0; dx < size.width; dx++) {
             const clearX = origin.originX + dx;
             const clearY = origin.originY + dy;
             if (clearX < state.gridSize && clearY < state.gridSize) {
-              newGrid[clearY][clearX].building = createBuilding('grass');
+              newGrid[clearY][clearX].building = createBuilding('grass', originCityId);
               newGrid[clearY][clearX].zone = 'none';
             }
           }
@@ -2299,7 +2314,7 @@ export function placeBuilding(
         }
         // De-zoning resets to grass
         newGrid[y][x].zone = 'none';
-        newGrid[y][x].building = createBuilding('grass');
+        newGrid[y][x].building = createBuilding('grass', tile.building.cityId || defaultCityId);
       }
     } else {
       // Can't zone over existing buildings (only allow zoning on grass, tree, or road)
@@ -2329,7 +2344,7 @@ export function placeBuilding(
       if (!canPlaceMultiTileBuilding(newGrid, x, y, size.width, size.height, state.gridSize)) {
         return state; // Can't place here
       }
-      applyBuildingFootprint(newGrid, x, y, buildingType, 'none', 1);
+      applyBuildingFootprint(newGrid, x, y, buildingType, 'none', 1, defaultCityId);
       // Set flip for waterfront buildings to face the water
       if (shouldFlip) {
         newGrid[y][x].building.flipped = true;
@@ -2351,7 +2366,7 @@ export function placeBuilding(
         // Don't change the building type - it stays as road
       } else if (buildingType === 'road' && tile.building.type === 'rail') {
         // Placing road on rail: convert to road with rail overlay
-        newGrid[y][x].building = createBuilding('road');
+        newGrid[y][x].building = createBuilding('road', tile.building.cityId || defaultCityId);
         newGrid[y][x].hasRailOverlay = true;
         newGrid[y][x].zone = 'none';
       } else if (buildingType === 'rail' && tile.hasRailOverlay) {
@@ -2360,7 +2375,7 @@ export function placeBuilding(
         // Already has road with rail overlay, do nothing
       } else {
         // Normal placement
-        newGrid[y][x].building = createBuilding(buildingType);
+        newGrid[y][x].building = createBuilding(buildingType, defaultCityId);
         newGrid[y][x].zone = 'none';
         // Clear rail overlay if placing non-combined building
         if (buildingType !== 'road') {
@@ -2445,12 +2460,13 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
   if (origin) {
     // Bulldoze the entire multi-tile building
     const size = getBuildingSize(origin.buildingType);
+    const originCityId = newGrid[origin.originY]?.[origin.originX]?.building.cityId || state.activeCityId || state.id;
     for (let dy = 0; dy < size.height; dy++) {
       for (let dx = 0; dx < size.width; dx++) {
         const clearX = origin.originX + dx;
         const clearY = origin.originY + dy;
         if (clearX < state.gridSize && clearY < state.gridSize) {
-          newGrid[clearY][clearX].building = createBuilding('grass');
+          newGrid[clearY][clearX].building = createBuilding('grass', originCityId);
           newGrid[clearY][clearX].zone = 'none';
           newGrid[clearY][clearX].hasRailOverlay = false; // Clear rail overlay
           // Don't remove subway when bulldozing surface buildings
@@ -2459,7 +2475,7 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
     }
   } else {
     // Single tile bulldoze
-    newGrid[y][x].building = createBuilding('grass');
+    newGrid[y][x].building = createBuilding('grass', tile.building.cityId || state.activeCityId || state.id);
     newGrid[y][x].zone = 'none';
     newGrid[y][x].hasRailOverlay = false; // Clear rail overlay
     // Don't remove subway when bulldozing surface buildings
@@ -2515,12 +2531,13 @@ export function placeWaterTerraform(state: GameState, x: number, y: number): Gam
   if (origin) {
     // Clear the entire multi-tile building first, then place water on this tile
     const size = getBuildingSize(origin.buildingType);
+    const originCityId = newGrid[origin.originY]?.[origin.originX]?.building.cityId || state.activeCityId || state.id;
     for (let dy = 0; dy < size.height; dy++) {
       for (let dx = 0; dx < size.width; dx++) {
         const clearX = origin.originX + dx;
         const clearY = origin.originY + dy;
         if (clearX < state.gridSize && clearY < state.gridSize) {
-          newGrid[clearY][clearX].building = createBuilding('grass');
+          newGrid[clearY][clearX].building = createBuilding('grass', originCityId);
           newGrid[clearY][clearX].zone = 'none';
         }
       }
@@ -2528,7 +2545,7 @@ export function placeWaterTerraform(state: GameState, x: number, y: number): Gam
   }
   
   // Now place water on the target tile
-  newGrid[y][x].building = createBuilding('water');
+  newGrid[y][x].building = createBuilding('water', tile.building.cityId || state.activeCityId || state.id);
   newGrid[y][x].zone = 'none';
   newGrid[y][x].hasSubway = false; // Remove any subway under water
 
@@ -2540,6 +2557,7 @@ export function generateRandomAdvancedCity(size: number = DEFAULT_GRID_SIZE, cit
   // Start with a base state (terrain generation)
   const baseState = createInitialGameState(size, cityName);
   const grid = baseState.grid;
+  const cityId = baseState.activeCityId || baseState.id;
   
   // Helper to check if a region is clear (no water)
   const isRegionClear = (x: number, y: number, w: number, h: number): boolean => {
@@ -2565,6 +2583,7 @@ export function generateRandomAdvancedCity(size: number = DEFAULT_GRID_SIZE, cit
   function createAdvancedBuilding(type: BuildingType): Building {
     return {
       type,
+      cityId,
       level: type === 'grass' || type === 'empty' || type === 'water' || type === 'road' ? 0 : Math.floor(Math.random() * 3) + 3,
       population: 0,
       jobs: 0,

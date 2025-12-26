@@ -205,6 +205,14 @@ function loadGameState(): GameState | null {
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9; // Start at current tax rate
         }
+        // Ensure cities/activeCityId exist for multi-city maps
+        if (!parsed.cities || !Array.isArray(parsed.cities) || parsed.cities.length === 0) {
+          // Default: one city using the game UUID
+          parsed.cities = [{ id: parsed.id, name: parsed.cityName ?? 'City' }];
+        }
+        if (!parsed.activeCityId) {
+          parsed.activeCityId = parsed.cities[0]?.id ?? parsed.id;
+        }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -215,6 +223,10 @@ function loadGameState(): GameState | null {
               // Migrate abandoned property for existing buildings (they're not abandoned)
               if (parsed.grid[y][x]?.building && parsed.grid[y][x].building.abandoned === undefined) {
                 parsed.grid[y][x].building.abandoned = false;
+              }
+              // Migrate building city ownership (default to active city)
+              if (parsed.grid[y][x]?.building && parsed.grid[y][x].building.cityId === undefined) {
+                parsed.grid[y][x].building.cityId = parsed.activeCityId;
               }
             }
           }
@@ -904,6 +916,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (parsed.effectiveTaxRate === undefined) {
           parsed.effectiveTaxRate = parsed.taxRate ?? 9;
         }
+        // Ensure cities/activeCityId exist for multi-city maps
+        if (!parsed.cities || !Array.isArray(parsed.cities) || parsed.cities.length === 0) {
+          parsed.cities = [{ id: parsed.id, name: parsed.cityName ?? 'City' }];
+        }
+        if (!parsed.activeCityId) {
+          parsed.activeCityId = parsed.cities[0]?.id ?? parsed.id;
+        }
         // Migrate constructionProgress for existing buildings (they're already built)
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -914,6 +933,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               // Migrate abandoned property for existing buildings (they're not abandoned)
               if (parsed.grid[y][x]?.building && parsed.grid[y][x].building.abandoned === undefined) {
                 parsed.grid[y][x].building.abandoned = false;
+              }
+              // Migrate building city ownership (default to active city)
+              if (parsed.grid[y][x]?.building && parsed.grid[y][x].building.cityId === undefined) {
+                parsed.grid[y][x].building.cityId = parsed.activeCityId;
               }
             }
           }
@@ -1071,6 +1094,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (cityState.effectiveTaxRate === undefined) {
       cityState.effectiveTaxRate = cityState.taxRate ?? 9;
     }
+    // Ensure cities/activeCityId exist for multi-city maps
+    if (!cityState.cities || !Array.isArray(cityState.cities) || cityState.cities.length === 0) {
+      cityState.cities = [{ id: cityState.id, name: cityState.cityName ?? 'City' }];
+    }
+    if (!cityState.activeCityId) {
+      cityState.activeCityId = cityState.cities[0]?.id ?? cityState.id;
+    }
     if (cityState.grid) {
       for (let y = 0; y < cityState.grid.length; y++) {
         for (let x = 0; x < cityState.grid[y].length; x++) {
@@ -1079,6 +1109,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }
           if (cityState.grid[y][x]?.building && cityState.grid[y][x].building.abandoned === undefined) {
             cityState.grid[y][x].building.abandoned = false;
+          }
+          if (cityState.grid[y][x]?.building && (cityState.grid[y][x].building as unknown as { cityId?: string }).cityId === undefined) {
+            // Back-compat: older saves won't have cityId on Building
+            (cityState.grid[y][x].building as unknown as { cityId: string }).cityId = cityState.activeCityId;
           }
         }
       }

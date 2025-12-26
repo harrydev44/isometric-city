@@ -73,6 +73,8 @@ function minifyTile(tile: Tile): MinTile {
 function expandTile(min: MinTile, x: number, y: number): Tile {
   const building: Building = {
     type: BUILDING_REVERSE[min[1]] ?? 'grass',
+    // Shared states are single-city; ownership is assigned during merge/migration.
+    cityId: 'unassigned',
     level: min[2],
     population: min[3],
     jobs: min[4],

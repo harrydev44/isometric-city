@@ -205,6 +205,8 @@ export const TOOL_INFO: Record<Tool, ToolInfo> = {
 
 export interface Building {
   type: BuildingType;
+  /** Owning city (for multi-city maps / per-city economy & borders). */
+  cityId: string;
   level: number;
   population: number;
   jobs: number;
@@ -216,6 +218,11 @@ export interface Building {
   constructionProgress: number; // 0-100, building is under construction until 100
   abandoned: boolean; // Building is abandoned due to low demand, produces nothing
   flipped?: boolean; // Horizontally mirror the sprite (used for waterfront buildings to face water)
+}
+
+export interface City {
+  id: string;
+  name: string;
 }
 
 export interface Tile {
@@ -320,6 +327,10 @@ export interface GameState {
   grid: Tile[][];
   gridSize: number;
   cityName: string;
+  /** Cities present on this map. */
+  cities: City[];
+  /** Currently active city for placement/economy context. */
+  activeCityId: string;
   year: number;
   month: number;
   day: number;

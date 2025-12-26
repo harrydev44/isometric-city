@@ -40,6 +40,7 @@ import {
   SKIP_SMALL_ELEMENTS_ZOOM_THRESHOLD,
   ZOOM_MIN,
   ZOOM_MAX,
+  ULTRA_ZOOM_ENTITY_CUTOFF,
   WATER_ASSET_PATH,
   AIRPLANE_SPRITE_SRC,
 } from '@/components/game/constants';
@@ -139,6 +140,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const isPanningRef = useRef(false); // Ref for animation loop to check panning state
   const isPinchZoomingRef = useRef(false); // Ref for animation loop to check pinch zoom state
   const zoomRef = useRef(isMobile ? 0.6 : 1); // Ref for animation loop to check zoom level
+  const wasUltraZoomRef = useRef(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const panCandidateRef = useRef<{ startX: number; startY: number; gridX: number; gridY: number } | null>(null);
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
@@ -524,6 +526,50 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  // When zoomed out past the historical minimum, aggressively clear transient entities.
+  // This prevents huge maps from spending CPU on simulation/rendering work the user can't see.
+  useEffect(() => {
+    const isUltraZoom = zoom < ULTRA_ZOOM_ENTITY_CUTOFF;
+    if (isUltraZoom && !wasUltraZoomRef.current) {
+      carsRef.current = [];
+      carIdRef.current = 0;
+      carSpawnTimerRef.current = 0;
+      emergencyVehiclesRef.current = [];
+      emergencyVehicleIdRef.current = 0;
+      emergencyDispatchTimerRef.current = 0;
+      activeFiresRef.current.clear();
+      activeCrimesRef.current.clear();
+      activeCrimeIncidentsRef.current.clear();
+      crimeSpawnTimerRef.current = 0;
+
+      pedestriansRef.current = [];
+      pedestrianIdRef.current = 0;
+      pedestrianSpawnTimerRef.current = 0;
+
+      airplanesRef.current = [];
+      airplaneIdRef.current = 0;
+      airplaneSpawnTimerRef.current = 0;
+      helicoptersRef.current = [];
+      helicopterIdRef.current = 0;
+      helicopterSpawnTimerRef.current = 0;
+      seaplanesRef.current = [];
+      seaplaneIdRef.current = 0;
+      seaplaneSpawnTimerRef.current = 0;
+
+      boatsRef.current = [];
+      boatIdRef.current = 0;
+      boatSpawnTimerRef.current = 0;
+      bargesRef.current = [];
+      bargeIdRef.current = 0;
+      bargeSpawnTimerRef.current = 0;
+
+      trainsRef.current = [];
+      trainIdRef.current = 0;
+      trainSpawnTimerRef.current = 0;
+    }
+    wasUltraZoomRef.current = isUltraZoom;
+  }, [zoom, gridSize]);
 
   // Notify parent of viewport changes for minimap
   useEffect(() => {
@@ -3167,8 +3213,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       const delta = Math.min((time - lastTime) / 1000, 0.3);
       lastTime = time;
       lastRenderTime = time;
+
+      const isUltraZoom = zoomRef.current < ULTRA_ZOOM_ENTITY_CUTOFF;
       
-      if (delta > 0) {
+      if (delta > 0 && !isUltraZoom) {
         updateCars(delta);
         spawnCrimeIncidents(delta); // Spawn new crime incidents
         updateCrimeIncidents(delta); // Update/decay crime incidents
@@ -3214,9 +3262,14 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
             }
           }
         }
+      } else if (delta > 0) {
+        // Still advance a couple timers so visuals don't "jump" when zooming back in.
+        navLightFlashTimerRef.current += delta * 3;
+        trafficLightTimerRef.current += delta;
+        crossingFlashTimerRef.current += delta;
       }
       // PERF: Skip drawing animated elements during mobile panning/zooming for better performance
-      const skipAnimatedElements = isMobile && (isPanningRef.current || isPinchZoomingRef.current);
+      const skipAnimatedElements = (isMobile && (isPanningRef.current || isPinchZoomingRef.current)) || isUltraZoom;
       // PERF: Skip small elements (boats, helis, smog) on desktop when panning while very zoomed out
       const skipSmallElements = !isMobile && isPanningRef.current && zoomRef.current < SKIP_SMALL_ELEMENTS_ZOOM_THRESHOLD;
       

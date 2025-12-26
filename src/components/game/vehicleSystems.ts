@@ -84,6 +84,85 @@ export function useVehicleSystems(
 
   const { worldStateRef, gridVersionRef, cachedRoadTileCountRef, state, isMobile } = systemState;
 
+  // PERF: Cache expensive grid scans (residentials/destinations/recreation/etc.) per grid version.
+  // These were previously recomputed many times per second during pedestrian spawning.
+  const gridFinderCacheRef = useRef<{
+    gridVersion: number;
+    residentials: { x: number; y: number }[];
+    destinations: { x: number; y: number; type: PedestrianDestType }[];
+    recreationAreas: ReturnType<typeof findRecreationAreas>;
+    enterableBuildings: ReturnType<typeof findEnterableBuildings>;
+    beachTiles: ReturnType<typeof findBeachTiles>;
+    fireStations: { x: number; y: number }[];
+    policeStations: { x: number; y: number }[];
+    fires: { x: number; y: number }[];
+    // Tiles eligible for crime incidents (avoid scanning whole grid every spawn check)
+    crimeEligibleTiles: { x: number; y: number }[];
+  }>({
+    gridVersion: -1,
+    residentials: [],
+    destinations: [],
+    recreationAreas: [],
+    enterableBuildings: [],
+    beachTiles: [],
+    fireStations: [],
+    policeStations: [],
+    fires: [],
+    crimeEligibleTiles: [],
+  });
+
+  const getGridFinderCache = useCallback(() => {
+    const currentGridVersion = gridVersionRef.current;
+    const cache = gridFinderCacheRef.current;
+    if (cache.gridVersion === currentGridVersion) return cache;
+
+    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    if (!currentGrid || currentGridSize <= 0) {
+      cache.gridVersion = currentGridVersion;
+      cache.residentials = [];
+      cache.destinations = [];
+      cache.recreationAreas = [];
+      cache.enterableBuildings = [];
+      cache.beachTiles = [];
+      cache.fireStations = [];
+      cache.policeStations = [];
+      cache.fires = [];
+      cache.crimeEligibleTiles = [];
+      return cache;
+    }
+
+    cache.residentials = findResidentialBuildings(currentGrid, currentGridSize);
+    cache.destinations = findPedestrianDestinations(currentGrid, currentGridSize);
+    cache.recreationAreas = findRecreationAreas(currentGrid, currentGridSize);
+    cache.enterableBuildings = findEnterableBuildings(currentGrid, currentGridSize);
+    cache.beachTiles = findBeachTiles(currentGrid, currentGridSize);
+    cache.fireStations = findStations(currentGrid, currentGridSize, 'fire_station');
+    cache.policeStations = findStations(currentGrid, currentGridSize, 'police_station');
+    cache.fires = findFires(currentGrid, currentGridSize);
+
+    // Crime eligible tiles: any active building tile with population/jobs.
+    // (We still apply police coverage weighting at spawn-time.)
+    const eligible: { x: number; y: number }[] = [];
+    for (let y = 0; y < currentGridSize; y++) {
+      for (let x = 0; x < currentGridSize; x++) {
+        const tile = currentGrid[y][x];
+        const buildingType = tile.building.type;
+        const isBuilding = buildingType !== 'grass' &&
+          buildingType !== 'water' &&
+          buildingType !== 'road' &&
+          buildingType !== 'tree' &&
+          buildingType !== 'empty';
+        if (!isBuilding) continue;
+        if ((tile.building.population || 0) <= 0 && (tile.building.jobs || 0) <= 0) continue;
+        eligible.push({ x, y });
+      }
+    }
+    cache.crimeEligibleTiles = eligible;
+
+    cache.gridVersion = currentGridVersion;
+    return cache;
+  }, [gridVersionRef, worldStateRef]);
+
   const spawnRandomCar = useCallback(() => {
     const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
     if (!currentGrid || currentGridSize <= 0) return false;
@@ -126,32 +205,27 @@ export function useVehicleSystems(
   }, [worldStateRef, carsRef, carIdRef, isMobile]);
 
   const findResidentialBuildingsCallback = useCallback((): { x: number; y: number }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findResidentialBuildings(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().residentials;
+  }, [getGridFinderCache]);
 
   const findPedestrianDestinationsCallback = useCallback((): { x: number; y: number; type: PedestrianDestType }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findPedestrianDestinations(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().destinations;
+  }, [getGridFinderCache]);
 
   // Find recreation areas
   const findRecreationAreasCallback = useCallback(() => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findRecreationAreas(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().recreationAreas;
+  }, [getGridFinderCache]);
 
   // Find enterable buildings
   const findEnterableBuildingsCallback = useCallback(() => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findEnterableBuildings(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().enterableBuildings;
+  }, [getGridFinderCache]);
 
   // Find beach tiles (water tiles adjacent to land)
   const findBeachTilesCallback = useCallback(() => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findBeachTiles(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().beachTiles;
+  }, [getGridFinderCache]);
 
   const spawnPedestrian = useCallback(() => {
     const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
@@ -311,14 +385,13 @@ export function useVehicleSystems(
   }, [worldStateRef, findResidentialBuildingsCallback, findPedestrianDestinationsCallback, findRecreationAreasCallback, findEnterableBuildingsCallback, findBeachTilesCallback, pedestriansRef, pedestrianIdRef]);
 
   const findStationsCallback = useCallback((type: 'fire_station' | 'police_station'): { x: number; y: number }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findStations(currentGrid, currentGridSize, type);
-  }, [worldStateRef]);
+    const cache = getGridFinderCache();
+    return type === 'fire_station' ? cache.fireStations : cache.policeStations;
+  }, [getGridFinderCache]);
 
   const findFiresCallback = useCallback((): { x: number; y: number }[] => {
-    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
-    return findFires(currentGrid, currentGridSize);
-  }, [worldStateRef]);
+    return getGridFinderCache().fires;
+  }, [getGridFinderCache]);
 
   const spawnCrimeIncidents = useCallback((delta: number) => {
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed } = worldStateRef.current;
@@ -330,23 +403,11 @@ export function useVehicleSystems(
     if (crimeSpawnTimerRef.current > 0) return;
     crimeSpawnTimerRef.current = 3 + Math.random() * 2;
     
-    const eligibleTiles: { x: number; y: number; policeCoverage: number }[] = [];
-    
-    for (let y = 0; y < currentGridSize; y++) {
-      for (let x = 0; x < currentGridSize; x++) {
-        const tile = currentGrid[y][x];
-        const isBuilding = tile.building.type !== 'grass' && 
-            tile.building.type !== 'water' && 
-            tile.building.type !== 'road' && 
-            tile.building.type !== 'tree' &&
-            tile.building.type !== 'empty';
-        const hasActivity = tile.building.population > 0 || tile.building.jobs > 0;
-        
-        if (isBuilding && hasActivity) {
-          const policeCoverage = state.services.police[y]?.[x] || 0;
-          eligibleTiles.push({ x, y, policeCoverage });
-        }
-      }
+    const baseEligibleTiles = getGridFinderCache().crimeEligibleTiles;
+    const eligibleTiles: { x: number; y: number; policeCoverage: number }[] = new Array(baseEligibleTiles.length);
+    for (let i = 0; i < baseEligibleTiles.length; i++) {
+      const t = baseEligibleTiles[i];
+      eligibleTiles[i] = { x: t.x, y: t.y, policeCoverage: state.services.police[t.y]?.[t.x] || 0 };
     }
     
     if (eligibleTiles.length === 0) return;
@@ -387,7 +448,14 @@ export function useVehicleSystems(
         timeRemaining: duration,
       });
     }
-  }, [worldStateRef, crimeSpawnTimerRef, activeCrimeIncidentsRef, state.services.police, state.stats.population]);
+  }, [
+    worldStateRef,
+    crimeSpawnTimerRef,
+    activeCrimeIncidentsRef,
+    state.services.police,
+    state.stats.population,
+    getGridFinderCache,
+  ]);
 
   const updateCrimeIncidents = useCallback((delta: number) => {
     const { speed: currentSpeed } = worldStateRef.current;
@@ -920,7 +988,7 @@ export function useVehicleSystems(
     }
     
     carsRef.current = updatedCars;
-  }, [worldStateRef, carsRef, carSpawnTimerRef, spawnRandomCar, trafficLightTimerRef, isIntersection, isMobile]);
+  }, [worldStateRef, carsRef, carSpawnTimerRef, spawnRandomCar, trafficLightTimerRef, trainsRef, isIntersection, isMobile]);
 
   const updatePedestrians = useCallback((delta: number) => {
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed, zoom: currentZoom } = worldStateRef.current;
