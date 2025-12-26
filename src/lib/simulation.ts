@@ -419,29 +419,32 @@ function generateAdjacentCities(): AdjacentCity[] {
 
 // Check if there's a road tile at any edge of the map in a given direction
 export function hasRoadAtEdge(grid: Tile[][], gridSize: number, direction: 'north' | 'south' | 'east' | 'west'): boolean {
+  const isRoadLike = (t: Tile | undefined): boolean => {
+    return !!t && (t.building.type === 'road' || !!t.bridge);
+  };
   switch (direction) {
     case 'north':
       // Check top edge (y = 0)
       for (let x = 0; x < gridSize; x++) {
-        if (grid[0][x].building.type === 'road') return true;
+        if (isRoadLike(grid[0]?.[x])) return true;
       }
       return false;
     case 'south':
       // Check bottom edge (y = gridSize - 1)
       for (let x = 0; x < gridSize; x++) {
-        if (grid[gridSize - 1][x].building.type === 'road') return true;
+        if (isRoadLike(grid[gridSize - 1]?.[x])) return true;
       }
       return false;
     case 'east':
       // Check right edge (x = gridSize - 1)
       for (let y = 0; y < gridSize; y++) {
-        if (grid[y][gridSize - 1].building.type === 'road') return true;
+        if (isRoadLike(grid[y]?.[gridSize - 1])) return true;
       }
       return false;
     case 'west':
       // Check left edge (x = 0)
       for (let y = 0; y < gridSize; y++) {
-        if (grid[y][0].building.type === 'road') return true;
+        if (isRoadLike(grid[y]?.[0])) return true;
       }
       return false;
   }
@@ -637,6 +640,10 @@ export function getRoadAdjacency(
   height: number,
   gridSize: number
 ): { hasRoad: boolean; shouldFlip: boolean } {
+  const isRoadLike = (t: Tile | undefined): boolean => {
+    return !!t && (t.building.type === 'road' || !!t.bridge);
+  };
+
   // In isometric view (looking from SE toward NW):
   // - The default sprite faces toward the "front" (south-east in world coords)
   // - To face the opposite direction, we flip horizontally
@@ -649,7 +656,7 @@ export function getRoadAdjacency(
   for (let dx = 0; dx < width; dx++) {
     const checkX = x + dx;
     const checkY = y + height;
-    if (checkY < gridSize && grid[checkY]?.[checkX]?.building.type === 'road') {
+    if (checkY < gridSize && isRoadLike(grid[checkY]?.[checkX])) {
       roadOnSouthOrEast = true;
       break;
     }
@@ -660,7 +667,7 @@ export function getRoadAdjacency(
     for (let dy = 0; dy < height; dy++) {
       const checkX = x + width;
       const checkY = y + dy;
-      if (checkX < gridSize && grid[checkY]?.[checkX]?.building.type === 'road') {
+      if (checkX < gridSize && isRoadLike(grid[checkY]?.[checkX])) {
         roadOnSouthOrEast = true;
         break;
       }
@@ -671,7 +678,7 @@ export function getRoadAdjacency(
   for (let dx = 0; dx < width; dx++) {
     const checkX = x + dx;
     const checkY = y - 1;
-    if (checkY >= 0 && grid[checkY]?.[checkX]?.building.type === 'road') {
+    if (checkY >= 0 && isRoadLike(grid[checkY]?.[checkX])) {
       roadOnNorthOrWest = true;
       break;
     }
@@ -682,7 +689,7 @@ export function getRoadAdjacency(
     for (let dy = 0; dy < height; dy++) {
       const checkX = x - 1;
       const checkY = y + dy;
-      if (checkX >= 0 && grid[checkY]?.[checkX]?.building.type === 'road') {
+      if (checkX >= 0 && isRoadLike(grid[checkY]?.[checkX])) {
         roadOnNorthOrWest = true;
         break;
       }
@@ -713,7 +720,7 @@ function createTile(x: number, y: number, buildingType: BuildingType = 'grass'):
 // Building types that don't require construction (already complete when placed)
 const NO_CONSTRUCTION_TYPES: BuildingType[] = ['grass', 'empty', 'water', 'road', 'tree'];
 
-function createBuilding(type: BuildingType): Building {
+export function createBuilding(type: BuildingType): Building {
   // Buildings that don't require construction start at 100% complete
   const constructionProgress = NO_CONSTRUCTION_TYPES.includes(type) ? 100 : 0;
   
@@ -1069,7 +1076,7 @@ function hasRoadAccess(
 
       const neighbor = grid[ny][nx];
 
-      if (neighbor.building.type === 'road') {
+      if (neighbor.building.type === 'road' || !!neighbor.bridge) {
         return true;
       }
 
@@ -1554,6 +1561,8 @@ function updateBudgetCosts(grid: Tile[][], budget: Budget): Budget {
     for (const tile of row) {
       // Count subway tiles
       if (tile.hasSubway) subwayTileCount++;
+      // Count bridge tiles (road over water)
+      if (tile.bridge) roadCount++;
       
       // Count building types using switch for jump table optimization
       switch (tile.building.type) {
@@ -2457,7 +2466,13 @@ function findBuildingOrigin(
 export function bulldozeTile(state: GameState, x: number, y: number): GameState {
   const tile = state.grid[y]?.[x];
   if (!tile) return state;
-  if (tile.building.type === 'water') return state;
+  // Allow bulldozing bridges on water (clears the overlay but keeps water)
+  if (tile.building.type === 'water') {
+    if (!tile.bridge) return state;
+    const newGrid = state.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
+    newGrid[y][x].bridge = undefined;
+    return { ...state, grid: newGrid };
+  }
 
   const newGrid = state.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
   
@@ -2484,6 +2499,7 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
     newGrid[y][x].building = createBuilding('grass');
     newGrid[y][x].zone = 'none';
     newGrid[y][x].hasRailOverlay = false; // Clear rail overlay
+    newGrid[y][x].bridge = undefined; // Clear bridge overlay if any
     // Don't remove subway when bulldozing surface buildings
   }
 
@@ -2553,6 +2569,7 @@ export function placeWaterTerraform(state: GameState, x: number, y: number): Gam
   newGrid[y][x].building = createBuilding('water');
   newGrid[y][x].zone = 'none';
   newGrid[y][x].hasSubway = false; // Remove any subway under water
+  newGrid[y][x].bridge = undefined; // Clear any bridge overlay
 
   return { ...state, grid: newGrid };
 }

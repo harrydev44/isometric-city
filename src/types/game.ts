@@ -219,6 +219,24 @@ export interface Building {
   cityId?: string; // ID of the city this building belongs to (for multi-city support)
 }
 
+// Bridge overlay (road over water). Kept separate from BuildingType so boats/water logic still works.
+export type BridgeOrientation = 'h' | 'v'; // 'h' = constant y, varying x; 'v' = constant x, varying y
+export type BridgeKind = 'beam' | 'truss' | 'arch' | 'suspension';
+
+export interface BridgeOverlay {
+  /** Stable ID shared by all tiles in this bridge span */
+  id: string;
+  orientation: BridgeOrientation;
+  /** Number of water tiles in the span */
+  length: number;
+  /** Position index within the span (0..length-1) */
+  index: number;
+  /** High-level bridge type used for rendering */
+  kind: BridgeKind;
+  /** Variant index within the kind for visual variety */
+  variant: number;
+}
+
 // City definition for multi-city maps
 export interface City {
   id: string;
@@ -258,6 +276,7 @@ export interface Tile {
   traffic: number;
   hasSubway: boolean;
   hasRailOverlay?: boolean; // Rail tracks overlaid on road (road base with rail tracks on top)
+  bridge?: BridgeOverlay; // Road bridge overlay on water tiles (water stays water logically)
 }
 
 export interface Stats {

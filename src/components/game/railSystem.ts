@@ -1369,7 +1369,8 @@ export const CROSSING_FLASH_INTERVAL = 0.5; // seconds
  */
 function hasRoadAtPosition(grid: Tile[][], gridSize: number, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= gridSize || y >= gridSize) return false;
-  return grid[y][x].building.type === 'road';
+  const t = grid[y][x];
+  return t.building.type === 'road' || !!t.bridge;
 }
 
 /**

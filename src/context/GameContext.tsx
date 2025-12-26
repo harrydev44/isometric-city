@@ -15,6 +15,7 @@ import {
   bulldozeTile,
   createInitialGameState,
   DEFAULT_GRID_SIZE,
+  createBuilding,
   placeBuilding,
   placeSubway,
   placeWaterTerraform,
@@ -55,6 +56,7 @@ type GameContextValue = {
   setActivePanel: (panel: GameState['activePanel']) => void;
   setBudgetFunding: (key: keyof Budget, funding: number) => void;
   placeAtTile: (x: number, y: number) => void;
+  placeRoadLine: (x0: number, y0: number, x1: number, y1: number) => void;
   connectToCity: (cityId: string) => void;
   discoverCity: (cityId: string) => void;
   checkAndDiscoverCities: (onDiscover?: (city: { id: string; direction: 'north' | 'south' | 'east' | 'west'; name: string }) => void) => void;
@@ -767,6 +769,235 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const placeRoadLine = useCallback((x0: number, y0: number, x1: number, y1: number) => {
+    setState((prev) => {
+      if (prev.selectedTool !== 'road') return prev;
+
+      const costPerTile = TOOL_INFO.road?.cost ?? 0;
+      if (costPerTile <= 0) return prev;
+
+      const gridSize = prev.gridSize;
+      if (
+        x0 < 0 || y0 < 0 || x1 < 0 || y1 < 0 ||
+        x0 >= gridSize || y0 >= gridSize || x1 >= gridSize || y1 >= gridSize
+      ) {
+        return prev;
+      }
+
+      // Only supports straight lines (Canvas snaps road drags to this already)
+      const isHorizontal = y0 === y1;
+      const isVertical = x0 === x1;
+      if (!isHorizontal && !isVertical) return prev;
+
+      const orientation: import('@/types/game').BridgeOrientation = isHorizontal ? 'h' : 'v';
+      const stepX = isHorizontal ? (x1 >= x0 ? 1 : -1) : 0;
+      const stepY = isVertical ? (y1 >= y0 ? 1 : -1) : 0;
+      const length = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) + 1;
+
+      // Build path (inclusive)
+      const path: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < length; i++) {
+        path.push({ x: x0 + stepX * i, y: y0 + stepY * i });
+      }
+
+      const MAX_BRIDGE_SPAN = 10;
+      const roadableLandTypes: BuildingType[] = ['grass', 'tree', 'road', 'rail'];
+
+      // Cheap deterministic hash for stable variants
+      const hash = (s: string): number => {
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      };
+
+      const pickBridgeKind = (spanLen: number, seed: number): import('@/types/game').BridgeKind => {
+        if (spanLen <= 2) return 'beam';
+        if (spanLen <= 5) return 'truss';
+        // Longer spans: mix arch vs suspension for variety
+        return (seed % 2 === 0) ? 'suspension' : 'arch';
+      };
+
+      const variantCountForKind = (kind: import('@/types/game').BridgeKind): number => {
+        switch (kind) {
+          case 'beam': return 3;
+          case 'truss': return 3;
+          case 'arch': return 2;
+          case 'suspension': return 2;
+        }
+      };
+
+      // Clone once for batched placement
+      const newGrid = prev.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
+      let money = prev.stats.money;
+      let changed = false;
+
+      const isRoadLike = (x: number, y: number): boolean => {
+        const t = newGrid[y]?.[x];
+        return !!t && (t.building.type === 'road' || !!t.bridge);
+      };
+
+      const canPlaceRoadOn = (x: number, y: number): boolean => {
+        const t = newGrid[y]?.[x];
+        if (!t) return false;
+        if (t.building.type === 'water') return false;
+        if (!roadableLandTypes.includes(t.building.type)) return false;
+        // Disallow on multi-tile placeholders
+        if (t.building.type === 'empty') return false;
+        return true;
+      };
+
+      const spend = (): boolean => {
+        if (money < costPerTile) return false;
+        money -= costPerTile;
+        return true;
+      };
+
+      // 1) Place roads on non-water tiles along the path
+      for (const p of path) {
+        const t = newGrid[p.y]?.[p.x];
+        if (!t) continue;
+        if (t.building.type === 'water') continue;
+
+        // Skip if road already exists (or rail+road overlay already)
+        if (t.building.type === 'road') continue;
+
+        if (!roadableLandTypes.includes(t.building.type)) continue;
+
+        if (!spend()) break;
+        changed = true;
+
+        if (t.building.type === 'rail') {
+          // Road over rail => road with rail overlay
+          t.building = createBuilding('road');
+          t.hasRailOverlay = true;
+          t.zone = 'none';
+        } else {
+          t.building = createBuilding('road');
+          t.zone = 'none';
+          // Preserve rail overlay only when meaningful; a normal road shouldn't keep it.
+          t.hasRailOverlay = false;
+        }
+      }
+
+      // 2) Detect bounded water runs (bridges) within the path and place overlays
+      for (let i = 0; i < path.length; ) {
+        const p = path[i];
+        const t = newGrid[p.y]?.[p.x];
+        const isWater = t?.building.type === 'water';
+        if (!isWater) {
+          i++;
+          continue;
+        }
+
+        // Start of water run
+        let j = i;
+        while (j + 1 < path.length) {
+          const np = path[j + 1];
+          const nt = newGrid[np.y]?.[np.x];
+          if (nt?.building.type !== 'water') break;
+          j++;
+        }
+
+        const runLen = j - i + 1;
+        const before = i - 1 >= 0 ? path[i - 1] : null;
+        const after = j + 1 < path.length ? path[j + 1] : null;
+
+        const bounded =
+          !!before && !!after &&
+          newGrid[before.y]?.[before.x]?.building.type !== 'water' &&
+          newGrid[after.y]?.[after.x]?.building.type !== 'water';
+
+        const bridgeable =
+          bounded &&
+          runLen <= MAX_BRIDGE_SPAN &&
+          canPlaceRoadOn(before!.x, before!.y) &&
+          canPlaceRoadOn(after!.x, after!.y);
+
+        if (bridgeable) {
+          // Ensure bridge endpoints are road-like (after step 1 they should be, but be defensive)
+          if (!isRoadLike(before!.x, before!.y) || !isRoadLike(after!.x, after!.y)) {
+            // Try to force-place road endpoints if possible (cost-gated)
+            for (const end of [before!, after!]) {
+              const endTile = newGrid[end.y]?.[end.x];
+              if (!endTile) continue;
+              if (endTile.building.type === 'road') continue;
+              if (!roadableLandTypes.includes(endTile.building.type)) continue;
+              if (!spend()) break;
+              changed = true;
+              if (endTile.building.type === 'rail') {
+                endTile.building = createBuilding('road');
+                endTile.hasRailOverlay = true;
+                endTile.zone = 'none';
+              } else {
+                endTile.building = createBuilding('road');
+                endTile.hasRailOverlay = false;
+                endTile.zone = 'none';
+              }
+            }
+          }
+
+          if (isRoadLike(before!.x, before!.y) && isRoadLike(after!.x, after!.y)) {
+            // Stable bridge id based on land endpoints (order-independent)
+            const a = `${before!.x},${before!.y}`;
+            const b = `${after!.x},${after!.y}`;
+            const id = a < b ? `bridge:${a}->${b}` : `bridge:${b}->${a}`;
+            const seed = hash(id);
+            const kind = pickBridgeKind(runLen, seed);
+            const variant = seed % variantCountForKind(kind);
+
+            // Normalize tile order so index is stable regardless of drag direction
+            const runTiles = path.slice(i, j + 1);
+            if (orientation === 'h' && runTiles[0].x > runTiles[runTiles.length - 1].x) runTiles.reverse();
+            if (orientation === 'v' && runTiles[0].y > runTiles[runTiles.length - 1].y) runTiles.reverse();
+
+            // Only build the full span if we can afford all missing bridge tiles
+            let missing = 0;
+            for (const rp of runTiles) {
+              const rt = newGrid[rp.y]?.[rp.x];
+              if (rt && rt.building.type === 'water' && !rt.bridge) missing++;
+            }
+            if (money >= missing * costPerTile) {
+              for (let k = 0; k < runTiles.length; k++) {
+                const rp = runTiles[k];
+                const rt = newGrid[rp.y]?.[rp.x];
+                if (!rt || rt.building.type !== 'water') continue;
+                if (!rt.bridge) {
+                  // Spend for new bridge tile
+                  if (!spend()) break;
+                  changed = true;
+                }
+                rt.bridge = {
+                  id,
+                  orientation,
+                  length: runLen,
+                  index: k,
+                  kind,
+                  variant,
+                };
+              }
+            }
+          }
+        }
+
+        i = j + 1;
+      }
+
+      if (!changed) return prev;
+
+      return {
+        ...prev,
+        grid: newGrid,
+        stats: {
+          ...prev.stats,
+          money,
+        },
+      };
+    });
+  }, []);
+
   const connectToCity = useCallback((cityId: string) => {
     setState((prev) => {
       const city = prev.adjacentCities.find(c => c.id === cityId);
@@ -1208,6 +1439,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setActivePanel,
     setBudgetFunding,
     placeAtTile,
+    placeRoadLine,
     connectToCity,
     discoverCity,
     checkAndDiscoverCities,

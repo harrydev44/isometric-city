@@ -127,7 +127,7 @@ export interface CanvasIsometricGridProps {
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
 export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false, navigationTarget, onNavigationComplete, onViewportChange, onBargeDelivery }: CanvasIsometricGridProps) {
-  const { state, placeAtTile, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour } = useGame();
+  const { state, placeAtTile, placeRoadLine, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, gameVersion } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCanvasRef = useRef<HTMLCanvasElement>(null); // PERF: Separate canvas for hover/selection highlights
@@ -214,6 +214,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const crossingFlashTimerRef = useRef(0);
   const crossingGateAnglesRef = useRef<Map<number, number>>(new Map()); // key = y * gridSize + x, value = angle (0=open, 90=closed)
   const crossingPositionsRef = useRef<{x: number, y: number}[]>([]); // Cached crossing positions for O(1) iteration
+  const bridgePositionsRef = useRef<{ x: number; y: number }[]>([]); // Cached bridge tiles for efficient bridge rendering
 
   // Firework system refs
   const fireworksRef = useRef<Firework[]>([]);
@@ -443,6 +444,15 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     gridVersionRef.current++;
     // Cache crossing positions for O(n) iteration instead of O(n²) grid scan
     crossingPositionsRef.current = findRailroadCrossings(grid, gridSize);
+    // Cache bridge tiles (water tiles with bridge overlay)
+    const bridges: Array<{ x: number; y: number }> = [];
+    for (let y = 0; y < gridSize; y++) {
+      const row = grid[y];
+      for (let x = 0; x < gridSize; x++) {
+        if (row[x]?.bridge) bridges.push({ x, y });
+      }
+    }
+    bridgePositionsRef.current = bridges;
   }, [grid, gridSize]);
 
   useEffect(() => {
@@ -721,6 +731,212 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
 
   // Boats are now handled by useBoatSystem hook (see above)
 
+  // Draw bridges (road overlays on water) ABOVE boats but BELOW cars/pedestrians
+  const drawBridges = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset: currentOffset, zoom: currentZoom, grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    const canvas = ctx.canvas;
+    const dpr = window.devicePixelRatio || 1;
+
+    if (!currentGrid || currentGridSize <= 0) return;
+    const bridgeTiles = bridgePositionsRef.current;
+    if (!bridgeTiles || bridgeTiles.length === 0) return;
+
+    ctx.save();
+    ctx.scale(dpr * currentZoom, dpr * currentZoom);
+    ctx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+
+    const viewWidth = canvas.width / (dpr * currentZoom);
+    const viewHeight = canvas.height / (dpr * currentZoom);
+    const viewBounds = {
+      viewLeft: -currentOffset.x / currentZoom - TILE_WIDTH * 2,
+      viewTop: -currentOffset.y / currentZoom - TILE_HEIGHT * 4,
+      viewRight: viewWidth - currentOffset.x / currentZoom + TILE_WIDTH * 2,
+      viewBottom: viewHeight - currentOffset.y / currentZoom + TILE_HEIGHT * 4,
+    };
+
+    const drawBridgeTile = (screenX: number, screenY: number, tile: Tile) => {
+      const b = tile.bridge;
+      if (!b) return;
+
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+      const cx = screenX + w / 2;
+      const cy = screenY + h / 2;
+
+      // Diamond corners
+      const top = { x: cx, y: screenY };
+      const right = { x: screenX + w, y: cy };
+      const bottom = { x: cx, y: screenY + h };
+      const left = { x: screenX, y: cy };
+
+      // Base deck colors by kind/variant
+      const deckPalettes: Record<string, string[]> = {
+        beam: ['#6b7280', '#4b5563', '#7c6f5a'],        // concrete / dark / timber-ish
+        truss: ['#4b5563', '#b91c1c', '#166534'],       // steel / red / green
+        arch: ['#6b7280', '#4b5563'],                  // concrete / dark
+        suspension: ['#374151', '#1f2937'],            // steel dark / darker
+      };
+      const deckColor = (deckPalettes[b.kind]?.[b.variant] ?? '#4b5563');
+      const railColor = b.kind === 'truss' ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.35)';
+      const shadowAlpha = b.kind === 'suspension' ? 0.22 : 0.16;
+
+      // Water shadow (gives "height" cue) – keep subtle
+      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(top.x, top.y + 3);
+      ctx.lineTo(right.x, right.y + 3);
+      ctx.lineTo(bottom.x, bottom.y + 3);
+      ctx.lineTo(left.x, left.y + 3);
+      ctx.closePath();
+      ctx.fill();
+
+      // Deck
+      ctx.fillStyle = deckColor;
+      ctx.beginPath();
+      ctx.moveTo(top.x, top.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.lineTo(bottom.x, bottom.y);
+      ctx.lineTo(left.x, left.y);
+      ctx.closePath();
+      ctx.fill();
+
+      // Edge outline
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Railings: emphasize edges perpendicular to bridge travel
+      ctx.strokeStyle = railColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (b.orientation === 'h') {
+        // Horizontal bridge: rail on north/south edges
+        ctx.moveTo(left.x + w * 0.12, left.y - h * 0.12);
+        ctx.lineTo(right.x - w * 0.12, right.y - h * 0.12);
+        ctx.moveTo(left.x + w * 0.12, left.y + h * 0.12);
+        ctx.lineTo(right.x - w * 0.12, right.y + h * 0.12);
+      } else {
+        // Vertical bridge: rail on west/east edges
+        ctx.moveTo(top.x - w * 0.18, top.y + h * 0.18);
+        ctx.lineTo(bottom.x - w * 0.18, bottom.y - h * 0.18);
+        ctx.moveTo(top.x + w * 0.18, top.y + h * 0.18);
+        ctx.lineTo(bottom.x + w * 0.18, bottom.y - h * 0.18);
+      }
+      ctx.stroke();
+
+      // Type-specific superstructure
+      if (b.kind === 'truss') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 1;
+        // Simple truss diagonals
+        ctx.beginPath();
+        if (b.orientation === 'h') {
+          const yTop = cy - h * 0.12;
+          const yBot = cy + h * 0.12;
+          for (let i = 0; i < 3; i++) {
+            const t0 = (i / 3);
+            const t1 = ((i + 1) / 3);
+            const x0 = screenX + w * (0.12 + 0.76 * t0);
+            const x1 = screenX + w * (0.12 + 0.76 * t1);
+            ctx.moveTo(x0, yTop);
+            ctx.lineTo(x1, yBot);
+          }
+        } else {
+          const xLeft = cx - w * 0.18;
+          const xRight = cx + w * 0.18;
+          for (let i = 0; i < 3; i++) {
+            const t0 = (i / 3);
+            const t1 = ((i + 1) / 3);
+            const y0 = screenY + h * (0.18 + 0.64 * t0);
+            const y1 = screenY + h * (0.18 + 0.64 * t1);
+            ctx.moveTo(xLeft, y0);
+            ctx.lineTo(xRight, y1);
+          }
+        }
+        ctx.stroke();
+      } else if (b.kind === 'arch') {
+        // Under-arch hint (only really visible mid-span)
+        if (b.length >= 4) {
+          const t = b.length <= 1 ? 0 : b.index / (b.length - 1);
+          const archStrength = Math.sin(Math.PI * t);
+          ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          if (b.orientation === 'h') {
+            const ax0 = screenX + w * 0.15;
+            const ax1 = screenX + w * 0.85;
+            const ay = cy + h * 0.28;
+            const midX = (ax0 + ax1) / 2;
+            ctx.moveTo(ax0, ay);
+            ctx.quadraticCurveTo(midX, ay + archStrength * 10, ax1, ay);
+          } else {
+            const ay0 = screenY + h * 0.15;
+            const ay1 = screenY + h * 0.85;
+            const ax = cx;
+            const midY = (ay0 + ay1) / 2;
+            ctx.moveTo(ax - w * 0.22, ay0);
+            ctx.quadraticCurveTo(ax, midY + archStrength * 8, ax + w * 0.22, ay1);
+          }
+          ctx.stroke();
+        }
+      } else if (b.kind === 'suspension') {
+        // Towers on ends + catenary hint
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2;
+
+        const isEnd = b.index === 0 || b.index === b.length - 1;
+        if (isEnd) {
+          ctx.beginPath();
+          // Two simple tower legs
+          ctx.moveTo(cx - w * 0.08, cy - h * 0.22);
+          ctx.lineTo(cx - w * 0.08, cy + h * 0.02);
+          ctx.moveTo(cx + w * 0.08, cy - h * 0.22);
+          ctx.lineTo(cx + w * 0.08, cy + h * 0.02);
+          ctx.stroke();
+        }
+
+        // Cable curve (per tile sample) - higher in middle
+        if (b.length >= 4) {
+          const t = b.length <= 1 ? 0 : b.index / (b.length - 1);
+          const cable = Math.sin(Math.PI * t);
+          const yCable = cy - h * (0.22 + cable * 0.22);
+          ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(screenX + w * 0.18, yCable);
+          ctx.lineTo(screenX + w * 0.82, yCable);
+          ctx.stroke();
+        }
+      } else {
+        // beam: add small expansion joints for texture
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (b.orientation === 'h') {
+          ctx.moveTo(cx, screenY + h * 0.15);
+          ctx.lineTo(cx, screenY + h * 0.85);
+        } else {
+          ctx.moveTo(screenX + w * 0.2, cy);
+          ctx.lineTo(screenX + w * 0.8, cy);
+        }
+        ctx.stroke();
+      }
+    };
+
+    for (const pos of bridgeTiles) {
+      const { screenX, screenY } = gridToScreen(pos.x, pos.y, 0, 0);
+      if (
+        screenX < viewBounds.viewLeft || screenX > viewBounds.viewRight ||
+        screenY < viewBounds.viewTop || screenY > viewBounds.viewBottom
+      ) continue;
+      const tile = currentGrid[pos.y]?.[pos.x];
+      if (!tile?.bridge) continue;
+      drawBridgeTile(screenX, screenY, tile);
+    }
+
+    ctx.restore();
+  }, []);
+
   // Update trains - spawn, move, and manage lifecycle
   const updateTrains = useCallback((delta: number) => {
     const { grid: currentGrid, gridSize: currentGridSize, speed: currentSpeed } = worldStateRef.current;
@@ -987,7 +1203,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // Helper function to check if a tile has a road
     function hasRoad(gridX: number, gridY: number): boolean {
       if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
-      return grid[gridY][gridX].building.type === 'road';
+      const t = grid[gridY][gridX];
+      return t.building.type === 'road' || !!t.bridge;
     }
     
     // Helper function to check if a tile has a marina dock or pier (no beaches next to these)
@@ -3236,12 +3453,13 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         clearAirCanvas();
       } else {
-        drawCars(ctx);
         if (!skipSmallElements) {
           drawBoats(ctx); // Draw boats on water (skip when panning zoomed out on desktop)
         }
         drawBarges(ctx); // Draw ocean barges (larger, keep visible)
         drawTrainsCallback(ctx); // Draw trains on rail network
+        drawBridges(ctx); // Bridges above boats/barges/trains, below cars/pedestrians
+        drawCars(ctx); // Cars above bridge deck
         if (!skipSmallElements) {
           drawSmog(ctx); // Draw factory smog (skip when panning zoomed out on desktop)
         }
@@ -3266,7 +3484,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, drawRecreationPedestrians, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateSeaplanes, drawSeaplanes, updateBoats, drawBoats, updateBarges, drawBarges, updateTrains, drawTrainsCallback, drawIncidentIndicators, updateFireworks, drawFireworks, updateSmog, drawSmog, visualHour, isMobile, grid, gridSize, speed]);
+  }, [canvasSize.width, canvasSize.height, updateCars, drawCars, spawnCrimeIncidents, updateCrimeIncidents, updateEmergencyVehicles, drawEmergencyVehicles, updatePedestrians, drawPedestrians, drawRecreationPedestrians, updateAirplanes, drawAirplanes, updateHelicopters, drawHelicopters, updateSeaplanes, drawSeaplanes, updateBoats, drawBoats, updateBarges, drawBarges, updateTrains, drawTrainsCallback, drawIncidentIndicators, drawBridges, updateFireworks, drawFireworks, updateSmog, drawSmog, visualHour, isMobile, grid, gridSize, speed]);
   
   // Day/Night cycle lighting rendering - optimized for performance
   useEffect(() => {
@@ -3749,19 +3967,24 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           }
           
           setDragEndTile({ x: targetX, y: targetY });
-          
-          // Place all tiles from start to target in a straight line
-          const minX = Math.min(dragStartTile.x, targetX);
-          const maxX = Math.max(dragStartTile.x, targetX);
-          const minY = Math.min(dragStartTile.y, targetY);
-          const maxY = Math.max(dragStartTile.y, targetY);
-          
-          for (let x = minX; x <= maxX; x++) {
-            for (let y = minY; y <= maxY; y++) {
-              const key = `${x},${y}`;
-              if (!placedRoadTilesRef.current.has(key)) {
-                placeAtTile(x, y);
-                placedRoadTilesRef.current.add(key);
+
+          // Roads: batch-place the whole line so we can generate bridges over water spans
+          if (selectedTool === 'road') {
+            placeRoadLine(dragStartTile.x, dragStartTile.y, targetX, targetY);
+          } else {
+            // Rail/subway: keep incremental placement behavior
+            const minX = Math.min(dragStartTile.x, targetX);
+            const maxX = Math.max(dragStartTile.x, targetX);
+            const minY = Math.min(dragStartTile.y, targetY);
+            const maxY = Math.max(dragStartTile.y, targetY);
+            
+            for (let x = minX; x <= maxX; x++) {
+              for (let y = minY; y <= maxY; y++) {
+                const key = `${x},${y}`;
+                if (!placedRoadTilesRef.current.has(key)) {
+                  placeAtTile(x, y);
+                  placedRoadTilesRef.current.add(key);
+                }
               }
             }
           }
@@ -3772,7 +3995,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         }
       }
     }
-  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, clampOffset, grid]);
+  }, [isPanning, dragStart, offset, zoom, gridSize, isDragging, showsDragGrid, dragStartTile, selectedTool, roadDrawDirection, supportsDragPlace, placeAtTile, placeRoadLine, clampOffset, grid]);
   
   const handleMouseUp = useCallback(() => {
     if (panCandidateRef.current && !isPanning && selectedTool === 'select') {
