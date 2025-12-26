@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/immutability */
+// This file intentionally mutates objects stored in refs for performance.
+
 import { useCallback } from 'react';
 import { Airplane, Helicopter, WorldRenderState, TILE_WIDTH, TILE_HEIGHT, PlaneType } from './types';
 import {
