@@ -987,7 +987,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // Helper function to check if a tile has a road
     function hasRoad(gridX: number, gridY: number): boolean {
       if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
-      return grid[gridY][gridX].building.type === 'road';
+      const t = grid[gridY][gridX];
+      return t.building.type === 'road' || t.hasBridgeOverlay === true;
     }
     
     // Helper function to check if a tile has a marina dock or pier (no beaches next to these)
@@ -1036,6 +1037,171 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       return info;
     }
     
+    function drawBridgeOverlay(ctx: CanvasRenderingContext2D, x: number, y: number, tile: Tile, currentZoom: number): void {
+      const bridge = tile.bridge;
+      if (!bridge) return;
+
+      const w = TILE_WIDTH;
+      const h = TILE_HEIGHT;
+
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+
+      // Edge midpoints (match road renderer coordinate system)
+      const northEdge = { x: x + w * 0.25, y: y + h * 0.25 }; // toward gridX-1
+      const eastEdge = { x: x + w * 0.75, y: y + h * 0.25 };  // toward gridY-1
+      const southEdge = { x: x + w * 0.75, y: y + h * 0.75 }; // toward gridX+1
+      const westEdge = { x: x + w * 0.25, y: y + h * 0.75 };  // toward gridY+1
+
+      const spanStart = bridge.orientation === 'horizontal' ? northEdge : eastEdge;
+      const spanEnd = bridge.orientation === 'horizontal' ? southEdge : westEdge;
+
+      const dx = spanEnd.x - spanStart.x;
+      const dy = spanEnd.y - spanStart.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const px = -uy;
+      const py = ux;
+
+      const isLong = bridge.spanLength >= 6;
+      const deckHalfWidth = w * (isLong ? 0.20 : 0.18) * (bridge.style === 'wood_beam' ? 0.95 : 1);
+
+      const colorsByStyle: Record<string, { deck: string; edge: string; rail: string; shadow: string }> = {
+        wood_beam: { deck: '#8b5a2b', edge: '#6b4421', rail: 'rgba(245, 245, 245, 0.7)', shadow: 'rgba(0,0,0,0.18)' },
+        concrete_slab: { deck: '#6b7280', edge: '#4b5563', rail: 'rgba(255, 255, 255, 0.7)', shadow: 'rgba(0,0,0,0.16)' },
+        stone_arch: { deck: '#7a6f63', edge: '#5f574e', rail: 'rgba(245, 245, 245, 0.65)', shadow: 'rgba(0,0,0,0.16)' },
+        steel_girder: { deck: '#4b5563', edge: '#374151', rail: 'rgba(255, 255, 255, 0.65)', shadow: 'rgba(0,0,0,0.18)' },
+        concrete_box: { deck: '#6b7280', edge: '#4b5563', rail: 'rgba(255, 255, 255, 0.65)', shadow: 'rgba(0,0,0,0.16)' },
+        steel_arch: { deck: '#4b5563', edge: '#374151', rail: 'rgba(255, 255, 255, 0.65)', shadow: 'rgba(0,0,0,0.18)' },
+        steel_truss: { deck: '#374151', edge: '#1f2937', rail: 'rgba(255, 255, 255, 0.6)', shadow: 'rgba(0,0,0,0.2)' },
+        cable_stayed: { deck: '#4b5563', edge: '#374151', rail: 'rgba(255, 255, 255, 0.6)', shadow: 'rgba(0,0,0,0.18)' },
+        suspension: { deck: '#374151', edge: '#1f2937', rail: 'rgba(255, 255, 255, 0.6)', shadow: 'rgba(0,0,0,0.2)' },
+      };
+      const c = colorsByStyle[bridge.style] ?? colorsByStyle.concrete_slab;
+
+      // Subtle under-shadow to sell height above water
+      const shadowOffset = Math.max(2, Math.round(h * 0.10));
+      ctx.fillStyle = c.shadow;
+      ctx.beginPath();
+      ctx.moveTo(spanStart.x + px * deckHalfWidth, spanStart.y + py * deckHalfWidth + shadowOffset);
+      ctx.lineTo(spanEnd.x + px * deckHalfWidth, spanEnd.y + py * deckHalfWidth + shadowOffset);
+      ctx.lineTo(spanEnd.x - px * deckHalfWidth, spanEnd.y - py * deckHalfWidth + shadowOffset);
+      ctx.lineTo(spanStart.x - px * deckHalfWidth, spanStart.y - py * deckHalfWidth + shadowOffset);
+      ctx.closePath();
+      ctx.fill();
+
+      // Deck
+      ctx.fillStyle = c.deck;
+      ctx.beginPath();
+      ctx.moveTo(spanStart.x + px * deckHalfWidth, spanStart.y + py * deckHalfWidth);
+      ctx.lineTo(spanEnd.x + px * deckHalfWidth, spanEnd.y + py * deckHalfWidth);
+      ctx.lineTo(spanEnd.x - px * deckHalfWidth, spanEnd.y - py * deckHalfWidth);
+      ctx.lineTo(spanStart.x - px * deckHalfWidth, spanStart.y - py * deckHalfWidth);
+      ctx.closePath();
+      ctx.fill();
+
+      // Deck edge shading
+      ctx.strokeStyle = c.edge;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(spanStart.x + px * deckHalfWidth, spanStart.y + py * deckHalfWidth);
+      ctx.lineTo(spanEnd.x + px * deckHalfWidth, spanEnd.y + py * deckHalfWidth);
+      ctx.moveTo(spanStart.x - px * deckHalfWidth, spanStart.y - py * deckHalfWidth);
+      ctx.lineTo(spanEnd.x - px * deckHalfWidth, spanEnd.y - py * deckHalfWidth);
+      ctx.stroke();
+
+      // Lane marking (simple center line)
+      if (currentZoom >= 0.7) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)'; // yellow
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2.5, 3.5]);
+        const inset = deckHalfWidth * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(spanStart.x + ux * inset, spanStart.y + uy * inset);
+        ctx.lineTo(spanEnd.x - ux * inset, spanEnd.y - uy * inset);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Railings
+      ctx.strokeStyle = c.rail;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(spanStart.x + px * (deckHalfWidth * 0.92), spanStart.y + py * (deckHalfWidth * 0.92));
+      ctx.lineTo(spanEnd.x + px * (deckHalfWidth * 0.92), spanEnd.y + py * (deckHalfWidth * 0.92));
+      ctx.moveTo(spanStart.x - px * (deckHalfWidth * 0.92), spanStart.y - py * (deckHalfWidth * 0.92));
+      ctx.lineTo(spanEnd.x - px * (deckHalfWidth * 0.92), spanEnd.y - py * (deckHalfWidth * 0.92));
+      ctx.stroke();
+
+      // Variant details / supports
+      const tMid = (bridge.indexInSpan + 0.5) / bridge.spanLength;
+      const midX = spanStart.x + dx * 0.5;
+      const midY = spanStart.y + dy * 0.5;
+
+      // Simple pier/support under longer spans (skip tiny wooden bridges)
+      if (bridge.spanLength >= 3 && bridge.style !== 'wood_beam' && currentZoom >= 0.6) {
+        ctx.strokeStyle = 'rgba(17, 24, 39, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(midX, midY + shadowOffset);
+        ctx.lineTo(midX, midY + shadowOffset + h * 0.35);
+        ctx.stroke();
+      }
+
+      // Truss side pattern (steel_truss)
+      if (bridge.style === 'steel_truss' && currentZoom >= 0.75) {
+        const steps = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i <= steps; i++) {
+          const tt = i / (steps + 1);
+          const ax = spanStart.x + dx * tt;
+          const ay = spanStart.y + dy * tt;
+          ctx.beginPath();
+          ctx.moveTo(ax + px * (deckHalfWidth * 0.9), ay + py * (deckHalfWidth * 0.9));
+          ctx.lineTo(ax - px * (deckHalfWidth * 0.9), ay - py * (deckHalfWidth * 0.9));
+          ctx.stroke();
+        }
+      }
+
+      // Cables (very lightweight) for long-span types
+      if ((bridge.style === 'suspension' || bridge.style === 'cable_stayed') && currentZoom >= 0.8) {
+        const t0 = bridge.indexInSpan / bridge.spanLength;
+        const t1 = (bridge.indexInSpan + 1) / bridge.spanLength;
+        const sagAmp = h * (bridge.style === 'suspension' ? 0.45 : 0.25);
+        const sag0 = -Math.sin(Math.PI * t0) * sagAmp;
+        const sag1 = -Math.sin(Math.PI * t1) * sagAmp;
+
+        // Cable segment above deck
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(spanStart.x, spanStart.y + sag0);
+        ctx.lineTo(spanEnd.x, spanEnd.y + sag1);
+        ctx.stroke();
+
+        // Towers at ends
+        if (bridge.style === 'suspension') {
+          ctx.fillStyle = 'rgba(229,231,235,0.55)';
+          if (bridge.indexInSpan === 0) {
+            ctx.fillRect(spanStart.x - 2, spanStart.y - 10, 4, 14);
+          }
+          if (bridge.indexInSpan === bridge.spanLength - 1) {
+            ctx.fillRect(spanEnd.x - 2, spanEnd.y - 10, 4, 14);
+          }
+        } else {
+          // Cable-stayed pylon (single-ish): draw near 1/3 and 2/3 positions
+          const pylonHit = Math.abs(tMid - 0.33) < 0.06 || Math.abs(tMid - 0.66) < 0.06;
+          if (pylonHit) {
+            ctx.fillStyle = 'rgba(229,231,235,0.45)';
+            ctx.fillRect(cx - 2, cy - 10, 4, 14);
+          }
+        }
+      }
+    }
+
     // Draw sophisticated road with merged avenues/highways, traffic lights, and proper lane directions
     function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, gridX: number, gridY: number, currentZoom: number) {
       const w = TILE_WIDTH;
@@ -2647,8 +2813,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           const depth = x + y + size.width + size.height - 2;
           waterQueue.push({ screenX, screenY, tile, depth });
         }
-        // Roads go to their own queue (drawn above water)
-        else if (tile.building.type === 'road') {
+        
+        // Roads (including bridge overlays over water) go to their own queue (drawn above water)
+        if (tile.building.type === 'road' || tile.hasBridgeOverlay) {
           const depth = x + y;
           roadQueue.push({ screenX, screenY, tile, depth });
         }
@@ -2752,6 +2919,11 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     // PERF: Use for loop instead of forEach
     for (let i = 0; i < roadQueue.length; i++) {
       const { tile, screenX, screenY } = roadQueue[i];
+      // Bridge overlays render as elevated decks over water (water is still drawn underneath)
+      if (tile.hasBridgeOverlay && tile.building.type === 'water') {
+        drawBridgeOverlay(ctx, screenX, screenY, tile, zoom);
+        continue;
+      }
       // Draw road base tile first (grey diamond)
       ctx.fillStyle = '#4a4a4a';
       ctx.beginPath();

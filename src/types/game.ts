@@ -258,6 +258,35 @@ export interface Tile {
   traffic: number;
   hasSubway: boolean;
   hasRailOverlay?: boolean; // Rail tracks overlaid on road (road base with rail tracks on top)
+  hasBridgeOverlay?: boolean; // Road bridge deck over water (water base remains for boats)
+  bridge?: BridgeInfo; // Present when hasBridgeOverlay is true
+}
+
+export type BridgeOrientation = 'horizontal' | 'vertical';
+
+// Chosen deterministically from span length + endpoints. Rendering uses this to draw variants.
+export type BridgeStyle =
+  // Small spans (1-2)
+  | 'wood_beam'
+  | 'concrete_slab'
+  | 'stone_arch'
+  // Medium spans (3-5)
+  | 'steel_girder'
+  | 'concrete_box'
+  | 'steel_arch'
+  // Large spans (6-10)
+  | 'steel_truss'
+  | 'cable_stayed'
+  | 'suspension';
+
+export interface BridgeInfo {
+  style: BridgeStyle;
+  variant: number; // 0..n-1 within style
+  spanLength: number; // number of water tiles in the span (1..10)
+  orientation: BridgeOrientation;
+  indexInSpan: number; // 0..spanLength-1 (used for end towers/supports)
+  spanStart: { x: number; y: number };
+  spanEnd: { x: number; y: number };
 }
 
 export interface Stats {

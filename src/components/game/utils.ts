@@ -19,7 +19,8 @@ export function getOppositeDirection(direction: CarDirection): CarDirection {
 // Check if a tile is a road
 export function isRoadTile(gridData: Tile[][], gridSizeValue: number, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= gridSizeValue || y >= gridSizeValue) return false;
-  return gridData[y][x].building.type === 'road';
+  const tile = gridData[y][x];
+  return tile.building.type === 'road' || tile.hasBridgeOverlay === true;
 }
 
 // Get available direction options from a tile

@@ -5,6 +5,9 @@ import {
   Tile,
   Building,
   BuildingType,
+  BridgeInfo,
+  BridgeOrientation,
+  BridgeStyle,
   ZoneType,
   Stats,
   Budget,
@@ -423,28 +426,161 @@ export function hasRoadAtEdge(grid: Tile[][], gridSize: number, direction: 'nort
     case 'north':
       // Check top edge (y = 0)
       for (let x = 0; x < gridSize; x++) {
-        if (grid[0][x].building.type === 'road') return true;
+        if (isRoadNetworkTile(grid[0][x])) return true;
       }
       return false;
     case 'south':
       // Check bottom edge (y = gridSize - 1)
       for (let x = 0; x < gridSize; x++) {
-        if (grid[gridSize - 1][x].building.type === 'road') return true;
+        if (isRoadNetworkTile(grid[gridSize - 1][x])) return true;
       }
       return false;
     case 'east':
       // Check right edge (x = gridSize - 1)
       for (let y = 0; y < gridSize; y++) {
-        if (grid[y][gridSize - 1].building.type === 'road') return true;
+        if (isRoadNetworkTile(grid[y][gridSize - 1])) return true;
       }
       return false;
     case 'west':
       // Check left edge (x = 0)
       for (let y = 0; y < gridSize; y++) {
-        if (grid[y][0].building.type === 'road') return true;
+        if (isRoadNetworkTile(grid[y][0])) return true;
       }
       return false;
   }
+}
+
+function isRoadNetworkTile(tile: Tile | undefined): boolean {
+  if (!tile) return false;
+  return tile.building.type === 'road' || tile.hasBridgeOverlay === true;
+}
+
+const MAX_BRIDGE_SPAN_TILES = 10;
+
+function bridgeHash(startX: number, startY: number, endX: number, endY: number, spanLength: number): number {
+  // Deterministic 32-bit hash (stable across sessions)
+  let h = 2166136261;
+  const mix = (n: number) => {
+    h ^= n >>> 0;
+    h = Math.imul(h, 16777619);
+  };
+  mix(startX * 73856093);
+  mix(startY * 19349663);
+  mix(endX * 83492791);
+  mix(endY * 2654435761);
+  mix(spanLength * 97);
+  return h >>> 0;
+}
+
+function pickBridgeStyle(spanLength: number, hash: number): { style: BridgeStyle; variant: number } {
+  const small: BridgeStyle[] = ['wood_beam', 'concrete_slab', 'stone_arch'];
+  const medium: BridgeStyle[] = ['steel_girder', 'concrete_box', 'steel_arch'];
+  const large: BridgeStyle[] = ['steel_truss', 'cable_stayed', 'suspension'];
+
+  const styles = spanLength <= 2 ? small : spanLength <= 5 ? medium : large;
+  const style = styles[hash % styles.length];
+  // 3 variants per style (enough to feel varied without bloating save size)
+  const variant = (hash >>> 3) % 3;
+  return { style, variant };
+}
+
+function tryApplyBridgeOverlay(grid: Tile[][], gridSize: number, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= gridSize || y >= gridSize) return false;
+  if (grid[y][x].building.type !== 'water') return false;
+
+  // Horizontal span (vary X, constant Y)
+  {
+    let left = x;
+    while (left - 1 >= 0 && grid[y][left - 1].building.type === 'water') left--;
+    let right = x;
+    while (right + 1 < gridSize && grid[y][right + 1].building.type === 'water') right++;
+
+    const spanLength = right - left + 1;
+    const leftBankX = left - 1;
+    const rightBankX = right + 1;
+
+    if (
+      spanLength >= 1 &&
+      spanLength <= MAX_BRIDGE_SPAN_TILES &&
+      leftBankX >= 0 &&
+      rightBankX < gridSize &&
+      isRoadNetworkTile(grid[y][leftBankX]) &&
+      isRoadNetworkTile(grid[y][rightBankX])
+    ) {
+      const orientation: BridgeOrientation = 'horizontal';
+      const hash = bridgeHash(left, y, right, y, spanLength);
+      const { style, variant } = pickBridgeStyle(spanLength, hash);
+      const spanStart = { x: left, y };
+      const spanEnd = { x: right, y };
+
+      for (let ix = left; ix <= right; ix++) {
+        const t = grid[y][ix];
+        if (t.building.type !== 'water') return false;
+        t.zone = 'none';
+        t.hasRailOverlay = false;
+        t.hasBridgeOverlay = true;
+        const indexInSpan = ix - left;
+        t.bridge = {
+          style,
+          variant,
+          spanLength,
+          orientation,
+          indexInSpan,
+          spanStart,
+          spanEnd,
+        } satisfies BridgeInfo;
+      }
+      return true;
+    }
+  }
+
+  // Vertical span (vary Y, constant X)
+  {
+    let top = y;
+    while (top - 1 >= 0 && grid[top - 1][x].building.type === 'water') top--;
+    let bottom = y;
+    while (bottom + 1 < gridSize && grid[bottom + 1][x].building.type === 'water') bottom++;
+
+    const spanLength = bottom - top + 1;
+    const topBankY = top - 1;
+    const bottomBankY = bottom + 1;
+
+    if (
+      spanLength >= 1 &&
+      spanLength <= MAX_BRIDGE_SPAN_TILES &&
+      topBankY >= 0 &&
+      bottomBankY < gridSize &&
+      isRoadNetworkTile(grid[topBankY][x]) &&
+      isRoadNetworkTile(grid[bottomBankY][x])
+    ) {
+      const orientation: BridgeOrientation = 'vertical';
+      const hash = bridgeHash(x, top, x, bottom, spanLength);
+      const { style, variant } = pickBridgeStyle(spanLength, hash);
+      const spanStart = { x, y: top };
+      const spanEnd = { x, y: bottom };
+
+      for (let iy = top; iy <= bottom; iy++) {
+        const t = grid[iy][x];
+        if (t.building.type !== 'water') return false;
+        t.zone = 'none';
+        t.hasRailOverlay = false;
+        t.hasBridgeOverlay = true;
+        const indexInSpan = iy - top;
+        t.bridge = {
+          style,
+          variant,
+          spanLength,
+          orientation,
+          indexInSpan,
+          spanStart,
+          spanEnd,
+        } satisfies BridgeInfo;
+      }
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Check all edges and return cities that can be connected (have roads reaching them)
@@ -649,7 +785,7 @@ export function getRoadAdjacency(
   for (let dx = 0; dx < width; dx++) {
     const checkX = x + dx;
     const checkY = y + height;
-    if (checkY < gridSize && grid[checkY]?.[checkX]?.building.type === 'road') {
+    if (checkY < gridSize && isRoadNetworkTile(grid[checkY]?.[checkX])) {
       roadOnSouthOrEast = true;
       break;
     }
@@ -660,7 +796,7 @@ export function getRoadAdjacency(
     for (let dy = 0; dy < height; dy++) {
       const checkX = x + width;
       const checkY = y + dy;
-      if (checkX < gridSize && grid[checkY]?.[checkX]?.building.type === 'road') {
+      if (checkX < gridSize && isRoadNetworkTile(grid[checkY]?.[checkX])) {
         roadOnSouthOrEast = true;
         break;
       }
@@ -671,7 +807,7 @@ export function getRoadAdjacency(
   for (let dx = 0; dx < width; dx++) {
     const checkX = x + dx;
     const checkY = y - 1;
-    if (checkY >= 0 && grid[checkY]?.[checkX]?.building.type === 'road') {
+    if (checkY >= 0 && isRoadNetworkTile(grid[checkY]?.[checkX])) {
       roadOnNorthOrWest = true;
       break;
     }
@@ -682,7 +818,7 @@ export function getRoadAdjacency(
     for (let dy = 0; dy < height; dy++) {
       const checkX = x - 1;
       const checkY = y + dy;
-      if (checkX >= 0 && grid[checkY]?.[checkX]?.building.type === 'road') {
+      if (checkX >= 0 && isRoadNetworkTile(grid[checkY]?.[checkX])) {
         roadOnNorthOrWest = true;
         break;
       }
@@ -1069,7 +1205,7 @@ function hasRoadAccess(
 
       const neighbor = grid[ny][nx];
 
-      if (neighbor.building.type === 'road') {
+      if (isRoadNetworkTile(neighbor)) {
         return true;
       }
 
@@ -2177,7 +2313,7 @@ function scoreFootprint(grid: Tile[][], originX: number, originY: number, width:
         const nx = gx + ox;
         const ny = gy + oy;
         if (nx >= 0 && ny >= 0 && nx < gridSize && ny < gridSize) {
-          if (grid[ny][nx].building.type === 'road') {
+          if (isRoadNetworkTile(grid[ny][nx])) {
             roadScore++;
           }
         }
@@ -2264,8 +2400,15 @@ export function placeBuilding(
   const tile = state.grid[y]?.[x];
   if (!tile) return state;
 
-  // Can't build on water
-  if (tile.building.type === 'water') return state;
+  // Roads can create bridge overlays over water (<= 10 tiles between two existing road endpoints).
+  // Everything else still can't be placed on water.
+  if (tile.building.type === 'water') {
+    if (buildingType !== 'road') return state;
+    const newGrid = state.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
+    const ok = tryApplyBridgeOverlay(newGrid, state.gridSize, x, y);
+    if (!ok) return state;
+    return { ...state, grid: newGrid };
+  }
 
   // Can't place roads on existing buildings (only allow on grass, tree, existing roads, or rail - rail+road creates combined tile)
   // Note: 'empty' tiles are part of multi-tile building footprints, so roads can't be placed there either
@@ -2394,6 +2537,23 @@ export function placeBuilding(
         newGrid[y][x].building.flipped = true;
       }
     }
+
+    // If we just placed a road on land, it might complete a bridge span across nearby water.
+    // Check adjacent water tiles and attempt to "upgrade" the contiguous water run into a bridge overlay.
+    if (buildingType === 'road') {
+      const neighbors: Array<[number, number]> = [
+        [x - 1, y],
+        [x + 1, y],
+        [x, y - 1],
+        [x, y + 1],
+      ];
+      for (const [nx, ny] of neighbors) {
+        if (nx < 0 || ny < 0 || nx >= state.gridSize || ny >= state.gridSize) continue;
+        if (newGrid[ny][nx].building.type === 'water') {
+          tryApplyBridgeOverlay(newGrid, state.gridSize, nx, ny);
+        }
+      }
+    }
   }
 
   return { ...state, grid: newGrid };
@@ -2457,7 +2617,8 @@ function findBuildingOrigin(
 export function bulldozeTile(state: GameState, x: number, y: number): GameState {
   const tile = state.grid[y]?.[x];
   if (!tile) return state;
-  if (tile.building.type === 'water') return state;
+  // Allow removing bridge overlays on water (keeps water for boats)
+  if (tile.building.type === 'water' && tile.hasBridgeOverlay !== true) return state;
 
   const newGrid = state.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
   
@@ -2475,15 +2636,26 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
           newGrid[clearY][clearX].building = createBuilding('grass');
           newGrid[clearY][clearX].zone = 'none';
           newGrid[clearY][clearX].hasRailOverlay = false; // Clear rail overlay
+          newGrid[clearY][clearX].hasBridgeOverlay = false;
+          newGrid[clearY][clearX].bridge = undefined;
           // Don't remove subway when bulldozing surface buildings
         }
       }
     }
   } else {
     // Single tile bulldoze
-    newGrid[y][x].building = createBuilding('grass');
-    newGrid[y][x].zone = 'none';
-    newGrid[y][x].hasRailOverlay = false; // Clear rail overlay
+    if (newGrid[y][x].building.type === 'water') {
+      newGrid[y][x].hasBridgeOverlay = false;
+      newGrid[y][x].bridge = undefined;
+      newGrid[y][x].hasRailOverlay = false;
+      newGrid[y][x].zone = 'none';
+    } else {
+      newGrid[y][x].building = createBuilding('grass');
+      newGrid[y][x].zone = 'none';
+      newGrid[y][x].hasRailOverlay = false; // Clear rail overlay
+      newGrid[y][x].hasBridgeOverlay = false;
+      newGrid[y][x].bridge = undefined;
+    }
     // Don't remove subway when bulldozing surface buildings
   }
 
