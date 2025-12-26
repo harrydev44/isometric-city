@@ -17,6 +17,7 @@ import {
   DEFAULT_GRID_SIZE,
   placeBuilding,
   placeSubway,
+  terraformWater,
   simulateTick,
   checkForDiscoverableCities,
   generateRandomAdvancedCity,
@@ -675,6 +676,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const tile = prev.grid[y]?.[x];
 
       if (!tile) return prev;
+
+      // Water terraform has dynamic cost: $100,000 per tile actually converted.
+      if (tool === 'zone_water') {
+        const result = terraformWater(prev, x, y);
+        if (!result) return prev;
+
+        const totalCost = cost * result.tilesChanged;
+        if (totalCost > 0 && prev.stats.money < totalCost) return prev;
+
+        return {
+          ...result.nextState,
+          stats: { ...result.nextState.stats, money: result.nextState.stats.money - totalCost },
+        };
+      }
+
       if (cost > 0 && prev.stats.money < cost) return prev;
 
       // Prevent wasted spend if nothing would change

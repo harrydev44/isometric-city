@@ -2468,6 +2468,62 @@ export function bulldozeTile(state: GameState, x: number, y: number): GameState 
   return { ...state, grid: newGrid };
 }
 
+export type TerraformWaterResult = {
+  nextState: GameState;
+  tilesChanged: number;
+};
+
+/**
+ * Terraform a tile into water.
+ *
+ * - Converts the target tile to water and clears zoning + rail overlay + subway.
+ * - If the target is part of a multi-tile building footprint, converts the entire footprint to water
+ *   (prevents "broken" empty tiles).
+ * - Returns null if nothing would change.
+ */
+export function terraformWater(state: GameState, x: number, y: number): TerraformWaterResult | null {
+  const tile = state.grid[y]?.[x];
+  if (!tile) return null;
+
+  // No-op if already water
+  if (tile.building.type === 'water') return null;
+
+  const newGrid = state.grid.map(row => row.map(t => ({ ...t, building: { ...t.building } })));
+
+  const toFlood: Array<{ x: number; y: number }> = [];
+  const origin = findBuildingOrigin(newGrid, x, y, state.gridSize);
+  if (origin) {
+    const size = getBuildingSize(origin.buildingType);
+    for (let dy = 0; dy < size.height; dy++) {
+      for (let dx = 0; dx < size.width; dx++) {
+        const floodX = origin.originX + dx;
+        const floodY = origin.originY + dy;
+        if (floodX < state.gridSize && floodY < state.gridSize) {
+          toFlood.push({ x: floodX, y: floodY });
+        }
+      }
+    }
+  } else {
+    toFlood.push({ x, y });
+  }
+
+  let tilesChanged = 0;
+  for (const p of toFlood) {
+    const cell = newGrid[p.y]?.[p.x];
+    if (!cell) continue;
+    if (cell.building.type === 'water') continue;
+
+    cell.building = createBuilding('water');
+    cell.zone = 'none';
+    cell.hasRailOverlay = false;
+    cell.hasSubway = false;
+    tilesChanged++;
+  }
+
+  if (tilesChanged === 0) return null;
+  return { nextState: { ...state, grid: newGrid }, tilesChanged };
+}
+
 // Place a subway line underground (doesn't affect surface buildings)
 export function placeSubway(state: GameState, x: number, y: number): GameState {
   const tile = state.grid[y]?.[x];
