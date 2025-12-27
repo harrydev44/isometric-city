@@ -660,6 +660,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [savedCities, setSavedCities] = useState<SavedCityMeta[]>([]);
   
   // Load game state and sprite pack from localStorage on mount (client-side only)
+  /* eslint-disable react-hooks/set-state-in-effect -- Initialization from localStorage on mount is intentional. */
   useEffect(() => {
     // Load sprite pack preference
     const savedPackId = loadSpritePackId();
@@ -687,6 +688,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // Mark as loaded immediately - the skipNextSaveRef will handle skipping the first save
     hasLoadedRef.current = true;
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
   
   // Track the state that needs to be saved
   const lastSaveTimeRef = useRef<number>(0);
@@ -696,7 +698,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // PERF: Just mark that state has changed - defer expensive deep copy to actual save time
   const stateChangedRef = useRef(false);
   const latestStateRef = useRef(state);
-  latestStateRef.current = state;
+  
+  // Keep latestStateRef in sync without writing to refs during render.
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
   
   useEffect(() => {
     if (!hasLoadedRef.current) {

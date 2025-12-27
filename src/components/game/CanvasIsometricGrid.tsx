@@ -53,8 +53,8 @@ import {
 } from '@/components/game/constants';
 import {
   gridToScreen,
-  screenToGrid,
 } from '@/components/game/utils';
+import { getGridCoordsFromClientPoint, isGridCoordInBounds } from '@/components/game/canvasPicking';
 import {
   drawGreenBaseTile,
   drawGreyBaseTile,
@@ -3014,11 +3014,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     if (e.button === 0) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
-        const mouseX = (e.clientX - rect.left) / zoom;
-        const mouseY = (e.clientY - rect.top) / zoom;
-        const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
-
-        const isInsideGrid = gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize;
+        const { gridX, gridY } = getGridCoordsFromClientPoint({ x: e.clientX, y: e.clientY }, rect, zoom, offset);
+        const isInsideGrid = isGridCoordInBounds(gridX, gridY, gridSize);
         if (!isInsideGrid) {
           setIsPanning(true);
           setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
@@ -3153,11 +3150,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
-      const mouseX = (e.clientX - rect.left) / zoom;
-      const mouseY = (e.clientY - rect.top) / zoom;
-      const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
+      const { gridX, gridY } = getGridCoordsFromClientPoint({ x: e.clientX, y: e.clientY }, rect, zoom, offset);
       
-      if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+      if (isGridCoordInBounds(gridX, gridY, gridSize)) {
         // Only update hovered tile if it actually changed to avoid unnecessary re-renders
         setHoveredTile(prev => (prev?.x === gridX && prev?.y === gridY) ? prev : { x: gridX, y: gridY });
         
@@ -3451,11 +3446,9 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         if (deltaTime < 300 && deltaX < 10 && deltaY < 10) {
           const rect = containerRef.current?.getBoundingClientRect();
           if (rect) {
-            const mouseX = (touch.clientX - rect.left) / zoom;
-            const mouseY = (touch.clientY - rect.top) / zoom;
-            const { gridX, gridY } = screenToGrid(mouseX, mouseY, offset.x / zoom, offset.y / zoom);
+            const { gridX, gridY } = getGridCoordsFromClientPoint({ x: touch.clientX, y: touch.clientY }, rect, zoom, offset);
 
-            if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+            if (isGridCoordInBounds(gridX, gridY, gridSize)) {
               if (selectedTool === 'select') {
                 const origin = findBuildingOrigin(gridX, gridY);
                 if (origin) {
