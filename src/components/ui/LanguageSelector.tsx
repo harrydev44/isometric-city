@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale, useSetLocale } from 'gt-next/client';
+import { msg, useMessages } from 'gt-next';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +12,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+
+// Translatable UI labels
+const UI_LABELS = {
+  selectLanguage: msg('Select Language'),
+  changeLanguage: msg('Change Language'),
+};
 
 // Language configuration with display names
 const LANGUAGES = [
@@ -86,6 +93,7 @@ export function LanguageSelector({
   const locale = useLocale();
   const setLocale = useSetLocale();
   const [isOpen, setIsOpen] = useState(false);
+  const m = useMessages();
   
   const currentLanguage = LANGUAGES.find(l => l.code === locale) || LANGUAGES[0];
 
@@ -101,7 +109,7 @@ export function LanguageSelector({
         <button
           onClick={() => setIsOpen(true)}
           className={`h-6 w-4 p-0 m-0 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${className}`}
-          title="Change Language"
+          title={String(m(UI_LABELS.changeLanguage))}
         >
           <GlobeIcon size={iconSize} />
         </button>
@@ -121,7 +129,7 @@ export function LanguageSelector({
               </div>
               <div className="p-4 pt-2">
                 <div className="text-sm font-medium text-foreground mb-3">
-                  Select Language
+                  {m(UI_LABELS.selectLanguage)}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {LANGUAGES.map((language) => (
@@ -152,7 +160,7 @@ export function LanguageSelector({
         {iconOnly ? (
           <button
             className={`h-6 w-6 p-0 m-0 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${className}`}
-            title="Change Language"
+            title={String(m(UI_LABELS.changeLanguage))}
           >
             <GlobeIcon size={iconSize} />
           </button>
