@@ -12,7 +12,7 @@ import {
   spawnUnit as spawnUnitUtil,
   tickState,
 } from '@/games/rise/state';
-import { AGE_CONFIGS, DIFFICULTY_START_BONUS, POP_COST, UNIT_COSTS } from '@/games/rise/constants';
+import { AGE_CONFIGS, DIFFICULTY_START_BONUS, POP_COST, UNIT_COSTS, BUILDING_COSTS } from '@/games/rise/constants';
 
 type RiseGameContextValue = {
   state: RiseGameState;
@@ -260,6 +260,45 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Build factory when in enlightenment+
+        const hasFactory = next.buildings.some(b => b.ownerId === 'ai' && b.type === 'factory');
+        if (!hasFactory && (ai.age === 'enlightenment' || ai.age === 'industrial' || ai.age === 'modern')) {
+          const cost = BUILDING_COSTS.factory;
+          if (canAfford(ai.resources, cost || {})) {
+            const cityTile = city ? city.tile : { x: 5, y: 5 };
+            const spot = findEmptyNear(next, cityTile.x, cityTile.y, 8);
+            if (spot) {
+              next = placeBuilding(next, 'ai', 'factory', spot.x, spot.y);
+            }
+          }
+        }
+
+        // Build siege factory in industrial+
+        const hasSiege = next.buildings.some(b => b.ownerId === 'ai' && b.type === 'siege_factory');
+        if (!hasSiege && (ai.age === 'industrial' || ai.age === 'modern')) {
+          const cost = BUILDING_COSTS.siege_factory;
+          if (canAfford(ai.resources, cost || {})) {
+            const cityTile = city ? city.tile : { x: 5, y: 5 };
+            const spot = findEmptyNear(next, cityTile.x, cityTile.y, 9);
+            if (spot) {
+              next = placeBuilding(next, 'ai', 'siege_factory', spot.x, spot.y);
+            }
+          }
+        }
+
+        // Build airbase in modern
+        const hasAirbase = next.buildings.some(b => b.ownerId === 'ai' && b.type === 'airbase');
+        if (!hasAirbase && ai.age === 'modern') {
+          const cost = BUILDING_COSTS.airbase;
+          if (canAfford(ai.resources, cost || {})) {
+            const cityTile = city ? city.tile : { x: 5, y: 5 };
+            const spot = findEmptyNear(next, cityTile.x, cityTile.y, 10);
+            if (spot) {
+              next = placeBuilding(next, 'ai', 'airbase', spot.x, spot.y);
+            }
+          }
+        }
+
         // Age up if possible
         const currentIndex = AGE_CONFIGS.findIndex(a => a.id === ai.age);
         const nextAge = AGE_CONFIGS[currentIndex + 1];
@@ -286,9 +325,40 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Train vehicles if factory exists
+        const factory = next.buildings.find(b => b.ownerId === 'ai' && b.type === 'factory');
+        if (factory) {
+          const cost = UNIT_COSTS.vehicle;
+          const popCost = POP_COST.vehicle ?? 2;
+          if (canAfford(ai.resources, cost) && ai.resources.population + popCost <= ai.resources.popCap) {
+            next = spawnUnitUtil(next, 'ai', 'vehicle', { x: factory.tile.x + 1, y: factory.tile.y + 1 });
+          }
+        }
+
+        // Train siege if siege factory exists
+        const siegeFactory = next.buildings.find(b => b.ownerId === 'ai' && b.type === 'siege_factory');
+        if (siegeFactory) {
+          const cost = UNIT_COSTS.siege;
+          const popCost = POP_COST.siege ?? 3;
+          if (canAfford(ai.resources, cost) && ai.resources.population + popCost <= ai.resources.popCap) {
+            next = spawnUnitUtil(next, 'ai', 'siege', { x: siegeFactory.tile.x + 1, y: siegeFactory.tile.y + 1 });
+          }
+        }
+
+        // Train air if airbase exists
+        const airbase = next.buildings.find(b => b.ownerId === 'ai' && b.type === 'airbase');
+        if (airbase && ai.age === 'modern') {
+          const cost = UNIT_COSTS.air;
+          const popCost = POP_COST.air ?? 3;
+          if (canAfford(ai.resources, cost) && ai.resources.population + popCost <= ai.resources.popCap) {
+            next = spawnUnitUtil(next, 'ai', 'air', { x: airbase.tile.x + 1, y: airbase.tile.y + 1 });
+          }
+        }
+
         // Attack if army large enough
         const army = next.units.filter(u => u.ownerId === 'ai' && u.type !== 'citizen');
-        if (army.length >= 6) {
+        const threshold = ai.controller.difficulty === 'hard' ? 5 : ai.controller.difficulty === 'easy' ? 8 : 6;
+        if (army.length >= threshold) {
           const enemyCity = next.buildings.find(b => b.ownerId === next.localPlayerId && b.type === 'city_center');
           if (enemyCity) {
             const target = { x: enemyCity.tile.x, y: enemyCity.tile.y };
