@@ -7,6 +7,7 @@ import { RiseCanvas } from './RiseCanvas';
 import { AGE_CONFIGS } from '@/games/rise/constants';
 import { BUILDING_COSTS, UNIT_COSTS, POP_COST } from '@/games/rise/constants';
 import { ResourcePool } from '@/games/rise/types';
+import { RiseMinimap } from './RiseMinimap';
 
 const SPEED_LABELS: Record<0 | 1 | 2 | 3, string> = {
   0: 'Pause',
@@ -138,6 +139,10 @@ export default function RiseGame() {
 
         <div className="flex-1 min-h-[720px] rounded-lg overflow-hidden border border-slate-800 bg-slate-900/60">
           <RiseCanvas activeBuild={activeBuild} onBuildPlaced={() => setActiveBuild(null)} />
+        </div>
+
+        <div className="w-64">
+          <RiseMinimap state={state} />
         </div>
       </div>
 
