@@ -347,7 +347,7 @@ export default function HomePage() {
   const loadSavedCity = (city: SavedCityMeta) => {
     // If it's a multiplayer city, navigate to the room
     if (city.roomCode) {
-      window.history.replaceState({}, '', `/?room=${city.roomCode}`);
+      window.history.replaceState({}, '', `/coop/${city.roomCode}`);
       setPendingRoomCode(city.roomCode);
       setShowCoopModal(true);
       return;

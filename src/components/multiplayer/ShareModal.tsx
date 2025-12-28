@@ -32,7 +32,7 @@ export function ShareModal({ open, onOpenChange }: ShareModalProps) {
       createRoom(state.cityName, state)
         .then((code) => {
           // Update URL to show room code
-          window.history.replaceState({}, '', `/?room=${code}`);
+          window.history.replaceState({}, '', `/coop/${code}`);
         })
         .catch((err) => {
           console.error('[ShareModal] Failed to create room:', err);
@@ -53,13 +53,13 @@ export function ShareModal({ open, onOpenChange }: ShareModalProps) {
   const handleCopyLink = () => {
     if (!roomCode) return;
 
-    const url = `${window.location.origin}/?room=${roomCode}`;
+    const url = `${window.location.origin}/coop/${roomCode}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const inviteUrl = roomCode ? `${window.location.origin}/?room=${roomCode}` : '';
+  const inviteUrl = roomCode ? `${window.location.origin}/coop/${roomCode}` : '';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

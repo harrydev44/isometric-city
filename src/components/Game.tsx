@@ -84,7 +84,7 @@ export default function Game({ onExit }: { onExit?: () => void }) {
   
   const handleCopyRoomLink = useCallback(() => {
     if (!roomCode) return;
-    const url = `${window.location.origin}/?room=${roomCode}`;
+    const url = `${window.location.origin}/coop/${roomCode}`;
     navigator.clipboard.writeText(url);
     setCopiedRoomLink(true);
     setTimeout(() => setCopiedRoomLink(false), 2000);
