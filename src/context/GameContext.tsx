@@ -710,19 +710,21 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // PERF: Just mark that state has changed - defer expensive deep copy to actual save time
   const stateChangedRef = useRef(false);
   const latestStateRef = useRef(state);
-  latestStateRef.current = state;
-  
+
   useEffect(() => {
+    // Update ref with latest state
+    latestStateRef.current = state;
+
     if (!hasLoadedRef.current) {
       return;
     }
-    
+
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
       lastSaveTimeRef.current = Date.now();
       return;
     }
-    
+
     // PERF: Just mark that state changed instead of expensive deep copy every time
     stateChangedRef.current = true;
   }, [state]);
