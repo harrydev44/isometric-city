@@ -145,6 +145,26 @@ export default function RiseGame() {
               Enemy City
             </button>
           </div>
+          <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800 rounded-lg px-2 py-1">
+            <span className="text-xs uppercase text-slate-400">Status</span>
+            <span
+              className={`px-2 py-1 text-xs rounded-md ${
+                state.gameStatus === 'playing'
+                  ? 'bg-emerald-600/30 text-emerald-200'
+                  : state.gameStatus === 'won'
+                  ? 'bg-amber-500/30 text-amber-200'
+                  : 'bg-rose-500/30 text-rose-200'
+              }`}
+            >
+              {state.gameStatus}
+            </span>
+            <button
+              className="px-2 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200"
+              onClick={restart}
+            >
+              Restart
+            </button>
+          </div>
         </div>
       </div>
 
