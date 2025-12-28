@@ -3,8 +3,7 @@
 import React, { useMemo } from 'react';
 import { useRiseGame } from '@/context/RiseGameContext';
 import { RiseCanvas } from './RiseCanvas';
-import { AGE_CONFIGS } from '@/games/rise/constants';
-import { BUILDING_COSTS, UNIT_COSTS, POP_COST } from '@/games/rise/constants';
+import { AGE_CONFIGS, BUILDING_COSTS, UNIT_COSTS, POP_COST, BUILDING_AGE_REQ, UNIT_AGE_REQ } from '@/games/rise/constants';
 import { ResourcePool } from '@/games/rise/types';
 import { RiseMinimap } from './RiseMinimap';
 import { TILE_HEIGHT, TILE_WIDTH } from '@/components/game/types';
@@ -38,6 +37,15 @@ export default function RiseGame() {
         if ((player.resources[key] ?? 0) < (cost[key] ?? 0)) return false;
       }
       return true;
+    },
+    [player]
+  );
+
+  const meetsAge = React.useCallback(
+    (required: string | undefined) => {
+      if (!required) return true;
+      if (!player) return false;
+      return AGE_CONFIGS.findIndex(a => a.id === player.age) >= AGE_CONFIGS.findIndex(a => a.id === required);
     },
     [player]
   );
@@ -146,14 +154,20 @@ export default function RiseGame() {
             <div className="grid grid-cols-2 gap-2">
               {['farm','lumber_camp','mine','house','barracks','factory','siege_factory','airbase','market','library','university','oil_rig','tower','fort'].map(b => {
                 const cost = BUILDING_COSTS[b as keyof typeof BUILDING_COSTS];
-                const affordable = canAfford(cost || {});
+                const requiredAge = BUILDING_AGE_REQ[b] || 'classics';
+                const hasAge = meetsAge(requiredAge);
+                const affordable = cost ? canAfford(cost) : true;
+                const enabled = hasAge && affordable && state.gameStatus === 'playing';
+                const titleParts: string[] = [];
+                if (cost) titleParts.push(Object.entries(cost).map(([k,v]) => `${k}:${v}`).join(' '));
+                if (!hasAge) titleParts.push(`Requires ${requiredAge}`);
                 return (
                   <button
                     key={b}
-                    onClick={() => affordable && setActiveBuild(b)}
-                    className={`text-left px-2 py-1 rounded-md text-xs border ${activeBuild===b?'border-amber-400 bg-slate-800 text-amber-300':'border-slate-700 bg-slate-800/60 text-slate-200'} ${affordable?'hover:border-slate-500':'opacity-50 cursor-not-allowed'}`}
-                    title={cost ? Object.entries(cost).map(([k,v]) => `${k}:${v}`).join(' ') : ''}
-                    disabled={!affordable}
+                    onClick={() => enabled && setActiveBuild(b)}
+                    className={`text-left px-2 py-1 rounded-md text-xs border ${activeBuild===b?'border-amber-400 bg-slate-800 text-amber-300':'border-slate-700 bg-slate-800/60 text-slate-200'} ${enabled?'hover:border-slate-500':'opacity-50 cursor-not-allowed'}`}
+                    title={titleParts.join(' | ')}
+                    disabled={!enabled}
                   >
                     {b.replace('_',' ')}
                   </button>
@@ -167,14 +181,22 @@ export default function RiseGame() {
               {(['infantry','ranged','vehicle','siege','air'] as const).map(t => {
                 const cost = UNIT_COSTS[t];
                 const pop = POP_COST[t] ?? 1;
-                const affordable = canAfford(cost || {}) && player.resources.population + pop <= player.resources.popCap;
+                const requiredAge = UNIT_AGE_REQ[t] || 'classics';
+                const hasAge = meetsAge(requiredAge);
+                const affordable = cost ? canAfford(cost) : true;
+                const hasPop = player.resources.population + pop <= player.resources.popCap;
+                const enabled = hasAge && affordable && hasPop && state.gameStatus === 'playing';
+                const titleParts: string[] = [`pop:${pop}`];
+                if (cost) titleParts.push(Object.entries(cost).map(([k,v])=>`${k}:${v}`).join(' '));
+                if (!hasAge) titleParts.push(`Requires ${requiredAge}`);
+                if (!hasPop) titleParts.push('Pop cap reached');
                 return (
                   <button
                     key={t}
-                    className={`px-2 py-1 rounded-md text-xs ${affordable ? 'bg-slate-800/60 hover:bg-slate-800' : 'bg-slate-800/40 text-slate-500 cursor-not-allowed'}`}
-                    onClick={() => affordable && trainUnit(t)}
-                    title={`${Object.entries(cost||{}).map(([k,v])=>`${k}:${v}`).join(' ')} pop:${pop}`}
-                    disabled={!affordable}
+                    className={`px-2 py-1 rounded-md text-xs ${enabled ? 'bg-slate-800/60 hover:bg-slate-800' : 'bg-slate-800/40 text-slate-500 cursor-not-allowed'}`}
+                    onClick={() => enabled && trainUnit(t)}
+                    title={titleParts.join(' | ')}
+                    disabled={!enabled}
                   >
                     {t}
                   </button>
