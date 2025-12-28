@@ -1,7 +1,7 @@
 /**
- * SimCity Game Module
+ * IsoCity Game Module
  * 
- * This module contains all SimCity-specific game logic, including:
+ * This module contains all IsoCity-specific game logic, including:
  * - City simulation (economy, zones, services)
  * - Building types and evolution
  * - Traffic and vehicle systems
@@ -12,5 +12,5 @@
  * isometric renderer while implementing different gameplay.
  */
 
-// SimCity-specific types
+// IsoCity-specific types
 export * from './types';

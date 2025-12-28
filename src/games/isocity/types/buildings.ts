@@ -1,7 +1,7 @@
 /**
- * SimCity Building Types
+ * IsoCity Building Types
  * 
- * Defines all building types available in the SimCity game mode.
+ * Defines all building types available in the IsoCity game mode.
  * These include residential, commercial, industrial, and special buildings.
  */
 
@@ -11,8 +11,8 @@ import { BaseBuilding } from '../../../core/types/grid';
 // Building Type Enums
 // ============================================================================
 
-/** All SimCity building types */
-export type SimCityBuildingType =
+/** All IsoCity building types */
+export type BuildingType =
   // Terrain
   | 'empty'
   | 'grass'
@@ -91,7 +91,7 @@ export type SimCityBuildingType =
   | 'amusement_park';
 
 // ============================================================================
-// SimCity Building Interface
+// IsoCity Building Interface
 // ============================================================================
 
 /** Bridge configuration types */
@@ -100,10 +100,10 @@ export type BridgeOrientation = 'ns' | 'ew';
 export type BridgeTrackType = 'road' | 'rail';
 
 /**
- * SimCity Building - extends BaseBuilding with city-builder specific properties
+ * Building - extends BaseBuilding with city-builder specific properties
  */
-export interface SimCityBuilding extends BaseBuilding {
-  type: SimCityBuildingType;
+export interface Building extends BaseBuilding {
+  type: BuildingType;
   /** Building level (1-5 for evolving buildings) */
   level: number;
   /** Current population living in this building */
@@ -151,8 +151,8 @@ export interface BuildingStats {
 }
 
 /** Building size (for placement validation) */
-export function getBuildingSize(buildingType: SimCityBuildingType): number {
-  const sizes: Partial<Record<SimCityBuildingType, number>> = {
+export function getBuildingSize(buildingType: BuildingType): number {
+  const sizes: Partial<Record<BuildingType, number>> = {
     hospital: 2,
     school: 2,
     university: 3,
@@ -187,7 +187,7 @@ export function getBuildingSize(buildingType: SimCityBuildingType): number {
 // ============================================================================
 
 /** Residential buildings in evolution order */
-export const RESIDENTIAL_BUILDINGS: SimCityBuildingType[] = [
+export const RESIDENTIAL_BUILDINGS: BuildingType[] = [
   'house_small',
   'house_medium',
   'mansion',
@@ -196,7 +196,7 @@ export const RESIDENTIAL_BUILDINGS: SimCityBuildingType[] = [
 ];
 
 /** Commercial buildings in evolution order */
-export const COMMERCIAL_BUILDINGS: SimCityBuildingType[] = [
+export const COMMERCIAL_BUILDINGS: BuildingType[] = [
   'shop_small',
   'shop_medium',
   'office_low',
@@ -205,7 +205,7 @@ export const COMMERCIAL_BUILDINGS: SimCityBuildingType[] = [
 ];
 
 /** Industrial buildings in evolution order */
-export const INDUSTRIAL_BUILDINGS: SimCityBuildingType[] = [
+export const INDUSTRIAL_BUILDINGS: BuildingType[] = [
   'factory_small',
   'factory_medium',
   'warehouse',
@@ -214,7 +214,7 @@ export const INDUSTRIAL_BUILDINGS: SimCityBuildingType[] = [
 ];
 
 /** Service buildings */
-export const SERVICE_BUILDINGS: SimCityBuildingType[] = [
+export const SERVICE_BUILDINGS: BuildingType[] = [
   'police_station',
   'fire_station',
   'hospital',
@@ -223,7 +223,7 @@ export const SERVICE_BUILDINGS: SimCityBuildingType[] = [
 ];
 
 /** Park and recreation buildings */
-export const RECREATION_BUILDINGS: SimCityBuildingType[] = [
+export const RECREATION_BUILDINGS: BuildingType[] = [
   'park',
   'park_large',
   'tennis',

@@ -2,7 +2,7 @@
  * Core Entity Types - Base types for movable entities (vehicles, units, etc.)
  * 
  * These types define the foundation for any movable entity in the game.
- * Both SimCity vehicles and RoN military units will extend these base types.
+ * IsoCity vehicles and future game mode entities will extend these base types.
  */
 
 import { CardinalDirection, GridPosition, ScreenPosition } from './grid';

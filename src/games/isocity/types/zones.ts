@@ -1,5 +1,5 @@
 /**
- * SimCity Zone Types
+ * IsoCity Zone Types
  * 
  * Defines the zone system for residential, commercial, and industrial development.
  */

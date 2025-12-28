@@ -1,5 +1,5 @@
 /**
- * SimCity Service Types
+ * IsoCity Service Types
  * 
  * Defines city services like police, fire, health, and education.
  */

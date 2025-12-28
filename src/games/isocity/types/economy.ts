@@ -1,5 +1,5 @@
 /**
- * SimCity Economy Types
+ * IsoCity Economy Types
  * 
  * Types for the economic simulation including taxes, budget, and city statistics.
  */

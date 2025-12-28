@@ -2,7 +2,7 @@
  * Core Grid Types - Shared between all game modes
  * 
  * This module defines the fundamental types for isometric grid-based games.
- * These types are game-mode agnostic and can be used by SimCity, Rise of Nations, or any future game mode.
+ * These types are game-mode agnostic and can be used by IsoCity or any future game mode.
  */
 
 // ============================================================================
@@ -73,7 +73,7 @@ export type TerrainType =
 
 /**
  * Base building interface - common properties for all buildings across game modes.
- * SimCity and RoN will extend this with game-specific building types.
+ * Game modes will extend this with game-specific building types.
  */
 export interface BaseBuilding {
   /** Building type identifier (game-specific) */
