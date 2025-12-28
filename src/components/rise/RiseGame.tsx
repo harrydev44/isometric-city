@@ -82,6 +82,25 @@ export default function RiseGame() {
     return { can: true, reason: 'Ready' };
   }, [player, state.elapsedSeconds, canAfford]);
 
+  // Hotkeys for speed / actions
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (e.key === '1') setSpeed(1);
+      if (e.key === '2') setSpeed(2);
+      if (e.key === '3') setSpeed(3);
+      if (e.key === '0' || e.key === ' ') setSpeed(0);
+      if (e.key.toLowerCase() === 'r') restart();
+      if (e.key.toLowerCase() === 'c') spawnCitizen();
+      if (e.key.toLowerCase() === 'a') ageUp();
+      if (e.key.toLowerCase() === 'b') setActiveBuild('barracks');
+      if (e.key.toLowerCase() === 'f') setActiveBuild('farm');
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [setSpeed, restart, spawnCitizen, ageUp]);
+
   if (!player) return null;
 
   return (
