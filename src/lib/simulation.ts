@@ -2214,6 +2214,75 @@ export function simulateTick(state: GameState): GameState {
         }
       }
 
+      // Fire spread mechanic: untamed fires can ignite adjacent buildings.
+      // "Untamed" is approximated as low fire coverage (few/no fire stations nearby),
+      // which keeps spread mostly contained to under-served areas.
+      if (state.disastersEnabled && originalBuilding.onFire && tile.building.onFire) {
+        const sourceCoverage = services.fire[y][x]; // 0-100
+        const UNTAIMED_COVERAGE_THRESHOLD = 45; // <45 => <15% per-tick extinguish chance (45/300)
+        if (sourceCoverage < UNTAIMED_COVERAGE_THRESHOLD) {
+          // Fire intensity increases as the fire progresses.
+          const intensity = 0.25 + Math.min(1, tile.building.fireProgress / 100) * 0.75;
+          const untamedFactor = (UNTAIMED_COVERAGE_THRESHOLD - sourceCoverage) / UNTAIMED_COVERAGE_THRESHOLD; // 0..1
+          const baseSpreadChancePerNeighbor = 0.03; // tuned with "max 1 spread per source per tick"
+
+          // Check 4-directional adjacency (N/E/S/W). Start at a random direction to avoid bias.
+          const dxs = [-1, 1, 0, 0] as const;
+          const dys = [0, 0, -1, 1] as const;
+          const startDir = (Math.random() * 4) | 0;
+
+          for (let i = 0; i < 4; i++) {
+            const dir = (startDir + i) & 3;
+            const nx = x + dxs[dir];
+            const ny = y + dys[dir];
+            if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+
+            // Resolve multi-tile buildings: if the neighbor is an 'empty' footprint tile,
+            // ignite the origin tile instead.
+            let targetX = nx;
+            let targetY = ny;
+            const neighborTile = newGrid[ny][nx];
+            if (neighborTile.building.type === 'empty') {
+              const origin = findBuildingOrigin(newGrid, nx, ny, size);
+              if (!origin) continue;
+              targetX = origin.originX;
+              targetY = origin.originY;
+            }
+
+            const target = newGrid[targetY][targetX];
+            const targetType = target.building.type;
+
+            // Only spread to real buildings (skip terrain, infrastructure, placeholders).
+            if (
+              target.building.onFire ||
+              targetType === 'grass' ||
+              targetType === 'water' ||
+              targetType === 'road' ||
+              targetType === 'bridge' ||
+              targetType === 'rail' ||
+              targetType === 'tree' ||
+              targetType === 'empty'
+            ) {
+              continue;
+            }
+
+            // Nearby fire coverage makes ignition less likely.
+            const targetCoverage = services.fire[targetY][targetX]; // 0-100
+            const defense = 1 - Math.min(1, targetCoverage / 100) * 0.85; // 1.0 .. 0.15
+            const igniteChance = baseSpreadChancePerNeighbor * intensity * untamedFactor * defense;
+
+            if (Math.random() < igniteChance) {
+              const targetMutable = getModifiableTile(targetX, targetY);
+              if (!targetMutable.building.onFire) {
+                targetMutable.building.onFire = true;
+                targetMutable.building.fireProgress = 0;
+              }
+              break; // max 1 successful spread per source fire per tick
+            }
+          }
+        }
+      }
+
       // Random fire start
       if (state.disastersEnabled && !tile.building.onFire && 
           tile.building.type !== 'grass' && tile.building.type !== 'water' && 
