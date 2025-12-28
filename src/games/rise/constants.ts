@@ -71,6 +71,18 @@ export const POP_COST: Record<string, number> = {
   air: 3,
 };
 
+export const DIFFICULTY_GATHER_MULT: Record<'easy' | 'medium' | 'hard', number> = {
+  easy: 0.85,
+  medium: 1.0,
+  hard: 1.35,
+};
+
+export const DIFFICULTY_START_BONUS: Record<'easy' | 'medium' | 'hard', Partial<ResourcePool>> = {
+  easy: { wealth: -100, food: -100, wood: -100, metal: -50 },
+  medium: {},
+  hard: { wealth: 250, food: 250, wood: 250, metal: 150, knowledge: 80 },
+};
+
 export const UNIT_COSTS = {
   citizen: { food: 50, wealth: 30 },
   infantry: { food: 60, metal: 30, wealth: 30 },

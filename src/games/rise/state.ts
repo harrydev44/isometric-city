@@ -1,4 +1,4 @@
-import { BASE_RESOURCES, BUILDING_COSTS, BUILDING_HP, GATHER_RATES, POP_COST, SPEED_MULTIPLIERS, UNIT_COSTS } from './constants';
+import { BASE_RESOURCES, BUILDING_COSTS, BUILDING_HP, DIFFICULTY_GATHER_MULT, GATHER_RATES, POP_COST, SPEED_MULTIPLIERS, UNIT_COSTS } from './constants';
 import {
   AgeId,
   AGE_ORDER,
@@ -273,7 +273,8 @@ export function tickState(state: RiseGameState, deltaSeconds: number): RiseGameS
   function addResource(ownerId: string, key: keyof ResourcePool, amount: number) {
     const p = updatedPlayers.find(pl => pl.id === ownerId);
     if (!p) return;
-    p.resources[key] += amount * scaledDelta;
+    const mult = p.controller.difficulty ? DIFFICULTY_GATHER_MULT[p.controller.difficulty] ?? 1 : 1;
+    p.resources[key] += amount * scaledDelta * mult;
   }
 
   const buildingsById = new Map(state.buildings.map(b => [b.id, b]));

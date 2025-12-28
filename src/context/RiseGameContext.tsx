@@ -12,7 +12,7 @@ import {
   spawnUnit as spawnUnitUtil,
   tickState,
 } from '@/games/rise/state';
-import { AGE_CONFIGS, POP_COST, UNIT_COSTS } from '@/games/rise/constants';
+import { AGE_CONFIGS, DIFFICULTY_START_BONUS, POP_COST, UNIT_COSTS } from '@/games/rise/constants';
 
 type RiseGameContextValue = {
   state: RiseGameState;
@@ -26,9 +26,28 @@ type RiseGameContextValue = {
   selectUnits: (unitIds: string[]) => void;
   placeBuilding: (type: string, tileX: number, tileY: number) => void;
   ageUp: () => void;
+  setAIDifficulty: (difficulty: 'easy' | 'medium' | 'hard') => void;
 };
 
 const RiseGameContext = createContext<RiseGameContextValue | null>(null);
+
+function findEmptyNear(state: RiseGameState, cx: number, cy: number, radius: number): { x: number; y: number } | null {
+  const size = state.gridSize;
+  for (let r = 1; r <= radius; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x < 0 || y < 0 || x >= size || y >= size) continue;
+        const tile = state.tiles[y][x];
+        if (!tile.buildingId && tile.terrain !== 'water') {
+          return { x, y };
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export function RiseGameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<RiseGameState>(() => initializeRiseState());
@@ -127,7 +146,24 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Lightweight AI loop (resource gather + spawn citizens)
+  const setAIDifficulty = useCallback((difficulty: 'easy' | 'medium' | 'hard') => {
+    setState(prev => {
+      const delta = DIFFICULTY_START_BONUS[difficulty] || {};
+      return {
+        ...prev,
+        players: prev.players.map(p => {
+          if (p.id !== 'ai') return p;
+          const resources = { ...p.resources };
+          for (const key of Object.keys(delta) as (keyof typeof delta)[]) {
+            resources[key] = Math.max(0, resources[key] + (delta[key] ?? 0));
+          }
+          return { ...p, controller: { ...p.controller, difficulty }, resources };
+        }),
+      };
+    });
+  }, []);
+
+  // AI loop (resource gather + build + train + attack + age up)
   useEffect(() => {
     const interval = setInterval(() => {
       setState(prev => {
@@ -147,7 +183,7 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Assign idle citizens to nearest resource
+        // Assign idle citizens to nearest resource (non-oil until industrial)
         const aiUnits = next.units.filter(u => u.ownerId === 'ai' && u.type === 'citizen');
         const idle = aiUnits.filter(u => u.order.kind === 'idle');
         if (idle.length > 0) {
@@ -161,7 +197,8 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
           for (const unit of idle) {
             let best: { x: number; y: number; dist: number; type: ResourceNodeType } | null = null;
             for (const node of nodes) {
-              if (node.type === 'oil') continue; // gated later by age
+              const allowOil = ai.age === 'industrial' || ai.age === 'modern';
+              if (node.type === 'oil' && !allowOil) continue;
               const dist = Math.hypot(node.x - unit.position.x, node.y - unit.position.y);
               if (!best || dist < best.dist) {
                 best = { ...node, dist };
@@ -187,6 +224,68 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Build houses for pop cap
+        const aiPopRoom = ai.resources.popCap - ai.resources.population;
+        if (aiPopRoom < 4) {
+          const houseCost = { wood: 50, wealth: 20 };
+          if (canAfford(ai.resources, houseCost)) {
+            const cityTile = city ? city.tile : { x: 5, y: 5 };
+            const spot = findEmptyNear(next, cityTile.x, cityTile.y, 6);
+            if (spot) {
+              next = placeBuilding(next, 'ai', 'house', spot.x, spot.y);
+            }
+          }
+        }
+
+        // Build barracks if none
+        const hasBarracks = next.buildings.some(b => b.ownerId === 'ai' && b.type === 'barracks');
+        if (!hasBarracks) {
+          const cost = { wood: 140, wealth: 120 };
+          if (canAfford(ai.resources, cost)) {
+            const cityTile = city ? city.tile : { x: 5, y: 5 };
+            const spot = findEmptyNear(next, cityTile.x, cityTile.y, 7);
+            if (spot) {
+              next = placeBuilding(next, 'ai', 'barracks', spot.x, spot.y);
+            }
+          }
+        }
+
+        // Age up if possible
+        const currentIndex = AGE_CONFIGS.findIndex(a => a.id === ai.age);
+        const nextAge = AGE_CONFIGS[currentIndex + 1];
+        if (nextAge && canAfford(ai.resources, nextAge.nextCost)) {
+          next = ageUp(next, ai.id, nextAge.id, nextAge.nextCost);
+        }
+
+        // Train infantry/ranged
+        const trainable = next.buildings.some(b => b.ownerId === 'ai' && b.type === 'barracks');
+        if (trainable) {
+          const infantryCost = UNIT_COSTS.infantry;
+          if (canAfford(ai.resources, infantryCost) && ai.resources.population + (POP_COST.infantry ?? 1) <= ai.resources.popCap) {
+            const barracks = next.buildings.find(b => b.ownerId === 'ai' && b.type === 'barracks') || city;
+            if (barracks) {
+              next = spawnUnitUtil(next, 'ai', 'infantry', { x: barracks.tile.x + 1, y: barracks.tile.y + 1 });
+            }
+          }
+          const rangedCost = UNIT_COSTS.ranged;
+          if (canAfford(ai.resources, rangedCost) && ai.resources.population + (POP_COST.ranged ?? 1) <= ai.resources.popCap) {
+            const barracks = next.buildings.find(b => b.ownerId === 'ai' && b.type === 'barracks') || city;
+            if (barracks) {
+              next = spawnUnitUtil(next, 'ai', 'ranged', { x: barracks.tile.x + 1, y: barracks.tile.y + 1 });
+            }
+          }
+        }
+
+        // Attack if army large enough
+        const army = next.units.filter(u => u.ownerId === 'ai' && u.type !== 'citizen');
+        if (army.length >= 6) {
+          const enemyCity = next.buildings.find(b => b.ownerId === next.localPlayerId && b.type === 'city_center');
+          if (enemyCity) {
+            const target = { x: enemyCity.tile.x, y: enemyCity.tile.y };
+            next = issueOrder(next, army.map(a => a.id), { kind: 'attack', target, targetBuildingId: enemyCity.id });
+          }
+        }
+
         return next;
       });
     }, 1500);
@@ -207,8 +306,9 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
       selectUnits,
       placeBuilding: handlePlaceBuilding,
       ageUp: handleAgeUp,
+      setAIDifficulty,
     }),
-    [state, setSpeed, spawnCitizen, trainUnit, issueMove, issueGather, issueAttack, selectUnits, handlePlaceBuilding, handleAgeUp]
+    [state, setSpeed, spawnCitizen, trainUnit, issueMove, issueGather, issueAttack, selectUnits, handlePlaceBuilding, handleAgeUp, setAIDifficulty]
   );
 
   return <RiseGameContext.Provider value={value}>{children}</RiseGameContext.Provider>;

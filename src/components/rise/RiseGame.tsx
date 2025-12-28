@@ -14,7 +14,7 @@ const SPEED_LABELS: Record<0 | 1 | 2 | 3, string> = {
 };
 
 export default function RiseGame() {
-  const { state, setSpeed, spawnCitizen, trainUnit, ageUp } = useRiseGame();
+  const { state, setSpeed, spawnCitizen, trainUnit, ageUp, setAIDifficulty } = useRiseGame();
   const [activeBuild, setActiveBuild] = React.useState<string | null>(null);
   const player = state.players.find(p => p.id === state.localPlayerId);
   const ageLabel = useMemo(() => {
@@ -22,6 +22,7 @@ export default function RiseGame() {
     const cfg = AGE_CONFIGS.find(a => a.id === player.age);
     return cfg?.label ?? player.age;
   }, [player]);
+  const ai = state.players.find(p => p.id === 'ai');
 
   if (!player) return null;
 
@@ -58,6 +59,20 @@ export default function RiseGame() {
                 }`}
               >
                 {SPEED_LABELS[s]}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800 rounded-lg px-2 py-1">
+            <span className="text-xs text-slate-400">AI</span>
+            {(['easy','medium','hard'] as const).map(d => (
+              <button
+                key={d}
+                onClick={() => setAIDifficulty(d)}
+                className={`px-2 py-1 rounded-md text-xs font-semibold ${
+                  ai?.controller.difficulty === d ? 'bg-amber-500 text-black' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {d}
               </button>
             ))}
           </div>
