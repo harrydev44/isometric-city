@@ -2226,6 +2226,92 @@ export function simulateTick(state: GameState): GameState {
     }
   }
 
+  // Fire spread simulation (second pass)
+  // "Untamed" fires (low fire service coverage) can ignite adjacent buildings.
+  if (state.disastersEnabled) {
+    // Coverage in this sim is used as a probability input: fightingChance = coverage / 300.
+    // Treat fires below this as effectively "untamed" and allowed to spread.
+    const UNTAMED_FIRE_COVERAGE_THRESHOLD = 45; // ~= 15% fighting chance
+    const FIRE_SPREAD_BASE_CHANCE = 0.006; // per tick, per burning tile (will be adjusted per neighbor)
+    const FIRE_SPREAD_MIN_PROGRESS = 15; // don't spread immediately on ignition
+
+    const directions = [
+      { dx: -1, dy: 0 },
+      { dx: 1, dy: 0 },
+      { dx: 0, dy: -1 },
+      { dx: 0, dy: 1 },
+    ] as const;
+
+    const isIgnitableType = (t: BuildingType): boolean => {
+      // NOTE: 'empty' footprint tiles are ignited only via their origin building.
+      return t !== 'grass' && t !== 'water' && t !== 'road' && t !== 'bridge' && t !== 'rail' && t !== 'tree' && t !== 'empty';
+    };
+
+    const igniteAt = (tx: number, ty: number): boolean => {
+      if (tx < 0 || ty < 0 || tx >= size || ty >= size) return false;
+      const targetTile = newGrid[ty][tx];
+
+      // Map "empty" footprint tiles back to their origin building.
+      if (targetTile.building.type === 'empty') {
+        const origin = findBuildingOrigin(newGrid, tx, ty, size);
+        if (!origin) return false;
+        return igniteAt(origin.originX, origin.originY);
+      }
+
+      if (!isIgnitableType(targetTile.building.type)) return false;
+      if (targetTile.building.onFire) return false;
+
+      const modTile = getModifiableTile(tx, ty);
+      modTile.building.onFire = true;
+      modTile.building.fireProgress = 0;
+      return true;
+    };
+
+    // Scan for burning tiles in the post-update grid and attempt limited spread.
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const burningTile = newGrid[y][x];
+        if (!burningTile.building.onFire) continue;
+
+        const coverageHere = services.fire[y][x];
+        if (coverageHere >= UNTAMED_FIRE_COVERAGE_THRESHOLD) continue;
+        if ((burningTile.building.fireProgress || 0) < FIRE_SPREAD_MIN_PROGRESS) continue;
+
+        // Shuffle directions lightly to avoid bias (Fisher-Yates on 4 items).
+        const shuffled = directions.slice() as { dx: number; dy: number }[];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = shuffled[i];
+          shuffled[i] = shuffled[j];
+          shuffled[j] = tmp;
+        }
+
+        // Limit to at most one new ignition per burning tile per tick.
+        for (const { dx, dy } of shuffled) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+
+          const target = newGrid[ny][nx];
+          // No point attempting on clearly non-ignitable terrain.
+          if (!isIgnitableType(target.building.type) && target.building.type !== 'empty') continue;
+
+          // Nearby fire coverage reduces spread chance (treated as passive containment).
+          const neighborCoverage = services.fire[ny][nx];
+          const neighborContainment = Math.max(0, Math.min(1, neighborCoverage / 300));
+
+          // More progressed fires spread a bit more aggressively.
+          const intensity = 0.5 + (burningTile.building.fireProgress / 100) * 0.75; // 0.5..1.25
+
+          const spreadChance = FIRE_SPREAD_BASE_CHANCE * (1 - neighborContainment) * intensity;
+          if (Math.random() < spreadChance) {
+            if (igniteAt(nx, ny)) break;
+          }
+        }
+      }
+    }
+  }
+
   // Update budget costs
   const newBudget = updateBudgetCosts(newGrid, state.budget);
 
