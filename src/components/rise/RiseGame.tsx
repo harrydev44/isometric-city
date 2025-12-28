@@ -10,6 +10,7 @@ import { TILE_HEIGHT, TILE_WIDTH } from '@/components/game/types';
 import { TopStats } from './TopStats';
 import { SelectionPanel } from './SelectionPanel';
 import { Tips } from './Tips';
+import { AgeProgress } from './AgeProgress';
 
 const SPEED_LABELS: Record<0 | 1 | 2 | 3, string> = {
   0: 'Pause',
@@ -231,8 +232,9 @@ export default function RiseGame() {
           )}
         </div>
 
-        <div className="w-64">
+        <div className="w-64 space-y-3">
           <RiseMinimap state={state} onNavigate={centerOnTile} />
+          <AgeProgress age={player.age} elapsedSinceAge={state.elapsedSeconds - (player.ageStartSeconds ?? 0)} />
         </div>
       </div>
 
