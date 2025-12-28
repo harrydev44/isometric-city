@@ -2207,6 +2207,55 @@ export function simulateTick(state: GameState): GameState {
           tile.building.fireProgress = 0;
         } else {
           tile.building.fireProgress += 2/3; // Reduced from 1 to make fires last ~50% longer
+          
+          // Fire spread to adjacent buildings
+          // Spread chance increases with fire progress and decreases with fire coverage
+          // Base spread chance is 0.5% per tick when fire is at 50% progress
+          const spreadBaseChance = 0.005 * (tile.building.fireProgress / 50);
+          const spreadReduction = fireCoverage / 200; // Fire coverage reduces spread
+          const spreadChance = Math.max(0, spreadBaseChance - spreadReduction);
+          
+          // Check all 4 adjacent tiles for potential fire spread
+          const adjacentOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+          for (const [dx, dy] of adjacentOffsets) {
+            const nx = x + dx;
+            const ny = y + dy;
+            
+            // Bounds check
+            if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+            
+            const adjacentTile = newGrid[ny][nx];
+            const adjacentBuilding = adjacentTile.building;
+            
+            // Skip if already on fire or not a flammable building type
+            if (adjacentBuilding.onFire) continue;
+            if (adjacentBuilding.type === 'grass' || 
+                adjacentBuilding.type === 'water' || 
+                adjacentBuilding.type === 'road' || 
+                adjacentBuilding.type === 'bridge' ||
+                adjacentBuilding.type === 'tree' ||
+                adjacentBuilding.type === 'empty') continue;
+            
+            // Fire coverage at adjacent tile also affects spread resistance
+            const adjacentFireCoverage = services.fire[ny][nx];
+            const adjacentResistance = adjacentFireCoverage / 150;
+            const finalSpreadChance = Math.max(0, spreadChance - adjacentResistance);
+            
+            if (Math.random() < finalSpreadChance) {
+              // Ensure we have a mutable copy of the adjacent tile
+              if (newGrid[ny] === state.grid[ny]) {
+                newGrid[ny] = [...state.grid[ny]];
+              }
+              if (newGrid[ny][nx] === state.grid[ny]?.[nx]) {
+                newGrid[ny][nx] = { ...adjacentTile, building: { ...adjacentBuilding } };
+              } else {
+                newGrid[ny][nx] = { ...newGrid[ny][nx], building: { ...newGrid[ny][nx].building } };
+              }
+              newGrid[ny][nx].building.onFire = true;
+              newGrid[ny][nx].building.fireProgress = 0;
+            }
+          }
+          
           if (tile.building.fireProgress >= 100) {
             tile.building = createBuilding('grass');
             tile.zone = 'none';
