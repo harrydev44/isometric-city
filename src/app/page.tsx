@@ -471,90 +471,92 @@ export default function HomePage() {
   if (isMobile) {
     return (
       <MultiplayerContextProvider>
-        <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 safe-area-top safe-area-bottom overflow-y-auto">
-          {/* Title */}
-          <h1 className="text-5xl sm:text-6xl font-light tracking-wider text-white/90 mb-6">
-            IsoCity
-          </h1>
-          
-          {/* Sprite Gallery - keep visible even when saves exist */}
-          <div className="mb-6">
-            <SpriteGallery count={9} cols={3} cellSize={72} />
-          </div>
-          
-          {/* Buttons */}
-          <div className="flex flex-col gap-3 w-full max-w-xs">
-            <Button 
-              onClick={() => setShowGame(true)}
-              className="w-full py-6 text-xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
-            >
-              {hasSaved ? 'Continue' : 'New Game'}
-            </Button>
+        <main className="min-h-[100dvh] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center px-4 py-8 safe-area-top safe-area-bottom overflow-y-auto">
+          <div className="flex flex-col items-center justify-center flex-1 w-full max-w-xs">
+            {/* Title */}
+            <h1 className="text-4xl font-light tracking-wider text-white/90 mb-5">
+              IsoCity
+            </h1>
             
-            <Button 
-              onClick={() => setShowCoopModal(true)}
-              variant="outline"
-              className="w-full py-6 text-xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
-            >
-              Co-op
-            </Button>
-            
-            <Button 
-              onClick={async () => {
-                // Clear any room code from URL to prevent multiplayer conflicts
-                if (window.location.search.includes('room=')) {
-                  window.history.replaceState({}, '', '/');
-                  setPendingRoomCode(null);
-                }
-                const response = await fetch('/example-states/example_state_9.json');
-                const exampleState = await response.json();
-                try {
-                  const compressed = compressToUTF16(JSON.stringify(exampleState));
-                  localStorage.setItem(STORAGE_KEY, compressed);
-                } catch (e) {
-                  console.error('Failed to save example state:', e);
-                }
-                setShowGame(true);
-              }}
-              variant="outline"
-              className="w-full py-6 text-xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
-            >
-              Load Example
-            </Button>
-            <div className="flex items-center justify-between w-full">
-              <a
-                href="https://github.com/amilich/isometric-city"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-left py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
-              >
-                Open GitHub
-              </a>
-              <LanguageSelector variant="ghost" className="text-white/40 hover:text-white/70 hover:bg-white/10" />
+            {/* Sprite Gallery - keep visible even when saves exist */}
+            <div className="mb-5">
+              <SpriteGallery count={9} cols={3} cellSize={64} />
             </div>
-          </div>
           
-          {/* Saved Cities */}
-          {savedCities.length > 0 && (
-            <div className="w-full max-w-xs mt-4">
-              <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
-                Saved Cities
-              </h2>
-              <div 
-                className="flex flex-col gap-2 max-h-48 overflow-y-auto overscroll-y-contain"
-                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+            {/* Buttons */}
+            <div className="flex flex-col gap-2.5 w-full">
+              <Button 
+                onClick={() => setShowGame(true)}
+                className="w-full py-5 text-lg font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
               >
-                {savedCities.slice(0, 5).map((city) => (
-                  <SavedCityCard
-                    key={city.id}
-                    city={city}
-                    onLoad={() => loadSavedCity(city)}
-                    onDelete={() => deleteSavedCity(city)}
-                  />
-                ))}
+                {hasSaved ? 'Continue' : 'New Game'}
+              </Button>
+              
+              <Button 
+                onClick={() => setShowCoopModal(true)}
+                variant="outline"
+                className="w-full py-5 text-lg font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+              >
+                Co-op
+              </Button>
+              
+              <Button 
+                onClick={async () => {
+                  // Clear any room code from URL to prevent multiplayer conflicts
+                  if (window.location.search.includes('room=')) {
+                    window.history.replaceState({}, '', '/');
+                    setPendingRoomCode(null);
+                  }
+                  const response = await fetch('/example-states/example_state_9.json');
+                  const exampleState = await response.json();
+                  try {
+                    const compressed = compressToUTF16(JSON.stringify(exampleState));
+                    localStorage.setItem(STORAGE_KEY, compressed);
+                  } catch (e) {
+                    console.error('Failed to save example state:', e);
+                  }
+                  setShowGame(true);
+                }}
+                variant="outline"
+                className="w-full py-5 text-lg font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
+              >
+                Load Example
+              </Button>
+              <div className="flex items-center justify-between w-full">
+                <a
+                  href="https://github.com/amilich/isometric-city"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-left py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
+                >
+                  Open GitHub
+                </a>
+                <LanguageSelector variant="ghost" className="text-white/40 hover:text-white/70 hover:bg-white/10" />
               </div>
             </div>
-          )}
+            
+            {/* Saved Cities */}
+            {savedCities.length > 0 && (
+              <div className="w-full mt-4">
+                <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
+                  Saved Cities
+                </h2>
+                <div 
+                  className="flex flex-col gap-2 max-h-36 overflow-y-auto overscroll-y-contain"
+                  style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+                >
+                  {savedCities.slice(0, 5).map((city) => (
+                    <SavedCityCard
+                      key={city.id}
+                      city={city}
+                      onLoad={() => loadSavedCity(city)}
+                      onDelete={() => deleteSavedCity(city)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           
           {/* Co-op Modal */}
           <CoopModal
