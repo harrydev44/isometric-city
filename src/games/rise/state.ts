@@ -14,6 +14,7 @@ import {
   TerrainType,
   UnitOrder,
 } from './types';
+import { BUILDING_POP_BONUS } from './constants';
 
 function newId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -243,6 +244,10 @@ export function placeBuilding(state: RiseGameState, ownerId: string, type: RiseB
 
   const building = createBuilding(ownerId, type, tileX, tileY);
   const newResources = payCost(player.resources, cost);
+  const popBonus = BUILDING_POP_BONUS[type] ?? 0;
+  if (popBonus) {
+    newResources.popCap += popBonus;
+  }
 
   const newGrid = grid.map(row => row.slice());
   newGrid[tileY] = [...grid[tileY]];
@@ -261,7 +266,7 @@ export function tickState(state: RiseGameState, deltaSeconds: number): RiseGameS
   const speedMult = SPEED_MULTIPLIERS[state.speed];
   const scaledDelta = deltaSeconds * speedMult;
 
-  const updatedUnits: RiseUnit[] = [];
+  let updatedUnits: RiseUnit[] = [];
   const updatedPlayers = state.players.map(p => ({ ...p }));
   const grid = state.tiles;
 
@@ -270,6 +275,9 @@ export function tickState(state: RiseGameState, deltaSeconds: number): RiseGameS
     if (!p) return;
     p.resources[key] += amount * scaledDelta;
   }
+
+  const buildingsById = new Map(state.buildings.map(b => [b.id, b]));
+  const unitsById = new Map(state.units.map(u => [u.id, u]));
 
   for (const unit of state.units) {
     let newUnit = { ...unit };
@@ -317,13 +325,82 @@ export function tickState(state: RiseGameState, deltaSeconds: number): RiseGameS
       newUnit.attack = { ...newUnit.attack, cooldownRemaining: Math.max(0, newUnit.attack.cooldownRemaining - scaledDelta) };
     }
 
+    // Resolve attack damage if in range
+    if (newUnit.order.kind === 'attack' && newUnit.attack) {
+      const targetUnit = newUnit.order.targetUnitId ? unitsById.get(newUnit.order.targetUnitId) : undefined;
+      const targetBuilding = newUnit.order.targetBuildingId ? buildingsById.get(newUnit.order.targetBuildingId) : undefined;
+      if (!targetUnit && !targetBuilding) {
+        newUnit.order = { kind: 'idle' };
+      } else {
+        const targetPos = targetUnit
+          ? targetUnit.position
+          : targetBuilding
+            ? { x: targetBuilding.tile.x, y: targetBuilding.tile.y }
+            : newUnit.order.target;
+        const dist = Math.hypot(targetPos.x - newUnit.position.x, targetPos.y - newUnit.position.y);
+        const inRange = dist <= (newUnit.attack.range ?? 1);
+        if (inRange && newUnit.attack.cooldownRemaining <= 0) {
+          const dmg = newUnit.attack.damage;
+          if (targetUnit && targetUnit.ownerId !== newUnit.ownerId) {
+            targetUnit.hp -= dmg;
+            newUnit.attack = { ...newUnit.attack, cooldownRemaining: newUnit.attack.cooldown };
+          } else if (targetBuilding && targetBuilding.ownerId !== newUnit.ownerId) {
+            targetBuilding.hp -= dmg;
+            newUnit.attack = { ...newUnit.attack, cooldownRemaining: newUnit.attack.cooldown };
+          }
+        }
+      }
+    }
+
     updatedUnits.push(newUnit);
+  }
+
+  // Cull dead units
+  updatedUnits = updatedUnits.filter(u => u.hp > 0);
+
+  // Cull dead buildings and clear tiles
+  let updatedBuildings = state.buildings.map(b => ({ ...b })).filter(b => b.hp > 0);
+  const removedBuildings = state.buildings.filter(b => b.hp <= 0);
+  const removedBuildingIds = new Set(removedBuildings.map(b => b.id));
+  if (removedBuildingIds.size > 0) {
+    const newGrid = state.tiles.map(row => row.slice());
+    for (let y = 0; y < newGrid.length; y++) {
+      for (let x = 0; x < newGrid.length; x++) {
+        if (newGrid[y][x].buildingId && removedBuildingIds.has(newGrid[y][x].buildingId!)) {
+          newGrid[y][x] = { ...newGrid[y][x], buildingId: undefined, ownerId: undefined };
+        }
+      }
+    }
+
+    // Pop cap adjustment
+    if (removedBuildings.length > 0) {
+      for (const rb of removedBuildings) {
+        const bonus = BUILDING_POP_BONUS[rb.type] ?? 0;
+        if (bonus) {
+          const player = updatedPlayers.find(p => p.id === rb.ownerId);
+          if (player) {
+            player.resources.popCap = Math.max(player.resources.population, player.resources.popCap - bonus);
+          }
+        }
+      }
+    }
+
+    return {
+      ...state,
+      units: updatedUnits,
+      players: updatedPlayers,
+      buildings: updatedBuildings,
+      tiles: newGrid,
+      tick: state.tick + 1,
+      elapsedSeconds: state.elapsedSeconds + scaledDelta,
+    };
   }
 
   return {
     ...state,
     units: updatedUnits,
     players: updatedPlayers,
+    buildings: updatedBuildings,
     tick: state.tick + 1,
     elapsedSeconds: state.elapsedSeconds + scaledDelta,
   };

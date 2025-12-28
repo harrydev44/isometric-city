@@ -19,6 +19,7 @@ type RiseGameContextValue = {
   setSpeed: (speed: 0 | 1 | 2 | 3) => void;
   tick: () => void;
   spawnCitizen: () => void;
+  trainUnit: (type: 'infantry' | 'ranged' | 'vehicle' | 'siege' | 'air') => void;
   issueMove: (unitIds: string[], target: { x: number; y: number }) => void;
   issueGather: (unitIds: string[], target: { x: number; y: number }, resource: ResourceNodeType) => void;
   issueAttack: (unitIds: string[], target: { x: number; y: number }, unitId?: string, buildingId?: string) => void;
@@ -61,6 +62,33 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
     if (!city) return;
     setState(prev => spawnUnitUtil(prev, prev.localPlayerId, 'citizen', { x: city.tile.x + 1, y: city.tile.y + 1 }));
   }, [state.buildings, state.localPlayerId]);
+
+  const trainUnit = useCallback(
+    (type: 'infantry' | 'ranged' | 'vehicle' | 'siege' | 'air') => {
+      setState(prev => {
+        const ownerId = prev.localPlayerId;
+        const player = prev.players.find(p => p.id === ownerId);
+        if (!player) return prev;
+        // production buildings
+        const hasBarracks = prev.buildings.some(b => b.ownerId === ownerId && b.type === 'barracks');
+        const hasFactory = prev.buildings.some(b => b.ownerId === ownerId && (b.type === 'factory' || b.type === 'siege_factory'));
+        const hasAirbase = prev.buildings.some(b => b.ownerId === ownerId && b.type === 'airbase');
+        const canAir = player.age === 'modern' && hasAirbase;
+        let allowed = false;
+        if ((type === 'infantry' || type === 'ranged') && hasBarracks) allowed = true;
+        if ((type === 'vehicle' || type === 'siege') && hasFactory) allowed = true;
+        if (type === 'air' && canAir) allowed = true;
+        if (!allowed) return prev;
+
+        const spawnAt =
+          prev.buildings.find(b => b.ownerId === ownerId && ((type === 'air' && b.type === 'airbase') || (type === 'vehicle' || type === 'siege') ? b.type === 'factory' || b.type === 'siege_factory' : b.type === 'barracks')) ||
+          prev.buildings.find(b => b.ownerId === ownerId && b.type === 'city_center');
+        if (!spawnAt) return prev;
+        return spawnUnitUtil(prev, ownerId, type, { x: spawnAt.tile.x + 1, y: spawnAt.tile.y + 1 });
+      });
+    },
+    []
+  );
 
   const issueMove = useCallback((unitIds: string[], target: { x: number; y: number }) => {
     setState(prev => issueOrder(prev, unitIds, { kind: 'move', target }));
@@ -172,6 +200,7 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
       setSpeed,
       tick: () => setState(prev => tickState(prev, 0.016)),
       spawnCitizen,
+      trainUnit,
       issueMove,
       issueGather,
       issueAttack,
@@ -179,7 +208,7 @@ export function RiseGameProvider({ children }: { children: React.ReactNode }) {
       placeBuilding: handlePlaceBuilding,
       ageUp: handleAgeUp,
     }),
-    [state, setSpeed, spawnCitizen, issueMove, issueGather, issueAttack, selectUnits, handlePlaceBuilding, handleAgeUp]
+    [state, setSpeed, spawnCitizen, trainUnit, issueMove, issueGather, issueAttack, selectUnits, handlePlaceBuilding, handleAgeUp]
   );
 
   return <RiseGameContext.Provider value={value}>{children}</RiseGameContext.Provider>;

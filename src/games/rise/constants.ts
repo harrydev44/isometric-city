@@ -115,3 +115,8 @@ export const BUILDING_HP: Record<string, number> = {
   fort: 1600,
   tower: 650,
 };
+
+export const BUILDING_POP_BONUS: Record<string, number> = {
+  city_center: 10,
+  house: 5,
+};

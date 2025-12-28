@@ -63,8 +63,14 @@ function getNodeAccent(tile: RiseTile): string | null {
   }
 }
 
-export function RiseCanvas() {
-  const { state, issueMove, issueGather, selectUnits } = useRiseGame();
+export function RiseCanvas({
+  activeBuild,
+  onBuildPlaced,
+}: {
+  activeBuild?: string | null;
+  onBuildPlaced?: () => void;
+}) {
+  const { state, issueMove, issueGather, selectUnits, placeBuilding, issueAttack } = useRiseGame();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -197,28 +203,61 @@ export function RiseCanvas() {
       }
       selectUnits(selected);
     } else if (dragStart) {
-      // Single click selection
+      // Single click selection or build placement
       const { offsetX, offsetY } = e.nativeEvent;
-      let closest: { id: string; dist: number } | null = null;
-      for (const u of state.units) {
-        const { x: sx, y: sy } = gridToScreen(u.position.x, u.position.y, offset);
-        const dist = Math.hypot(sx - offsetX, sy - offsetY);
-        if (!closest || dist < closest.dist) {
-          closest = { id: u.id, dist };
+      const { x, y } = screenToGrid(offsetX, offsetY, offset);
+      if (activeBuild) {
+        placeBuilding(activeBuild, x, y);
+        onBuildPlaced?.();
+      } else {
+        let closest: { id: string; dist: number } | null = null;
+        for (const u of state.units) {
+          const { x: sx, y: sy } = gridToScreen(u.position.x, u.position.y, offset);
+          const dist = Math.hypot(sx - offsetX, sy - offsetY);
+          if (!closest || dist < closest.dist) {
+            closest = { id: u.id, dist };
+          }
+        }
+        if (closest && closest.dist < 20) {
+          selectUnits([closest.id]);
+        } else {
+          selectUnits([]);
         }
       }
-      if (closest && closest.dist < 20) {
-        selectUnits([closest.id]);
-      } else {
-        selectUnits([]);
-      }
     } else if (e.button === 2) {
-      const { x, y } = screenToGrid(e.nativeEvent.offsetX, e.nativeEvent.offsetY, offset);
+      const { offsetX, offsetY } = e.nativeEvent;
+      const { x, y } = screenToGrid(offsetX, offsetY, offset);
       const targetTile = state.tiles[y]?.[x];
       const nodeType = targetTile?.node?.type;
       const unitIds = Array.from(state.selectedUnitIds);
       if (unitIds.length > 0) {
-        if (nodeType) {
+        // Check enemy unit or building
+        const clickX = offsetX;
+        const clickY = offsetY;
+        let enemyUnit: { id: string; dist: number } | null = null;
+        for (const u of state.units) {
+          if (u.ownerId === state.localPlayerId) continue;
+          const { x: sx, y: sy } = gridToScreen(u.position.x, u.position.y, offset);
+          const dist = Math.hypot(sx - clickX, sy - clickY);
+          if (dist < 18 && (!enemyUnit || dist < enemyUnit.dist)) {
+            enemyUnit = { id: u.id, dist };
+          }
+        }
+        let enemyBuilding: { id: string; dist: number } | null = null;
+        for (const b of state.buildings) {
+          if (b.ownerId === state.localPlayerId) continue;
+          const { x: sx, y: sy } = gridToScreen(b.tile.x, b.tile.y, offset);
+          const dist = Math.hypot(sx - clickX, sy - clickY);
+          if (dist < 22 && (!enemyBuilding || dist < enemyBuilding.dist)) {
+            enemyBuilding = { id: b.id, dist };
+          }
+        }
+
+        if (enemyUnit) {
+          issueAttack(unitIds, { x, y }, enemyUnit.id, undefined);
+        } else if (enemyBuilding) {
+          issueAttack(unitIds, { x, y }, undefined, enemyBuilding.id);
+        } else if (nodeType) {
           issueGather(unitIds, { x, y }, nodeType);
         } else {
           issueMove(unitIds, { x, y });
