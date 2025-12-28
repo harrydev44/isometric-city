@@ -12,6 +12,8 @@ const items = [
   { label: 'Enemy Units', color: '#facc15' },
   { label: 'Friendly Buildings', color: '#22d3ee' },
   { label: 'Enemy Buildings', color: '#f97316' },
+  { label: 'Friendly Territory', color: 'rgba(56,189,248,0.35)' },
+  { label: 'Enemy Territory', color: 'rgba(249,115,22,0.35)' },
 ];
 
 export function Legend() {

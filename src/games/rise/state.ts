@@ -29,6 +29,55 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
+function recomputeTerritory(grid: RiseTile[][], buildings: RiseBuilding[], size: number): RiseTile[][] {
+  const dist: number[][] = Array.from({ length: size }, () => Array(size).fill(Number.POSITIVE_INFINITY));
+  const newGrid: RiseTile[][] = grid.map(row => row.map(t => ({ ...t, ownerId: undefined } as RiseTile)));
+  const radiusByType: Partial<Record<RiseBuildingType, number>> = {
+    city_center: 6,
+    fort: 5,
+    tower: 3,
+    barracks: 2,
+    factory: 2,
+    siege_factory: 2,
+    airbase: 2,
+    market: 2,
+    library: 2,
+    university: 2,
+    lumber_camp: 2,
+    mine: 2,
+    oil_rig: 2,
+    house: 2,
+    farm: 1,
+  };
+
+  for (const b of buildings) {
+    const radius = radiusByType[b.type] ?? 2;
+    for (let dy = -radius; dy <= radius; dy++) {
+      const y = b.tile.y + dy;
+      if (y < 0 || y >= size) continue;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = b.tile.x + dx;
+        if (x < 0 || x >= size) continue;
+        const manhattan = Math.abs(dx) + Math.abs(dy);
+        if (manhattan > radius) continue;
+        if (manhattan >= dist[y][x]) continue;
+        dist[y][x] = manhattan;
+        newGrid[y][x].ownerId = b.ownerId;
+      }
+    }
+  }
+
+  // Ensure building tiles keep their owner even if radiusByType was 0
+  for (const b of buildings) {
+    const { x, y } = b.tile;
+    if (x >= 0 && y >= 0 && x < size && y < size) {
+      newGrid[y][x].ownerId = b.ownerId;
+    }
+  }
+
+  return newGrid;
+}
+
 function isPassable(state: RiseGameState, x: number, y: number, ownerId: string): boolean {
   if (x < 0 || y < 0 || x >= state.gridSize || y >= state.gridSize) return false;
   const tile = state.tiles[y][x];
@@ -249,13 +298,15 @@ export function initializeRiseState(gridSize = 48): RiseGameState {
     createUnit('ai', 'citizen', aiCity.x + 2, aiCity.y),
   ];
 
+  const tilesWithTerritory = recomputeTerritory(tiles, buildings, gridSize);
+
   return {
     id: newId(),
     tick: 0,
     elapsedSeconds: 0,
     speed: 1,
     gridSize,
-    tiles,
+    tiles: tilesWithTerritory,
     players,
     units,
     buildings,
@@ -343,11 +394,14 @@ export function placeBuilding(state: RiseGameState, ownerId: string, type: RiseB
   newGrid[tileY] = [...grid[tileY]];
   newGrid[tileY][tileX] = { ...grid[tileY][tileX], buildingId: building.id, ownerId };
 
+  const updatedBuildings = [...state.buildings, building];
+  const territory = recomputeTerritory(newGrid, updatedBuildings, state.gridSize);
+
   return {
     ...state,
-    tiles: newGrid,
+    tiles: territory,
     players: state.players.map(p => (p.id === ownerId ? { ...p, resources: newResources } : p)),
-    buildings: [...state.buildings, building],
+    buildings: updatedBuildings,
   };
 }
 
@@ -510,12 +564,14 @@ export function tickState(state: RiseGameState, deltaSeconds: number): RiseGameS
       }
     }
 
+    const territory = recomputeTerritory(newGrid, updatedBuildings, state.gridSize);
+
     return {
       ...state,
       units: updatedUnits,
       players: updatedPlayers,
       buildings: updatedBuildings,
-      tiles: newGrid,
+      tiles: territory,
       tick: state.tick + 1,
       elapsedSeconds: state.elapsedSeconds + scaledDelta,
     };

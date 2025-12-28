@@ -63,6 +63,15 @@ function getNodeAccent(tile: RiseTile): string | null {
   }
 }
 
+function getTerritoryStyle(tile: RiseTile, localPlayerId: string): { fill: string; stroke: string } | null {
+  if (!tile.ownerId) return null;
+  const friendly = tile.ownerId === localPlayerId;
+  return {
+    fill: friendly ? 'rgba(56,189,248,0.12)' : 'rgba(249,115,22,0.10)',
+    stroke: friendly ? 'rgba(56,189,248,0.35)' : 'rgba(249,115,22,0.35)',
+  };
+}
+
 export function RiseCanvas({
   activeBuild,
   onBuildPlaced,
@@ -129,6 +138,21 @@ export function RiseCanvas({
         const tile = tiles[y][x];
         const { x: sx, y: sy } = gridToScreen(x, y, offset);
         drawDiamond(ctx, sx, sy, TW, TH, getTileColor(tile), '#0b1220');
+        const territory = getTerritoryStyle(tile, state.localPlayerId);
+        if (territory) {
+          const neighbors = [
+            { x: x + 1, y },
+            { x: x - 1, y },
+            { x, y: y + 1 },
+            { x, y: y - 1 },
+          ];
+          const isBorder = neighbors.some(n => {
+            if (n.x < 0 || n.y < 0 || n.x >= gridSize || n.y >= gridSize) return true;
+            const nOwner = tiles[n.y][n.x].ownerId;
+            return nOwner !== tile.ownerId;
+          });
+          drawDiamond(ctx, sx, sy, TW * 0.9, TH * 0.65, territory.fill, isBorder ? territory.stroke : 'transparent');
+        }
         const accent = getNodeAccent(tile);
         if (accent) {
           ctx.beginPath();

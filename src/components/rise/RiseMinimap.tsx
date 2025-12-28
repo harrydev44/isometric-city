@@ -29,6 +29,10 @@ export function RiseMinimap({ state, onNavigate }: { state: RiseGameState; onNav
         const tile = state.tiles[y][x];
         ctx.fillStyle = TILE_COLORS[tile.terrain] || '#111827';
         ctx.fillRect(x * scale, y * scale, scale, scale);
+        if (tile.ownerId) {
+          ctx.fillStyle = tile.ownerId === state.localPlayerId ? 'rgba(34,211,238,0.25)' : 'rgba(249,115,22,0.22)';
+          ctx.fillRect(x * scale, y * scale, scale, scale);
+        }
       }
     }
 
