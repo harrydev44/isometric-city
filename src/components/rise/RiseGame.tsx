@@ -10,6 +10,7 @@ import { RiseMinimap } from './RiseMinimap';
 import { TILE_HEIGHT, TILE_WIDTH } from '@/components/game/types';
 import { TopStats } from './TopStats';
 import { SelectionPanel } from './SelectionPanel';
+import { Tips } from './Tips';
 
 const SPEED_LABELS: Record<0 | 1 | 2 | 3, string> = {
   0: 'Pause',
@@ -184,6 +185,7 @@ export default function RiseGame() {
             Left click: place building (when a build is selected). Drag: select units. Right click: move / gather / attack.
           </div>
           <SelectionPanel state={state} />
+          <Tips />
         </div>
 
         <div className="flex-1 min-h-[720px] rounded-lg overflow-hidden border border-slate-800 bg-slate-900/60">
