@@ -269,14 +269,28 @@ export function useMultiplayerSync() {
     if (!multiplayer || multiplayer.connectionState !== 'connected') return;
     
     const now = Date.now();
-    if (now - lastUpdateRef.current < 2000) return; // Throttle to 2 second intervals
+    
+    // Check if running on mobile for performance optimization
+    const isMobileDevice = typeof window !== 'undefined' && (
+      window.innerWidth < 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    );
+    
+    // Check for big city (gridSize > 60 is considered big)
+    const isBigCity = game.state.gridSize > 60;
+    
+    // Throttle multiplayer syncs more aggressively on mobile with big cities
+    // Desktop: 2 seconds, Mobile: 3 seconds, Mobile Big City: 5 seconds
+    const syncInterval = (isMobileDevice && isBigCity) ? 5000 : (isMobileDevice ? 3000 : 2000);
+    if (now - lastUpdateRef.current < syncInterval) return;
     lastUpdateRef.current = now;
     
     // Update the game state - provider will save to Supabase database (throttled)
     multiplayer.updateGameState(game.state);
     
-    // Also update the local saved cities index (less frequently - every 10 seconds)
-    if (multiplayer.roomCode && now - lastIndexUpdateRef.current > 10000) {
+    // Also update the local saved cities index (less frequently - every 15 seconds on mobile big cities)
+    const indexInterval = (isMobileDevice && isBigCity) ? 15000 : 10000;
+    if (multiplayer.roomCode && now - lastIndexUpdateRef.current > indexInterval) {
       lastIndexUpdateRef.current = now;
       updateSavedCitiesIndex(game.state, multiplayer.roomCode);
     }

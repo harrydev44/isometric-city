@@ -99,8 +99,10 @@ export function useAircraftSystems(
       return;
     }
 
-    // Calculate max airplanes based on population (1 per 2k population, min 25, max 80)
-    const maxAirplanes = Math.min(80, Math.max(25, Math.floor(totalPopulation / 2000) * 3));
+    // Calculate max airplanes based on population (1 per 2k population)
+    // Use lower limits on mobile for performance
+    const airplaneLimit = isMobile ? 4 : 15;
+    const maxAirplanes = Math.min(airplaneLimit, Math.max(2, Math.floor(totalPopulation / 5000)));
     
     // Speed multiplier based on game speed
     const speedMultiplier = currentSpeed === 1 ? 1 : currentSpeed === 2 ? 1.5 : 2;
@@ -334,11 +336,12 @@ export function useAircraftSystems(
       return;
     }
 
-    // Calculate max helicopters based on heliports and population (1 per 1k population, min 6, max 60)
-    // Also scale with number of heliports available
-    const populationBased = Math.floor(totalPopulation / 1000);
-    const heliportBased = Math.floor(heliports.length * 2.5);
-    const maxHelicopters = Math.min(60, Math.max(6, Math.min(populationBased, heliportBased)));
+    // Calculate max helicopters based on heliports and population
+    // Use lower limits on mobile for performance
+    const helicopterLimit = isMobile ? 3 : 12;
+    const populationBased = Math.floor(totalPopulation / (isMobile ? 3000 : 1000));
+    const heliportBased = Math.floor(heliports.length * (isMobile ? 1 : 2.5));
+    const maxHelicopters = Math.min(helicopterLimit, Math.max(1, Math.min(populationBased, heliportBased)));
     
     // Speed multiplier based on game speed
     const speedMultiplier = currentSpeed === 1 ? 1 : currentSpeed === 2 ? 1.5 : 2;

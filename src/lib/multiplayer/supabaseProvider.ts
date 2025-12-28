@@ -24,7 +24,20 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Throttle state saves to avoid excessive database writes
-const STATE_SAVE_INTERVAL = 3000; // Save state every 3 seconds max
+const STATE_SAVE_INTERVAL = 3000; // Save state every 3 seconds max (desktop)
+const STATE_SAVE_INTERVAL_MOBILE = 5000; // Save state every 5 seconds on mobile
+
+// Helper to detect mobile
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth < 768 ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// Get appropriate save interval
+function getStateSaveInterval(): number {
+  return isMobileDevice() ? STATE_SAVE_INTERVAL_MOBILE : STATE_SAVE_INTERVAL;
+}
 
 export interface MultiplayerProviderOptions {
   roomCode: string;
@@ -240,8 +253,9 @@ export class MultiplayerProvider {
     
     const now = Date.now();
     const timeSinceLastSave = now - this.lastStateSave;
+    const saveInterval = getStateSaveInterval();
     
-    if (timeSinceLastSave >= STATE_SAVE_INTERVAL) {
+    if (timeSinceLastSave >= saveInterval) {
       // Save immediately
       this.saveStateToDatabase(state);
     } else {
@@ -255,7 +269,7 @@ export class MultiplayerProvider {
             this.saveStateToDatabase(this.pendingStateSave);
             this.pendingStateSave = null;
           }
-        }, STATE_SAVE_INTERVAL - timeSinceLastSave);
+        }, saveInterval - timeSinceLastSave);
       }
     }
   }

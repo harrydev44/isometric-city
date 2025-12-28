@@ -100,7 +100,9 @@ import {
   drawTrains,
   MIN_RAIL_TILES_FOR_TRAINS,
   MAX_TRAINS,
+  MAX_TRAINS_MOBILE,
   TRAIN_SPAWN_INTERVAL,
+  TRAIN_SPAWN_INTERVAL_MOBILE,
   TRAINS_PER_RAIL_TILES,
 } from '@/components/game/trainSystem';
 import { Train } from '@/components/game/types';
@@ -776,20 +778,22 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
       return;
     }
 
-    // Calculate max trains based on rail network size
-    const maxTrains = Math.min(MAX_TRAINS, Math.ceil(railTileCount / TRAINS_PER_RAIL_TILES));
+    // Calculate max trains based on rail network size (use lower limits on mobile)
+    const trainLimit = isMobile ? MAX_TRAINS_MOBILE : MAX_TRAINS;
+    const maxTrains = Math.min(trainLimit, Math.ceil(railTileCount / TRAINS_PER_RAIL_TILES));
     
     // Speed multiplier based on game speed
     const speedMultiplier = currentSpeed === 1 ? 1 : currentSpeed === 2 ? 2 : 3;
 
-    // Spawn timer
+    // Spawn timer (slower spawning on mobile for performance)
     trainSpawnTimerRef.current -= delta;
+    const spawnInterval = isMobile ? TRAIN_SPAWN_INTERVAL_MOBILE : TRAIN_SPAWN_INTERVAL;
     if (trainsRef.current.length < maxTrains && trainSpawnTimerRef.current <= 0) {
       const newTrain = spawnTrain(currentGrid, currentGridSize, trainIdRef);
       if (newTrain) {
         trainsRef.current.push(newTrain);
       }
-      trainSpawnTimerRef.current = TRAIN_SPAWN_INTERVAL;
+      trainSpawnTimerRef.current = spawnInterval;
     }
 
     // Update existing trains (pass all trains for collision detection)

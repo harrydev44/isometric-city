@@ -4,6 +4,14 @@ import { CarDirection, DirectionMeta, TILE_WIDTH, TILE_HEIGHT } from './types';
 // Vehicle colors (duller/muted versions)
 export const CAR_COLORS = ['#d97777', '#d4a01f', '#2ba67a', '#4d84c8', '#9a6ac9'];
 
+// Car system limits
+export const MAX_CARS = 200;                       // Maximum cars in the city
+export const MAX_CARS_MOBILE = 50;                 // Mobile: significantly fewer cars
+export const CAR_SPAWN_INTERVAL = 0.2;            // Seconds between car spawn attempts
+export const CAR_SPAWN_INTERVAL_MOBILE = 0.5;     // Mobile: slower car spawns
+export const MAX_EMERGENCY_VEHICLES = 20;          // Maximum emergency vehicles
+export const MAX_EMERGENCY_VEHICLES_MOBILE = 6;    // Mobile: fewer emergency vehicles
+
 // Pedestrian appearance colors - includes lighter skin tones
 export const PEDESTRIAN_SKIN_COLORS = ['#ffe4c4', '#ffd5b8', '#ffc8a8', '#fdbf7e', '#e0ac69', '#c68642', '#8d5524', '#613318'];
 export const PEDESTRIAN_SHIRT_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#ffffff', '#1f2937'];
@@ -34,9 +42,13 @@ export const MAX_BEACH_MATS_PER_EDGE = 2;           // Max mats per beach edge
 
 // Pedestrian performance limits
 export const PEDESTRIAN_MAX_COUNT = 560;            // Maximum pedestrians (hard cap) - reduced ~30%
+export const PEDESTRIAN_MAX_COUNT_MOBILE = 150;     // Mobile: significantly reduced for performance
 export const PEDESTRIAN_ROAD_TILE_DENSITY = 1.7;    // Target pedestrians per road tile - reduced ~30%
+export const PEDESTRIAN_ROAD_TILE_DENSITY_MOBILE = 0.5; // Mobile: fewer pedestrians per road tile
 export const PEDESTRIAN_SPAWN_BATCH_SIZE = 25;      // How many to try spawning at once
+export const PEDESTRIAN_SPAWN_BATCH_SIZE_MOBILE = 8; // Mobile: smaller spawn batches
 export const PEDESTRIAN_SPAWN_INTERVAL = 0.03;      // Seconds between spawn batches
+export const PEDESTRIAN_SPAWN_INTERVAL_MOBILE = 0.1; // Mobile: slower spawn rate
 export const PEDESTRIAN_UPDATE_SKIP_DISTANCE = 30;  // Skip detailed updates for pedestrians this far from view
 
 // Zoom limits for camera
@@ -131,6 +143,7 @@ export const SEAPLANE_MIN_POPULATION = 3000; // Minimum population for seaplanes
 export const SEAPLANE_MIN_BAY_SIZE = 12; // Minimum water tiles for a bay to support seaplanes
 export const SEAPLANE_COLORS = ['#ffffff', '#1e40af', '#dc2626', '#f97316', '#059669']; // Seaplane liveries
 export const MAX_SEAPLANES = 25; // Maximum seaplanes in the city
+export const MAX_SEAPLANES_MOBILE = 6; // Mobile: fewer seaplanes
 export const SEAPLANE_SPAWN_INTERVAL_MIN = 4; // Minimum seconds between spawns
 export const SEAPLANE_SPAWN_INTERVAL_MAX = 10; // Maximum seconds between spawns
 export const SEAPLANE_TAXI_TIME_MIN = 4; // Minimum seconds taxiing on water before takeoff
@@ -150,8 +163,14 @@ export const SEAPLANE_MAX_FLIGHTS = 3; // Maximum flights before despawning
 // Helicopter system constants
 export const HELICOPTER_MIN_POPULATION = 3000; // Minimum population required for helicopter activity
 export const HELICOPTER_COLORS = ['#dc2626', '#ffffff', '#1e3a8a', '#f97316', '#059669']; // Red cross, white, navy, orange, green
+export const MAX_HELICOPTERS = 12;                 // Maximum helicopters in the city
+export const MAX_HELICOPTERS_MOBILE = 3;           // Mobile: fewer helicopters
 export const ROTOR_WASH_MAX_AGE = 1.0; // seconds - shorter than plane contrails
 export const ROTOR_WASH_SPAWN_INTERVAL = 0.04; // seconds between rotor wash particles
+
+// Airplane system limits
+export const MAX_AIRPLANES = 15;                   // Maximum airplanes in the city
+export const MAX_AIRPLANES_MOBILE = 4;             // Mobile: fewer airplanes
 
 // Water asset path
 export const WATER_ASSET_PATH = '/assets/water.png';
@@ -162,6 +181,7 @@ export const BOAT_MIN_ZOOM = 0.3; // Minimum zoom level to show boats
 export const WAKE_MIN_ZOOM_MOBILE = 0.45; // Minimum zoom level to show wakes on mobile (matches traffic lights threshold)
 export const BOATS_PER_DOCK = 1.5; // Number of boats per marina/pier
 export const MAX_BOATS = 12; // Maximum total boats in the city
+export const MAX_BOATS_MOBILE = 4; // Mobile: fewer boats for performance
 export const WAKE_MAX_AGE = 2.0; // seconds - how long wake particles last
 export const WAKE_SPAWN_INTERVAL = 0.03; // seconds between wake particles
 
@@ -171,6 +191,7 @@ export const BARGE_MIN_ZOOM = 0.25; // Minimum zoom level to show barges (slight
 export const BARGE_SPEED_MIN = 8; // Minimum speed (pixels/second) - slower than boats
 export const BARGE_SPEED_MAX = 12; // Maximum speed (pixels/second)
 export const MAX_BARGES = 4; // Maximum barges in the city at once
+export const MAX_BARGES_MOBILE = 2; // Mobile: fewer barges
 export const BARGE_SPAWN_INTERVAL_MIN = 8; // Minimum seconds between barge spawns
 export const BARGE_SPAWN_INTERVAL_MAX = 20; // Maximum seconds between barge spawns
 export const BARGE_DOCK_TIME_MIN = 8; // Minimum seconds docked at marina
@@ -264,8 +285,10 @@ export const TRAFFIC_LIGHT_CYCLE = 7.6;            // Full cycle time
 // Train system constants
 export const TRAIN_MIN_ZOOM = 0.35;               // Minimum zoom to show trains (normal)
 export const TRAIN_SPAWN_INTERVAL = 3.0;          // Seconds between train spawn attempts
+export const TRAIN_SPAWN_INTERVAL_MOBILE = 6.0;   // Mobile: slower train spawns
 export const MIN_RAIL_TILES_FOR_TRAINS = 10;      // Minimum rail tiles needed
 export const MAX_TRAINS = 35;                      // Maximum trains in city
+export const MAX_TRAINS_MOBILE = 8;               // Mobile: significantly fewer trains for performance
 
 // Far zoom thresholds - all mobile/animated entities hidden below these levels
 export const HELICOPTER_MIN_ZOOM = 0.3;           // Minimum zoom to show helicopters

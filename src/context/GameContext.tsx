@@ -801,13 +801,22 @@ export function GameProvider({ children, startFresh = false }: { children: React
         window.innerWidth < 768 ||
         /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       );
+      
+      // Check for big city (gridSize > 60 is considered big)
+      const isBigCity = state.gridSize > 60;
 
       // PERF: Balanced tick intervals
       // Desktop: 500ms, 300ms, 200ms for speeds 1, 2, 3
       // Mobile: 750ms, 450ms, 300ms for speeds 1, 2, 3
-      const interval = isMobileDevice
-        ? (state.speed === 1 ? 750 : state.speed === 2 ? 450 : 300)
-        : (state.speed === 1 ? 500 : state.speed === 2 ? 300 : 200);
+      // Mobile Big City: 1000ms, 600ms, 400ms for speeds 1, 2, 3
+      let interval: number;
+      if (isMobileDevice && isBigCity) {
+        interval = state.speed === 1 ? 1000 : state.speed === 2 ? 600 : 400;
+      } else if (isMobileDevice) {
+        interval = state.speed === 1 ? 750 : state.speed === 2 ? 450 : 300;
+      } else {
+        interval = state.speed === 1 ? 500 : state.speed === 2 ? 300 : 200;
+      }
 
       timer = setInterval(() => {
         tickCountRef.current++;
@@ -818,10 +827,11 @@ export function GameProvider({ children, startFresh = false }: { children: React
         latestStateRef.current = newState;
         stateChangedRef.current = true;
         
-        // PERF: Only sync to React every 500ms to avoid expensive reconciliation
+        // PERF: Only sync to React every 500ms on desktop, 1000ms on mobile big cities
         // Canvas reads from latestStateRef so it sees updates immediately
         // React state is only needed for UI elements (stats, budget display)
-        if (now - lastUiSyncRef.current >= 500) {
+        const syncInterval = (isMobileDevice && isBigCity) ? 1000 : 500;
+        if (now - lastUiSyncRef.current >= syncInterval) {
           lastUiSyncRef.current = now;
           setState(newState);
         }
@@ -833,7 +843,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         clearInterval(timer);
       }
     };
-  }, [state.speed]);
+  }, [state.speed, state.gridSize]);
 
   const setTool = useCallback((tool: Tool) => {
     setState((prev) => ({ ...prev, selectedTool: tool, activePanel: 'none' }));

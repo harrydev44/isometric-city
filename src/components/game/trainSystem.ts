@@ -163,8 +163,14 @@ export const TRAINS_PER_RAIL_TILES = 6; // 1 train per 6 rail tiles
 /** Maximum trains in the city */
 export const MAX_TRAINS = 35;
 
+/** Maximum trains on mobile (fewer for performance) */
+export const MAX_TRAINS_MOBILE = 8;
+
 /** Train spawn interval in seconds */
 export const TRAIN_SPAWN_INTERVAL = 1.5;
+
+/** Train spawn interval on mobile (slower spawning for performance) */
+export const TRAIN_SPAWN_INTERVAL_MOBILE = 4.0;
 
 /** Station stop duration in seconds */
 export const STATION_STOP_DURATION = 2.0;
