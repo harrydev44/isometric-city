@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
-    "build": "npm run compress-images && next build",
+    "build": "TURBOPACK=0 npm run compress-images && TURBOPACK=0 next build",
     "start": "next start",
     "lint": "eslint .",
     "crop-screenshots": "bash scripts/crop-screenshots.sh",
