@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/immutability -- Simulation entities stored in refs are intentionally mutated for performance. */
 import { useCallback } from 'react';
 import { Airplane, Helicopter, WorldRenderState, TILE_WIDTH, TILE_HEIGHT, PlaneType } from './types';
 import {

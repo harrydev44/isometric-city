@@ -669,47 +669,37 @@ export function GameProvider({ children, startFresh = false }: { children: React
   
   // Load game state and sprite pack from localStorage on mount (client-side only)
   useEffect(() => {
-    const scheduledFrames: number[] = [];
-    const schedule = (fn: () => void) => {
-      const id = requestAnimationFrame(fn);
-      scheduledFrames.push(id);
-    };
-
     // Load sprite pack preference
     const savedPackId = loadSpritePackId();
     const pack = getSpritePack(savedPackId);
-    schedule(() => setCurrentSpritePack(pack));
+    setCurrentSpritePack(pack);
     setActiveSpritePack(pack);
     
     // Load day/night mode preference
     const savedDayNightMode = loadDayNightMode();
-    schedule(() => setDayNightModeState(savedDayNightMode));
+    setDayNightModeState(savedDayNightMode);
     
     // Load saved cities index
     const cities = loadSavedCitiesIndex();
-    schedule(() => setSavedCities(cities));
+    setSavedCities(cities);
     
     // Load game state (unless startFresh is true - used for co-op to start with a new city)
     if (!startFresh) {
       const saved = loadGameState();
       if (saved) {
         skipNextSaveRef.current = true; // Set skip flag BEFORE updating state
-        schedule(() => setState(saved));
-        schedule(() => setHasExistingGame(true));
+        setState(saved);
+        setHasExistingGame(true);
       } else {
-        schedule(() => setHasExistingGame(false));
+        setHasExistingGame(false);
       }
     } else {
-      schedule(() => setHasExistingGame(false));
+      setHasExistingGame(false);
     }
     // Mark as loaded immediately - the skipNextSaveRef will handle skipping the first save
     hasLoadedRef.current = true;
     // Mark state as ready - consumers should wait for this before using state
-    schedule(() => setIsStateReady(true));
-
-    return () => {
-      for (const id of scheduledFrames) cancelAnimationFrame(id);
-    };
+    setIsStateReady(true);
   }, [startFresh]);
   
   // Track the state that needs to be saved
@@ -720,9 +710,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // PERF: Just mark that state has changed - defer expensive deep copy to actual save time
   const stateChangedRef = useRef(false);
   const latestStateRef = useRef(state);
-  useEffect(() => {
-    latestStateRef.current = state;
-  }, [state]);
+  latestStateRef.current = state;
   
   useEffect(() => {
     if (!hasLoadedRef.current) {

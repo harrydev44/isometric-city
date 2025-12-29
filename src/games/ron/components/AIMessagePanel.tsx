@@ -31,15 +31,12 @@ export function AIMessagePanel({
   useEffect(() => {
     const latestUnread = messages.find(m => !m.isRead);
     if (latestUnread) {
-      const showFrame = requestAnimationFrame(() => setShowLatest(latestUnread));
+      setShowLatest(latestUnread);
       const timer = setTimeout(() => {
-        requestAnimationFrame(() => setShowLatest(null));
+        setShowLatest(null);
         onMarkRead(latestUnread.id);
       }, 5000);
-      return () => {
-        cancelAnimationFrame(showFrame);
-        clearTimeout(timer);
-      };
+      return () => clearTimeout(timer);
     }
   }, [messages, onMarkRead]);
 

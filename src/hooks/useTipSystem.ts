@@ -173,31 +173,23 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
   
   // Use a ref to always have the latest state without causing effect re-runs
   const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  stateRef.current = state;
 
   // Load preferences from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
-    const scheduledFrames: number[] = [];
-    const schedule = (fn: () => void) => {
-      const id = requestAnimationFrame(fn);
-      scheduledFrames.push(id);
-    };
     
     try {
       const disabled = localStorage.getItem(STORAGE_KEY);
       if (disabled === 'true') {
-        schedule(() => setTipsEnabledState(false));
+        setTipsEnabledState(false);
       }
       
       const shown = localStorage.getItem(SHOWN_TIPS_KEY);
       if (shown) {
         const parsed = JSON.parse(shown);
         if (Array.isArray(parsed)) {
-          schedule(() => setShownTips(new Set(parsed as TipId[])));
+          setShownTips(new Set(parsed as TipId[]));
         }
       }
     } catch (e) {
@@ -205,10 +197,6 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
     }
     
     hasLoadedRef.current = true;
-
-    return () => {
-      for (const id of scheduledFrames) cancelAnimationFrame(id);
-    };
   }, []);
 
   // Save shown tips to localStorage when they change
