@@ -151,6 +151,7 @@ export function useBoatSystem(
     const updatedBoats: Boat[] = [];
     
     for (const boat of boatsRef.current) {
+      // eslint-disable-next-line react-hooks/immutability -- this hook uses refs as a mutable simulation store
       boat.age += delta;
       
       // Update wake particles (similar to contrails) - shorter on mobile

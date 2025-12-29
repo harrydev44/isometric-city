@@ -31,7 +31,7 @@ export function AIMessagePanel({
   useEffect(() => {
     const latestUnread = messages.find(m => !m.isRead);
     if (latestUnread) {
-      setShowLatest(latestUnread);
+      queueMicrotask(() => setShowLatest(latestUnread));
       const timer = setTimeout(() => {
         setShowLatest(null);
         onMarkRead(latestUnread.id);

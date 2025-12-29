@@ -37,6 +37,7 @@ import {
   ZOOM_MIN,
   ZOOM_MAX,
   WATER_ASSET_PATH,
+  WATER_ASSET_PATHS,
   AIRPLANE_SPRITE_SRC,
   TRAIN_MIN_ZOOM,
 } from '@/components/game/constants';
@@ -845,7 +846,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     loadSpriteImage(currentSpritePack.src, true).catch(console.error);
     
     // High priority - water texture
-    loadImage(WATER_ASSET_PATH).catch(console.error);
+    // Load multiple water variants for richer visuals
+    Promise.all(WATER_ASSET_PATHS.map(src => loadImage(src))).catch(console.error);
     
     // Medium priority - load secondary sheets after a small delay
     // This allows the main content to render first

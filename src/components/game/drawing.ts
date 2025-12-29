@@ -28,6 +28,7 @@ export type DiamondCorners = {
 
 /** Beach edge direction for determining inward offset */
 export type BeachEdge = 'north' | 'east' | 'south' | 'west';
+export type BeachStyle = 'sidewalk' | 'natural';
 
 // ============================================================================
 // Color Constants
@@ -81,6 +82,12 @@ export const GREY_TILE_COLORS: TileColorScheme = {
 export const BEACH_COLORS = {
   fill: '#d4a574',
   curb: '#b8956a',
+} as const;
+
+const NATURAL_SHORE_COLORS = {
+  sand: '#d9c08b',
+  wetSand: '#b99f6c',
+  foam: 'rgba(255,255,255,0.85)',
 } as const;
 
 /** Dirt/foundation plot colors for construction phase 1 */
@@ -674,73 +681,126 @@ export function drawBeachOnWater(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  adjacentLand: { north: boolean; east: boolean; south: boolean; west: boolean }
+  adjacentLand: { north: boolean; east: boolean; south: boolean; west: boolean },
+  style: BeachStyle = 'sidewalk'
 ): void {
   const { north, east, south, west } = adjacentLand;
 
   // Early exit if no adjacent land (water is fully surrounded by water)
   if (!north && !east && !south && !west) return;
 
-  const beachWidth = TILE_WIDTH * BEACH_CONFIG.widthRatio * 2.5; // Slightly wider for visibility on water
+  const beachWidth = TILE_WIDTH * BEACH_CONFIG.widthRatio * (style === 'natural' ? 3.4 : 2.5);
   const corners = getDiamondCorners(x, y);
 
   // The inward vectors point FROM the edge TOWARD the center of the tile
   // For water tiles, we draw beach strips starting at the edge and going inward
 
+  // Natural shoreline: draw a wet-sand gradient + foam instead of sidewalk curb.
+  const drawNaturalEdge = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    inward: { dx: number; dy: number },
+    shortenStart: boolean,
+    shortenEnd: boolean
+  ) => {
+    // Fill (sand -> wet sand)
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    const g = ctx.createLinearGradient(
+      start.x,
+      start.y,
+      start.x + inward.dx * beachWidth,
+      start.y + inward.dy * beachWidth
+    );
+    g.addColorStop(0, NATURAL_SHORE_COLORS.sand);
+    g.addColorStop(1, NATURAL_SHORE_COLORS.wetSand);
+    ctx.fillStyle = g;
+    drawBeachEdgeOnWater(ctx, start.x, start.y, end.x, end.y, inward.dx, inward.dy, beachWidth, shortenStart, shortenEnd);
+
+    // Foam line near water boundary
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = NATURAL_SHORE_COLORS.foam;
+    ctx.lineWidth = 1.25;
+    const wobble = Math.sin(performance.now() / 1000 + (x + y) * 0.7) * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(start.x + inward.dx * (beachWidth * 0.88) + wobble, start.y + inward.dy * (beachWidth * 0.88));
+    ctx.lineTo(end.x + inward.dx * (beachWidth * 0.88) + wobble, end.y + inward.dy * (beachWidth * 0.88));
+    ctx.stroke();
+
+    ctx.restore();
+  };
+
   // North edge (top-left: left corner → top corner) - land is to the north
   if (north) {
     const inward = BEACH_INWARD_VECTORS.north;
-    drawBeachEdgeOnWater(
-      ctx,
-      corners.left.x, corners.left.y,
-      corners.top.x, corners.top.y,
-      inward.dx, inward.dy,
-      beachWidth,
-      west,   // Shorten at left if west also has land
-      east    // Shorten at top if east also has land
-    );
+    if (style === 'natural') {
+      drawNaturalEdge(corners.left, corners.top, inward, west, east);
+    } else {
+      drawBeachEdgeOnWater(
+        ctx,
+        corners.left.x, corners.left.y,
+        corners.top.x, corners.top.y,
+        inward.dx, inward.dy,
+        beachWidth,
+        west,   // Shorten at left if west also has land
+        east    // Shorten at top if east also has land
+      );
+    }
   }
 
   // East edge (top-right: top corner → right corner) - land is to the east
   if (east) {
     const inward = BEACH_INWARD_VECTORS.east;
-    drawBeachEdgeOnWater(
-      ctx,
-      corners.top.x, corners.top.y,
-      corners.right.x, corners.right.y,
-      inward.dx, inward.dy,
-      beachWidth,
-      north,  // Shorten at top if north also has land
-      south   // Shorten at right if south also has land
-    );
+    if (style === 'natural') {
+      drawNaturalEdge(corners.top, corners.right, inward, north, south);
+    } else {
+      drawBeachEdgeOnWater(
+        ctx,
+        corners.top.x, corners.top.y,
+        corners.right.x, corners.right.y,
+        inward.dx, inward.dy,
+        beachWidth,
+        north,  // Shorten at top if north also has land
+        south   // Shorten at right if south also has land
+      );
+    }
   }
 
   // South edge (bottom-right: right corner → bottom corner) - land is to the south
   if (south) {
     const inward = BEACH_INWARD_VECTORS.south;
-    drawBeachEdgeOnWater(
-      ctx,
-      corners.right.x, corners.right.y,
-      corners.bottom.x, corners.bottom.y,
-      inward.dx, inward.dy,
-      beachWidth,
-      east,   // Shorten at right if east also has land
-      west    // Shorten at bottom if west also has land
-    );
+    if (style === 'natural') {
+      drawNaturalEdge(corners.right, corners.bottom, inward, east, west);
+    } else {
+      drawBeachEdgeOnWater(
+        ctx,
+        corners.right.x, corners.right.y,
+        corners.bottom.x, corners.bottom.y,
+        inward.dx, inward.dy,
+        beachWidth,
+        east,   // Shorten at right if east also has land
+        west    // Shorten at bottom if west also has land
+      );
+    }
   }
 
   // West edge (bottom-left: bottom corner → left corner) - land is to the west
   if (west) {
     const inward = BEACH_INWARD_VECTORS.west;
-    drawBeachEdgeOnWater(
-      ctx,
-      corners.bottom.x, corners.bottom.y,
-      corners.left.x, corners.left.y,
-      inward.dx, inward.dy,
-      beachWidth,
-      south,  // Shorten at bottom if south also has land
-      north   // Shorten at left if north also has land
-    );
+    if (style === 'natural') {
+      drawNaturalEdge(corners.bottom, corners.left, inward, south, north);
+    } else {
+      drawBeachEdgeOnWater(
+        ctx,
+        corners.bottom.x, corners.bottom.y,
+        corners.left.x, corners.left.y,
+        inward.dx, inward.dy,
+        beachWidth,
+        south,  // Shorten at bottom if south also has land
+        north   // Shorten at left if north also has land
+      );
+    }
   }
 
   // Draw corner pieces where two beach edges meet

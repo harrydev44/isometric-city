@@ -36,6 +36,7 @@ import {
   calculateViewBounds,
   isTileVisible,
   WATER_ASSET_PATH,
+  WATER_ASSET_PATHS,
   drawBeachOnWater,
   drawFireEffect,
 } from '@/components/game/shared';
@@ -378,6 +379,33 @@ function drawGreyBase(
   }
 }
 
+function drawSoftSpriteShadow(
+  ctx: CanvasRenderingContext2D,
+  drawPosX: number,
+  drawPosY: number,
+  footprint: { width: number; height: number },
+  zoom: number,
+  intensity: number = 1
+): void {
+  // Shadow is drawn in world-space (ctx already scaled by zoom), so scale blur down at high zoom.
+  const footprintDepth = footprint.width + footprint.height - 2;
+  const cx = drawPosX + TILE_WIDTH / 2;
+  const cy = drawPosY + TILE_HEIGHT * (0.86 + footprintDepth * 0.05);
+
+  const rx = TILE_WIDTH * (0.28 + footprintDepth * 0.12);
+  const ry = TILE_HEIGHT * (0.14 + footprintDepth * 0.06);
+  const blurPx = 5 / Math.max(0.8, zoom);
+
+  ctx.save();
+  ctx.globalAlpha = 0.22 * intensity;
+  ctx.filter = `blur(${blurPx}px)`;
+  ctx.fillStyle = 'rgba(0,0,0,1)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // Check if a tile has a dock or is part of a dock's footprint (for beach exclusion)
 function hasDock(grid: import('../types/game').RoNTile[][], gridX: number, gridY: number, gridSize: number): boolean {
   if (gridX < 0 || gridX >= gridSize || gridY < 0 || gridY >= gridSize) return false;
@@ -626,6 +654,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
   // Interaction state
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
+  const [cursor, setCursor] = useState<'default' | 'grabbing' | 'crosshair'>('default');
   
   // Selection state
   const isSelectingRef = useRef(false);
@@ -638,7 +667,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
   
   // Fire animation time
   const fireAnimTimeRef = useRef(0);
-  const lastFrameTimeRef = useRef(performance.now());
+  const lastFrameTimeRef = useRef(0);
   const [roadDrawDirection, setRoadDrawDirection] = useState<'h' | 'v' | null>(null);
   const placedRoadTilesRef = useRef<Set<string>>(new Set());
   const [roadDragEnd, setRoadDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -676,7 +705,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
     const loadImages = async () => {
       // Load water texture first
       try {
-        await loadImage(WATER_ASSET_PATH);
+        // Load multiple water variants for richer visuals
+        await Promise.all(WATER_ASSET_PATHS.map(src => loadImage(src)));
         setImageLoadVersion(v => v + 1);
       } catch (error) {
         console.error('Failed to load water texture:', error);
@@ -872,6 +902,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
     if (e.button === 1 || e.altKey) {
       // Middle-click or alt: start panning
       isPanningRef.current = true;
+      setCursor('grabbing');
       panStartRef.current = { 
         x: e.clientX, 
         y: e.clientY,
@@ -913,11 +944,12 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       } else {
         // Default mode (no building tool) - start selection box
         isSelectingRef.current = true;
+        setCursor('crosshair');
         selectionStartScreenRef.current = { x: screenX, y: screenY };
         setSelectionBox({ startX: screenX, startY: screenY, endX: screenX, endY: screenY });
       }
     }
-  }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, latestStateRef]);
+  }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, assignTask, latestStateRef]);
   
   // Handle mouse move
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -1106,6 +1138,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       selectionStartScreenRef.current = null;
       setSelectionBox(null);
     }
+
+    setCursor('default');
   }, [selectionBox, selectUnits, selectUnitsInArea, selectBuilding, latestStateRef]);
   
   // Handle wheel zoom (matching IsoCity's smoother zoom)
@@ -1181,6 +1215,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
     window.addEventListener('resize', resize);
     
     let animationId: number;
+    lastFrameTimeRef.current = performance.now();
     
     const render = () => {
       const gameState = latestStateRef.current;
@@ -1198,8 +1233,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       // PERF: Pre-compute city centers ONCE per frame for all territory lookups
       const cityCenters = extractCityCenters(gameState.grid, gameState.gridSize);
       
-      // Disable image smoothing for crisp pixel art
-      ctx.imageSmoothingEnabled = false;
+      // Higher-fidelity sprite scaling (prevents jaggies when zoom isn't integer)
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       
       // Draw sky background
       drawSkyBackground(ctx, canvas, 'day');
@@ -1477,7 +1513,13 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               }
             } else if (tile.hasOilDeposit) {
               // Draw grass base first
-              drawGroundTile(ctx, screenX, screenY, 'none', currentZoom, false);
+              const adjacentWaterForLand = {
+                north: x > 0 && (gameState.grid[y]?.[x - 1]?.terrain === 'water' || hasDock(gameState.grid, x - 1, y, gameState.gridSize)),
+                east: y > 0 && (gameState.grid[y - 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y - 1, gameState.gridSize)),
+                south: x < gameState.gridSize - 1 && (gameState.grid[y]?.[x + 1]?.terrain === 'water' || hasDock(gameState.grid, x + 1, y, gameState.gridSize)),
+                west: y < gameState.gridSize - 1 && (gameState.grid[y + 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y + 1, gameState.gridSize)),
+              };
+              drawGroundTile(ctx, screenX, screenY, x, y, 'none', currentZoom, false, adjacentWaterForLand);
               
               // Only show oil in industrial+ ages
               const isIndustrial = AGE_ORDER.indexOf(playerAge) >= AGE_ORDER.indexOf('industrial');
@@ -1556,7 +1598,13 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               }
             } else if (tile.forestDensity > 0) {
               // Draw base grass tile for forest
-              drawGroundTile(ctx, screenX, screenY, 'none', currentZoom, false);
+              const adjacentWaterForLand = {
+                north: x > 0 && (gameState.grid[y]?.[x - 1]?.terrain === 'water' || hasDock(gameState.grid, x - 1, y, gameState.gridSize)),
+                east: y > 0 && (gameState.grid[y - 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y - 1, gameState.gridSize)),
+                south: x < gameState.gridSize - 1 && (gameState.grid[y]?.[x + 1]?.terrain === 'water' || hasDock(gameState.grid, x + 1, y, gameState.gridSize)),
+                west: y < gameState.gridSize - 1 && (gameState.grid[y + 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y + 1, gameState.gridSize)),
+              };
+              drawGroundTile(ctx, screenX, screenY, x, y, 'none', currentZoom, false, adjacentWaterForLand);
               
               // Draw trees on forest tiles using IsoCity's tree sprite
               const isoCitySprite = getCachedImage(ISOCITY_SPRITE_PATH, true);
@@ -1617,10 +1665,22 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               }
             } else if (tile.building?.type === 'road') {
               // Draw grass base under roads (roads are drawn on top in second pass)
-              drawGroundTile(ctx, screenX, screenY, 'none', currentZoom, false);
+              const adjacentWaterForLand = {
+                north: x > 0 && (gameState.grid[y]?.[x - 1]?.terrain === 'water' || hasDock(gameState.grid, x - 1, y, gameState.gridSize)),
+                east: y > 0 && (gameState.grid[y - 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y - 1, gameState.gridSize)),
+                south: x < gameState.gridSize - 1 && (gameState.grid[y]?.[x + 1]?.terrain === 'water' || hasDock(gameState.grid, x + 1, y, gameState.gridSize)),
+                west: y < gameState.gridSize - 1 && (gameState.grid[y + 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y + 1, gameState.gridSize)),
+              };
+              drawGroundTile(ctx, screenX, screenY, x, y, 'none', currentZoom, false, adjacentWaterForLand);
             } else {
               // Regular grass tile
-              drawGroundTile(ctx, screenX, screenY, zoneType, currentZoom, false);
+              const adjacentWaterForLand = {
+                north: x > 0 && (gameState.grid[y]?.[x - 1]?.terrain === 'water' || hasDock(gameState.grid, x - 1, y, gameState.gridSize)),
+                east: y > 0 && (gameState.grid[y - 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y - 1, gameState.gridSize)),
+                south: x < gameState.gridSize - 1 && (gameState.grid[y]?.[x + 1]?.terrain === 'water' || hasDock(gameState.grid, x + 1, y, gameState.gridSize)),
+                west: y < gameState.gridSize - 1 && (gameState.grid[y + 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y + 1, gameState.gridSize)),
+              };
+              drawGroundTile(ctx, screenX, screenY, x, y, zoneType, currentZoom, false, adjacentWaterForLand);
             }
             
             // Ownership tint overlay (skip for roads)
@@ -1715,7 +1775,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
 
           // Draw beach if any adjacent tile is land (and not a dock)
           if (adjacentLand.north || adjacentLand.east || adjacentLand.south || adjacentLand.west) {
-            drawBeachOnWater(ctx, screenX, screenY, adjacentLand);
+            // Natural shoreline style for RoN
+            drawBeachOnWater(ctx, screenX, screenY, adjacentLand, 'natural');
           }
         }
       }
@@ -1835,6 +1896,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           
           // Draw building sprite
           const buildingType = tile.building.type as RoNBuildingType;
+          const baseBuildingStats = BUILDING_STATS[buildingType];
+          const footprint = baseBuildingStats?.size || { width: 1, height: 1 };
           
           // Draw grey base for Industrial and Modern era buildings (except farms, roads, etc.)
           const needsGreyBase = (playerAge === 'industrial' || playerAge === 'modern') && 
@@ -1843,9 +1906,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
             buildingType !== 'dock' &&
             buildingType !== 'woodcutters_camp';
           if (needsGreyBase) {
-            const buildingStats = BUILDING_STATS[buildingType];
-            const buildingSize = buildingStats?.size || { width: 1, height: 1 };
-            drawGreyBase(ctx, screenX, screenY, buildingSize.width, buildingSize.height);
+            drawGreyBase(ctx, screenX, screenY, footprint.width, footprint.height);
           }
           
           // Special handling for dock - use IsoCity marina sprite from parks sheet (2x2)
@@ -1885,6 +1946,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush + buildingOffset;
+
+              // Soft ground shadow for depth
+              drawSoftSpriteShadow(ctx, drawPosX, drawPosY, buildingSize, currentZoom, 1.0);
 
               ctx.drawImage(
                 parksSprite,
@@ -1947,6 +2011,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush + buildingOffset;
+
+              // Stronger shadow for tall high-rises
+              drawSoftSpriteShadow(ctx, drawPosX, drawPosY, buildingSize, currentZoom, 1.25);
               
               ctx.drawImage(
                 denseSprite,
@@ -2000,6 +2067,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               const drawY = screenY + TILE_HEIGHT - destHeight + buildingOffset;
 
               // Farms are instant - no construction phase, always show farm sprite
+              drawSoftSpriteShadow(ctx, screenX, screenY, { width: 1, height: 1 }, currentZoom, 0.85);
               ctx.drawImage(
                 farmSprite,
                 sx, sy, farmTileWidth, srcHeight,
@@ -2045,6 +2113,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
                 const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
                 const drawY = drawPosY + TILE_HEIGHT - destHeight + buildingOffset;
 
+                drawSoftSpriteShadow(ctx, drawPosX, drawPosY, buildingSize, currentZoom, 1.05);
                 ctx.drawImage(
                   airportSprite,
                   0, 0, airportSprite.width, airportSprite.height,
@@ -2130,6 +2199,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush;
 
+              drawSoftSpriteShadow(ctx, drawPosX, drawPosY, buildingSize, currentZoom, 1.0);
               ctx.drawImage(
                 medievalSheet,
                 sx, sy, medTileWidth, medTileHeight,
@@ -2198,6 +2268,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
 
               const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush;
+
+              drawSoftSpriteShadow(ctx, drawPosX, drawPosY, buildingSize, currentZoom, 1.0);
 
               // Use construction sprite for buildings under construction
               const isUnderConstruction = tile.building.constructionProgress < 100;
@@ -2312,11 +2384,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
     <div 
       ref={containerRef} 
       className="relative w-full h-full overflow-hidden touch-none"
-      style={{ 
-        cursor: isPanningRef.current ? 'grabbing' : 
-                isSelectingRef.current ? 'crosshair' : 
-                'default' 
-      }}
+      style={{ cursor }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
