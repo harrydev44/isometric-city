@@ -239,13 +239,14 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     size: { width: 2, height: 2 },
     maxWorkers: 6,
   },
-  refinery: { 
-    cost: { wood: 250, metal: 200, gold: 150 }, 
-    maxHealth: 1200, 
-    buildTime: 120, 
-    minAge: 'industrial', 
+  refinery: {
+    cost: { wood: 250, metal: 200, gold: 150 },
+    maxHealth: 1200,
+    buildTime: 120,
+    minAge: 'industrial',
     size: { width: 2, height: 2 },
     gatherBonus: { oil: 0.5 },
+    maxWorkers: 5,
   },
   
   // Knowledge buildings

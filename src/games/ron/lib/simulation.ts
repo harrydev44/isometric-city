@@ -13,7 +13,6 @@ import { Age, AGE_ORDER, AGE_REQUIREMENTS, AGE_POPULATION_BONUS } from '../types
 import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_PRODUCTION_BUILDINGS } from '../types/buildings';
 import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
-import { runAdvancedAI } from './ai';
 
 // Simulation constants
 const CONSTRUCTION_SPEED = 2; // Progress per tick
@@ -358,9 +357,9 @@ export function simulateRoNTick(state: RoNGameState): RoNGameState {
   // Update units (movement, gathering, combat)
   newState = updateUnits(newState);
   
-  // Run AI for AI players (using advanced utility-based AI)
-  newState = runAdvancedAI(newState);
-  
+  // Note: AI is now handled by the Agentic AI system via API calls
+  // The old utility-based AI has been removed
+
   // Check win/lose conditions
   newState = checkVictoryConditions(newState);
   
@@ -507,6 +506,47 @@ function updatePlayers(state: RoNGameState): RoNGameState {
 }
 
 /**
+ * Find an adjacent water tile for naval unit spawning
+ * Searches around the building footprint for water tiles
+ */
+function findAdjacentWaterTile(
+  grid: RoNTile[][],
+  buildingX: number,
+  buildingY: number,
+  buildingWidth: number,
+  buildingHeight: number,
+  gridSize: number
+): { x: number; y: number } | null {
+  // Check all tiles around the building perimeter
+  const candidates: { x: number; y: number }[] = [];
+  
+  // Check tiles around the building perimeter (prioritize bottom/right for docks facing water)
+  for (let dx = -1; dx <= buildingWidth; dx++) {
+    for (let dy = -1; dy <= buildingHeight; dy++) {
+      // Skip interior tiles
+      if (dx >= 0 && dx < buildingWidth && dy >= 0 && dy < buildingHeight) continue;
+      
+      const checkX = buildingX + dx;
+      const checkY = buildingY + dy;
+      
+      if (checkX < 0 || checkX >= gridSize || checkY < 0 || checkY >= gridSize) continue;
+      
+      const tile = grid[checkY]?.[checkX];
+      if (tile?.terrain === 'water') {
+        candidates.push({ x: checkX, y: checkY });
+      }
+    }
+  }
+  
+  // Return a random water tile from candidates (to spread spawns)
+  if (candidates.length > 0) {
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+  
+  return null;
+}
+
+/**
  * Update buildings (construction progress, unit production)
  */
 function updateBuildings(state: RoNGameState): RoNGameState {
@@ -558,17 +598,35 @@ function updateBuildings(state: RoNGameState): RoNGameState {
             const buildingWidth = buildingStats?.size?.width || 1;
             const buildingHeight = buildingStats?.size?.height || 1;
             
-            // Spawn unit at random position around the bottom/front of the building
-            // Spread across the width and slightly in front
-            const spawnOffsetX = (Math.random() - 0.5) * (buildingWidth + 1);
-            const spawnOffsetY = buildingHeight + 0.3 + Math.random() * 0.6;
+            // Determine spawn position based on unit type
+            let spawnX: number;
+            let spawnY: number;
+            
+            if (unitStats.isNaval) {
+              // Naval units need to spawn on water - find adjacent water tile
+              const waterSpawn = findAdjacentWaterTile(state.grid, x, y, buildingWidth, buildingHeight, state.gridSize);
+              if (waterSpawn) {
+                spawnX = waterSpawn.x + 0.5 + (Math.random() - 0.5) * 0.5;
+                spawnY = waterSpawn.y + 0.5 + (Math.random() - 0.5) * 0.5;
+              } else {
+                // Fallback - spawn at dock position (might get stuck, but better than nothing)
+                spawnX = x + buildingWidth / 2;
+                spawnY = y + buildingHeight / 2;
+              }
+            } else {
+              // Land units - spawn at random position around the bottom/front of the building
+              const spawnOffsetX = (Math.random() - 0.5) * (buildingWidth + 1);
+              const spawnOffsetY = buildingHeight + 0.3 + Math.random() * 0.6;
+              spawnX = x + buildingWidth / 2 + spawnOffsetX;
+              spawnY = y + spawnOffsetY;
+            }
             
             const newUnit: Unit = {
               id: `unit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               type: unitType,
               ownerId: building.ownerId,
-              x: x + buildingWidth / 2 + spawnOffsetX,
-              y: y + spawnOffsetY,
+              x: spawnX,
+              y: spawnY,
               health: unitStats.health,
               maxHealth: unitStats.health,
               isSelected: false,
@@ -604,6 +662,8 @@ function updateBuildings(state: RoNGameState): RoNGameState {
 
 // Detection range for auto-attack (in tiles)
 const AUTO_ATTACK_RANGE = 3;
+// Detection range for civilian flee behavior (in tiles)
+const CIVILIAN_FLEE_RANGE = 4;
 
 /**
  * Check if a unit is military (not civilian)
@@ -643,6 +703,35 @@ function findNearbyEnemies(
     if (!aIsMilitary && bIsMilitary) return 1;
     
     // Then by distance
+    const distA = Math.sqrt((a.x - unit.x) ** 2 + (a.y - unit.y) ** 2);
+    const distB = Math.sqrt((b.x - unit.x) ** 2 + (b.y - unit.y) ** 2);
+    return distA - distB;
+  });
+}
+
+/**
+ * Find nearby enemy military units (for civilian fleeing)
+ */
+function findNearbyEnemyMilitary(
+  unit: Unit,
+  allUnits: Unit[],
+  range: number
+): Unit[] {
+  const enemies: Unit[] = [];
+  
+  for (const other of allUnits) {
+    // Skip same owner, dead units, self, and non-military
+    if (other.ownerId === unit.ownerId || other.health <= 0 || other.id === unit.id) continue;
+    if (!isMilitaryUnit(other)) continue;
+    
+    const dist = Math.sqrt((other.x - unit.x) ** 2 + (other.y - unit.y) ** 2);
+    if (dist <= range) {
+      enemies.push(other);
+    }
+  }
+  
+  // Sort by distance (closest first)
+  return enemies.sort((a, b) => {
     const distA = Math.sqrt((a.x - unit.x) ** 2 + (a.y - unit.y) ** 2);
     const distB = Math.sqrt((b.x - unit.x) ** 2 + (b.y - unit.y) ** 2);
     return distA - distB;
@@ -942,6 +1031,48 @@ function updateUnits(state: RoNGameState): RoNGameState {
       }
     }
     
+    // Civilian fleeing: if a civilian sees nearby enemy military units, flee!
+    if (!isMilitaryUnit(updatedUnit)) {
+      const nearbyEnemyMilitary = findNearbyEnemyMilitary(updatedUnit, state.units, CIVILIAN_FLEE_RANGE);
+      
+      if (nearbyEnemyMilitary.length > 0) {
+        // Calculate flee direction (away from the average position of enemies)
+        let avgEnemyX = 0;
+        let avgEnemyY = 0;
+        for (const enemy of nearbyEnemyMilitary) {
+          avgEnemyX += enemy.x;
+          avgEnemyY += enemy.y;
+        }
+        avgEnemyX /= nearbyEnemyMilitary.length;
+        avgEnemyY /= nearbyEnemyMilitary.length;
+        
+        // Flee in the opposite direction
+        const fleeDistance = 8; // Flee 8 tiles away
+        const dx = updatedUnit.x - avgEnemyX;
+        const dy = updatedUnit.y - avgEnemyY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist > 0.1) {
+          // Normalize and scale
+          const fleeX = updatedUnit.x + (dx / dist) * fleeDistance;
+          const fleeY = updatedUnit.y + (dy / dist) * fleeDistance;
+          
+          // Clamp to grid bounds
+          const gridSize = state.grid.length;
+          updatedUnit.targetX = Math.max(1, Math.min(gridSize - 2, fleeX));
+          updatedUnit.targetY = Math.max(1, Math.min(gridSize - 2, fleeY));
+          updatedUnit.task = 'flee';
+          updatedUnit.taskTarget = undefined;
+          updatedUnit.isMoving = true;
+          updatedUnit.idleSince = undefined; // Reset idle timer while fleeing
+        }
+      } else if (updatedUnit.task === 'flee' && !updatedUnit.isMoving) {
+        // Stopped fleeing - go back to idle so auto-work can kick in
+        updatedUnit.task = 'idle';
+        updatedUnit.idleSince = state.tick;
+      }
+    }
+    
     // Movement with pathfinding
     if (updatedUnit.isMoving && updatedUnit.targetX !== undefined && updatedUnit.targetY !== undefined) {
       const dx = updatedUnit.targetX - updatedUnit.x;
@@ -1140,446 +1271,6 @@ function updateUnits(state: RoNGameState): RoNGameState {
   }
   
   return { ...state, units: newUnits, grid: newGrid };
-}
-
-/**
- * AI decision making
- */
-function runAI(state: RoNGameState): RoNGameState {
-  let newState = state;
-
-  for (const player of state.players) {
-    if (player.type !== 'ai' || player.isDefeated) continue;
-
-    const difficulty = player.difficulty || 'medium';
-    // Increase action chances so AI is more active
-    const actionChance = difficulty === 'easy' ? 0.3 : difficulty === 'medium' ? 0.5 : 0.7;
-
-    // Random chance to take an action each tick
-    if (Math.random() > actionChance) continue;
-
-    // AI decision priorities - try multiple actions each tick
-    const decisions = [
-      () => aiAssignIdleWorkers(newState, player), // First assign workers
-      () => aiTryTrainUnits(newState, player),     // Then train units
-      () => aiTryBuildEconomic(newState, player),  // Build economy
-      () => aiTryBuildMilitary(newState, player),  // Build military
-      () => aiTryAdvanceAge(newState, player),     // Advance age
-      () => aiAttackIfStrong(newState, player, difficulty), // Attack
-    ];
-    
-    // Execute multiple decisions per tick (AI should be more active)
-    let actionsPerTick = difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3;
-    for (const decision of decisions) {
-      if (actionsPerTick <= 0) break;
-      const result = decision();
-      if (result !== newState) {
-        newState = result;
-        actionsPerTick--;
-      }
-    }
-  }
-  
-  return newState;
-}
-
-function aiTryAdvanceAge(state: RoNGameState, player: RoNPlayer): RoNGameState {
-  const ageIndex = AGE_ORDER.indexOf(player.age);
-  if (ageIndex >= AGE_ORDER.length - 1) return state;
-  
-  const nextAge = AGE_ORDER[ageIndex + 1];
-  const requirements = AGE_REQUIREMENTS[nextAge];
-  if (!requirements) return state;
-  
-  // Check if can afford
-  for (const [resource, amount] of Object.entries(requirements)) {
-    if (player.resources[resource as ResourceType] < amount) {
-      return state;
-    }
-  }
-  
-  // Advance age
-  const newResources = { ...player.resources };
-  for (const [resource, amount] of Object.entries(requirements)) {
-    newResources[resource as ResourceType] -= amount;
-  }
-  
-  const newPlayers = state.players.map(p =>
-    p.id === player.id ? { ...p, age: nextAge as Age, resources: newResources } : p
-  );
-  
-  return { ...state, players: newPlayers };
-}
-
-function aiTryBuildEconomic(state: RoNGameState, player: RoNPlayer): RoNGameState {
-  // Count existing economic buildings
-  let farms = 0;
-  let lumber = 0;
-  let mines = 0;
-  
-  state.grid.forEach(row => {
-    row.forEach(tile => {
-      if (tile.ownerId !== player.id || !tile.building) return;
-      switch (tile.building.type) {
-        case 'farm': farms++; break;
-        case 'woodcutters_camp':
-        case 'lumber_mill': lumber++; break;
-        case 'mine':
-        case 'smelter': mines++; break;
-      }
-    });
-  });
-  
-  // Determine what to build
-  let buildingType: RoNBuildingType | null = null;
-  if (farms < 2) buildingType = 'farm';
-  else if (lumber < 2) buildingType = 'woodcutters_camp';
-  else if (mines < 1 && AGE_ORDER.indexOf(player.age) >= 1) buildingType = 'mine';
-  
-  if (!buildingType) return state;
-  
-  return aiPlaceBuilding(state, player, buildingType);
-}
-
-function aiTryBuildMilitary(state: RoNGameState, player: RoNPlayer): RoNGameState {
-  // Count barracks
-  let barracks = 0;
-  state.grid.forEach(row => {
-    row.forEach(tile => {
-      if (tile.ownerId === player.id && tile.building?.type === 'barracks') {
-        barracks++;
-      }
-    });
-  });
-  
-  if (barracks >= 2) return state;
-  
-  return aiPlaceBuilding(state, player, 'barracks');
-}
-
-function aiPlaceBuilding(state: RoNGameState, player: RoNPlayer, buildingType: RoNBuildingType): RoNGameState {
-  const stats = BUILDING_STATS[buildingType];
-  if (!stats) return state;
-  
-  // Check resources
-  for (const [resource, amount] of Object.entries(stats.cost)) {
-    if (amount && player.resources[resource as ResourceType] < amount) {
-      return state;
-    }
-  }
-  
-  // Pre-compute city centers for territory checks
-  const cityCenters = extractCityCenters(state.grid, state.gridSize);
-  
-  // Find a suitable location WITHIN player's territory
-  let bestPos: { x: number; y: number } | null = null;
-  
-  for (let y = 0; y < state.gridSize; y++) {
-    for (let x = 0; x < state.gridSize; x++) {
-      const tile = state.grid[y][x];
-      
-      // Check if location is valid
-      if (tile.building || tile.terrain === 'water') continue;
-      
-      // Check if tile is within player's territory (not just "near" owned tiles)
-      const territoryOwner = getTerritoryOwner(state.grid, state.gridSize, x, y, cityCenters);
-      if (territoryOwner !== player.id) continue;
-      
-      // Check building size fits and all tiles are in territory
-      let fits = true;
-      for (let dy = 0; dy < stats.size.height; dy++) {
-        for (let dx = 0; dx < stats.size.width; dx++) {
-          const checkTile = state.grid[y + dy]?.[x + dx];
-          if (!checkTile || checkTile.building || checkTile.terrain === 'water') {
-            fits = false;
-            break;
-          }
-          // Also check that all tiles of multi-tile buildings are in territory
-          const tileOwner = getTerritoryOwner(state.grid, state.gridSize, x + dx, y + dy, cityCenters);
-          if (tileOwner !== player.id) {
-            fits = false;
-            break;
-          }
-        }
-        if (!fits) break;
-      }
-      
-      if (fits) {
-        bestPos = { x, y };
-        break;
-      }
-    }
-    if (bestPos) break;
-  }
-  
-  if (!bestPos) return state;
-  
-  // Deduct resources
-  const newResources = { ...player.resources };
-  for (const [resource, amount] of Object.entries(stats.cost)) {
-    if (amount) {
-      newResources[resource as ResourceType] -= amount;
-    }
-  }
-  
-  // Create building
-  const newBuilding: RoNBuilding = {
-    type: buildingType,
-    level: 1,
-    ownerId: player.id,
-    health: stats.maxHealth,
-    maxHealth: stats.maxHealth,
-    constructionProgress: 100, // AI buildings are instant for simplicity
-    queuedUnits: [],
-    productionProgress: 0,
-    garrisonedUnits: [],
-  };
-  
-  // Update grid
-  const newGrid = state.grid.map((row, gy) =>
-    row.map((tile, gx) => {
-      if (gx >= bestPos!.x && gx < bestPos!.x + stats.size.width &&
-          gy >= bestPos!.y && gy < bestPos!.y + stats.size.height) {
-        return {
-          ...tile,
-          building: gx === bestPos!.x && gy === bestPos!.y ? newBuilding : null,
-          ownerId: player.id,
-        };
-      }
-      return tile;
-    })
-  );
-  
-  const newPlayers = state.players.map(p =>
-    p.id === player.id ? { ...p, resources: newResources } : p
-  );
-  
-  return { ...state, grid: newGrid, players: newPlayers };
-}
-
-function aiTryTrainUnits(state: RoNGameState, player: RoNPlayer): RoNGameState {
-  if (player.population >= player.populationCap - 2) return state;
-  
-  // Count units
-  let citizens = 0;
-  let military = 0;
-  
-  state.units.forEach(u => {
-    if (u.ownerId !== player.id) return;
-    if (u.type === 'citizen') citizens++;
-    else military++;
-  });
-  
-  // Determine what to train
-  let unitType: UnitType | null = null;
-  let buildingType: RoNBuildingType | null = null;
-  
-  if (citizens < 6) {
-    unitType = 'citizen';
-    buildingType = 'city_center';
-  } else if (military < citizens) {
-    unitType = 'militia';
-    buildingType = 'barracks';
-  }
-  
-  if (!unitType || !buildingType) return state;
-  
-  // Find building
-  let buildingPos: { x: number; y: number } | null = null;
-  
-  state.grid.forEach((row, y) => {
-    row.forEach((tile, x) => {
-      if (tile.ownerId === player.id && 
-          tile.building?.type === buildingType &&
-          tile.building.constructionProgress >= 100 &&
-          tile.building.queuedUnits.length < 3) {
-        buildingPos = { x, y };
-      }
-    });
-  });
-  
-  if (!buildingPos) return state;
-  
-  const unitStats = UNIT_STATS[unitType];
-  if (!unitStats) return state;
-  
-  // Check resources
-  for (const [resource, amount] of Object.entries(unitStats.cost)) {
-    if (amount && player.resources[resource as ResourceType] < amount) {
-      return state;
-    }
-  }
-  
-  // Deduct resources and queue
-  const newResources = { ...player.resources };
-  for (const [resource, amount] of Object.entries(unitStats.cost)) {
-    if (amount) {
-      newResources[resource as ResourceType] -= amount;
-    }
-  }
-  
-  const newGrid = state.grid.map((row, gy) =>
-    row.map((tile, gx) => {
-      if (gx === buildingPos!.x && gy === buildingPos!.y && tile.building) {
-        return {
-          ...tile,
-          building: {
-            ...tile.building,
-            queuedUnits: [...tile.building.queuedUnits, unitType!],
-          },
-        };
-      }
-      return tile;
-    })
-  );
-  
-  const newPlayers = state.players.map(p =>
-    p.id === player.id ? { ...p, resources: newResources } : p
-  );
-  
-  return { ...state, grid: newGrid, players: newPlayers };
-}
-
-function aiAssignIdleWorkers(state: RoNGameState, player: RoNPlayer): RoNGameState {
-  // Find idle citizens
-  const idleCitizens = state.units.filter(
-    u => u.ownerId === player.id && u.type === 'citizen' && u.task === 'idle'
-  );
-  
-  if (idleCitizens.length === 0) return state;
-  
-  // Find economic buildings that need workers (with capacity available)
-  const economicBuildings: Array<{ x: number; y: number; type: RoNBuildingType }> = [];
-  
-  state.grid.forEach((row, y) => {
-    row.forEach((tile, x) => {
-      if (tile.ownerId === player.id && 
-          tile.building && 
-          tile.building.constructionProgress >= 100 &&
-          ECONOMIC_BUILDINGS.includes(tile.building.type)) {
-        // Check worker capacity
-        const buildingStats = BUILDING_STATS[tile.building.type as RoNBuildingType];
-        const maxWorkers = buildingStats?.maxWorkers ?? 999;
-        const currentWorkers = countWorkersAtBuilding(state.units, x, y, player.id);
-        if (currentWorkers < maxWorkers) {
-          economicBuildings.push({ x, y, type: tile.building.type });
-        }
-      }
-    });
-  });
-  
-  if (economicBuildings.length === 0) return state;
-  
-  // Assign first idle citizen to a random building with capacity
-  const citizen = idleCitizens[0];
-  const building = economicBuildings[Math.floor(Math.random() * economicBuildings.length)];
-  
-  let taskType: UnitTask = 'gather_food';
-  switch (building.type) {
-    case 'farm': taskType = 'gather_food'; break;
-    case 'woodcutters_camp':
-    case 'lumber_mill': taskType = 'gather_wood'; break;
-    case 'mine':
-    case 'smelter': taskType = 'gather_metal'; break;
-    case 'market': taskType = 'gather_gold'; break;
-    case 'oil_well':
-    case 'refinery': taskType = 'gather_oil'; break;
-    case 'library':
-    case 'university': taskType = 'gather_knowledge'; break;
-  }
-  
-  const newUnits = state.units.map(u => {
-    if (u.id === citizen.id) {
-      return {
-        ...u,
-        task: taskType,
-        taskTarget: { x: building.x, y: building.y },
-        targetX: building.x,
-        targetY: building.y,
-        isMoving: true,
-      };
-    }
-    return u;
-  });
-  
-  return { ...state, units: newUnits };
-}
-
-function aiAttackIfStrong(state: RoNGameState, player: RoNPlayer, difficulty: string): RoNGameState {
-  // Count military units
-  const militaryUnits = state.units.filter(
-    u => u.ownerId === player.id && u.type !== 'citizen' && u.task === 'idle'
-  );
-  
-  const threshold = difficulty === 'easy' ? 10 : difficulty === 'medium' ? 6 : 3;
-  if (militaryUnits.length < threshold) return state;
-  
-  // Find enemy buildings - use nested loop for proper type narrowing
-  let attackTarget: { x: number; y: number } | undefined = undefined;
-  
-  outer: for (let y = 0; y < state.grid.length; y++) {
-    const row = state.grid[y];
-    for (let x = 0; x < row.length; x++) {
-      const tile = row[x];
-      if (tile.ownerId && tile.ownerId !== player.id && tile.building) {
-        attackTarget = { x, y };
-        break outer;
-      }
-    }
-  }
-  
-  if (!attackTarget) return state;
-  
-  // Capture the value for use in callback
-  const target = attackTarget;
-  
-  // Count military units that will attack for formation spreading
-  const attackingUnits = state.units.filter(u => 
-    u.ownerId === player.id && 
-    u.type !== 'citizen' && 
-    u.task === 'idle'
-  );
-  const numAttacking = attackingUnits.length;
-  
-  // Send military units to attack with formation spreading
-  let unitIndex = 0;
-  const newUnits = state.units.map(u => {
-    if (u.ownerId === player.id && 
-        u.type !== 'citizen' && 
-        u.task === 'idle') {
-      
-      // Calculate offset for attack formation
-      let offsetX = 0;
-      let offsetY = 0;
-      
-      if (numAttacking > 1) {
-        const spreadRadius = 0.8;
-        if (unitIndex === 0) {
-          offsetX = 0;
-          offsetY = 0;
-        } else {
-          const angle = (unitIndex - 1) * (Math.PI * 2 / Math.max(1, numAttacking - 1));
-          const ring = Math.floor((unitIndex - 1) / 6) + 1;
-          offsetX = Math.cos(angle) * spreadRadius * ring;
-          offsetY = Math.sin(angle) * spreadRadius * ring;
-        }
-      }
-      
-      unitIndex++;
-      
-      return {
-        ...u,
-        task: 'attack' as UnitTask,
-        taskTarget: target,
-        targetX: target.x + offsetX,
-        targetY: target.y + offsetY,
-        isMoving: true,
-      };
-    }
-    return u;
-  });
-  
-  return { ...state, units: newUnits };
 }
 
 /**

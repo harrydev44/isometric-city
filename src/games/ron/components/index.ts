@@ -7,3 +7,4 @@ export { RoNCanvas } from './RoNCanvas';
 export { RoNSidebar } from './RoNSidebar';
 export { RoNMiniMap } from './RoNMiniMap';
 export { RoNBuildingPanel } from './RoNBuildingPanel';
+export { AIMessagePanel } from './AIMessagePanel';

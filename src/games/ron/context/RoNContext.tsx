@@ -21,6 +21,7 @@ import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS } from '../types/buildings';
 import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
 import { simulateRoNTick } from '../lib/simulation';
+import { useAgenticAI, AgenticAIMessage, AgenticAIConfig } from '../hooks/useAgenticAI';
 
 // Storage keys for RoN (separate from IsoCity)
 const RON_STORAGE_KEY = 'ron-game-state';
@@ -168,6 +169,18 @@ interface RoNContextValue {
   
   // Debug
   debugAddResources: () => void;
+  
+  // Agentic AI
+  agenticAI: {
+    enabled: boolean;
+    messages: AgenticAIMessage[];
+    isThinking: boolean;
+    lastError: string | null;
+    thoughts: string | null;
+  };
+  setAgenticAIEnabled: (enabled: boolean) => void;
+  markAIMessageRead: (messageId: string) => void;
+  clearAIMessages: () => void;
 }
 
 const RoNContext = createContext<RoNContextValue | null>(null);
@@ -180,6 +193,9 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   // Track if we've loaded from localStorage
   const [isStateReady, setIsStateReady] = useState(false);
   const hasLoadedRef = useRef(false);
+  
+  // Agentic AI state - enabled by default
+  const [agenticAIEnabled, setAgenticAIEnabled] = useState(true);
 
   // Initialize with a default 2-player game (1 human vs 1 AI)
   const [state, setState] = useState<RoNGameState>(() =>
@@ -197,6 +213,18 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const saveInProgressRef = useRef(false);
   const lastSaveTimeRef = useRef(0);
   const skipNextSaveRef = useRef(false);
+
+  // Find AI player ID
+  const aiPlayerId = state.players.find(p => p.type === 'ai')?.id || '';
+  
+  // Agentic AI hook - uses OpenAI Responses SDK
+  const agenticAIConfig: AgenticAIConfig = {
+    enabled: agenticAIEnabled && !!aiPlayerId,
+    aiPlayerId,
+    actionInterval: 100, // AI acts every 100 ticks
+  };
+  
+  const agenticAI = useAgenticAI(state, setState, agenticAIConfig);
 
   // Load game state from localStorage on mount
   useEffect(() => {
@@ -918,6 +946,17 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     loadState,
     resetGame,
     debugAddResources,
+    // Agentic AI
+    agenticAI: {
+      enabled: agenticAIEnabled,
+      messages: agenticAI.messages,
+      isThinking: agenticAI.isThinking,
+      lastError: agenticAI.lastError,
+      thoughts: agenticAI.thoughts,
+    },
+    setAgenticAIEnabled,
+    markAIMessageRead: agenticAI.markMessageRead,
+    clearAIMessages: agenticAI.clearMessages,
   };
   
   return (

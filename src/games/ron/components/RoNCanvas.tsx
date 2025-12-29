@@ -423,72 +423,46 @@ function drawRoNRoad(
   // Draw road surface
   ctx.fillStyle = roadColor;
 
+  // Helper to draw a road segment from center towards an edge
+  const drawSegment = (edgeX: number, edgeY: number, dx: number, dy: number) => {
+    const stopX = cx + (edgeX - cx) * edgeStop;
+    const stopY = cy + (edgeY - cy) * edgeStop;
+    const perp = getPerp(dx, dy);
+    const halfWidth = roadW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
+    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
+    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
+    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // Count connections
+  const connections = [north, east, south, west].filter(Boolean).length;
+
   // Draw road segments for each direction
-  if (north) {
-    const stopX = cx + (northEdgeX - cx) * edgeStop;
-    const stopY = cy + (northEdgeY - cy) * edgeStop;
-    const perp = getPerp(northDx, northDy);
-    const halfWidth = roadW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
-    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
-    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
-    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
-    ctx.closePath();
-    ctx.fill();
+  if (north) drawSegment(northEdgeX, northEdgeY, northDx, northDy);
+  if (east) drawSegment(eastEdgeX, eastEdgeY, eastDx, eastDy);
+  if (south) drawSegment(southEdgeX, southEdgeY, southDx, southDy);
+  if (west) drawSegment(westEdgeX, westEdgeY, westDx, westDy);
+
+  // If isolated road (no connections), draw all 4 directions as a crossroads
+  if (connections === 0) {
+    drawSegment(northEdgeX, northEdgeY, northDx, northDy);
+    drawSegment(eastEdgeX, eastEdgeY, eastDx, eastDy);
+    drawSegment(southEdgeX, southEdgeY, southDx, southDy);
+    drawSegment(westEdgeX, westEdgeY, westDx, westDy);
   }
 
-  if (east) {
-    const stopX = cx + (eastEdgeX - cx) * edgeStop;
-    const stopY = cy + (eastEdgeY - cy) * edgeStop;
-    const perp = getPerp(eastDx, eastDy);
-    const halfWidth = roadW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
-    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
-    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
-    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  if (south) {
-    const stopX = cx + (southEdgeX - cx) * edgeStop;
-    const stopY = cy + (southEdgeY - cy) * edgeStop;
-    const perp = getPerp(southDx, southDy);
-    const halfWidth = roadW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
-    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
-    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
-    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  if (west) {
-    const stopX = cx + (westEdgeX - cx) * edgeStop;
-    const stopY = cy + (westEdgeY - cy) * edgeStop;
-    const perp = getPerp(westDx, westDy);
-    const halfWidth = roadW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
-    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
-    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
-    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Center intersection diamond - use isometric proportions (2:1 width:height ratio)
-  // This ensures the intersection aligns with the isometric grid
-  const centerW = roadW * 1.4;  // Half-width of intersection
-  const centerH = roadW * 0.7;  // Half-height (half of width for isometric)
+  // Center intersection - match IsoCity exactly (same offset in all directions)
+  // This creates a proper diamond that covers the intersection gaps
+  const centerSize = roadW * 1.4;
   ctx.beginPath();
-  ctx.moveTo(cx, cy - centerH);        // Top
-  ctx.lineTo(cx + centerW, cy);        // Right
-  ctx.lineTo(cx, cy + centerH);        // Bottom
-  ctx.lineTo(cx - centerW, cy);        // Left
+  ctx.moveTo(cx, cy - centerSize);     // Top
+  ctx.lineTo(cx + centerSize, cy);     // Right  
+  ctx.lineTo(cx, cy + centerSize);     // Bottom
+  ctx.lineTo(cx - centerSize, cy);     // Left
   ctx.closePath();
   ctx.fill();
 
@@ -1519,8 +1493,11 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
                   );
                 }
               }
-            } else if (tile.building?.type !== 'road') {
-              // Regular grass tile (skip roads - they're drawn in second pass without base)
+            } else if (tile.building?.type === 'road') {
+              // Draw grass base under roads (roads are drawn on top in second pass)
+              drawGroundTile(ctx, screenX, screenY, 'none', currentZoom, false);
+            } else {
+              // Regular grass tile
               drawGroundTile(ctx, screenX, screenY, zoneType, currentZoom, false);
             }
             

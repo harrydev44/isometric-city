@@ -11,6 +11,7 @@ import { RoNCanvas } from './RoNCanvas';
 import { RoNSidebar } from './RoNSidebar';
 import { RoNMiniMap } from './RoNMiniMap';
 import { RoNBuildingPanel } from './RoNBuildingPanel';
+import { AIMessagePanel } from './AIMessagePanel';
 import { Button } from '@/components/ui/button';
 import { AGE_INFO } from '../types/ages';
 import { PLAYER_COLORS } from '../lib/renderConfig';
@@ -18,7 +19,18 @@ import { SpeedControl } from '@/components/game/shared';
 import { StatBadge } from '@/components/game/TopBar';
 
 function GameContent({ onExit }: { onExit?: () => void }) {
-  const { state, getCurrentPlayer, newGame, selectedBuildingPos, setSpeed, debugAddResources } = useRoN();
+  const { 
+    state, 
+    getCurrentPlayer, 
+    newGame, 
+    selectedBuildingPos, 
+    setSpeed, 
+    debugAddResources,
+    agenticAI,
+    setAgenticAIEnabled,
+    markAIMessageRead,
+    clearAIMessages,
+  } = useRoN();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{ 
     offset: { x: number; y: number }; 
@@ -167,8 +179,19 @@ function GameContent({ onExit }: { onExit?: () => void }) {
             )}
           </div>
           
-          {/* Right section: Debug and Exit */}
+          {/* Right section: Agentic AI toggle, Debug and Exit */}
           <div className="flex items-center gap-2 justify-end">
+            {/* Agentic AI toggle */}
+            <Button
+              size="sm"
+              variant={agenticAI.enabled ? "default" : "outline"}
+              onClick={() => setAgenticAIEnabled(!agenticAI.enabled)}
+              className={agenticAI.enabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+              title={agenticAI.enabled ? "Disable Agentic AI (using OpenAI)" : "Enable Agentic AI opponent (requires OPENAI_API_KEY)"}
+            >
+              {agenticAI.isThinking && "🤔 "}
+              {agenticAI.enabled ? "AI: ON" : "AI: OFF"}
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -216,6 +239,16 @@ function GameContent({ onExit }: { onExit?: () => void }) {
           )}
         </div>
       </div>
+      
+      {/* Agentic AI Message Panel */}
+      {agenticAI.enabled && (
+        <AIMessagePanel
+          messages={agenticAI.messages}
+          isThinking={agenticAI.isThinking}
+          onMarkRead={markAIMessageRead}
+          onClear={clearAIMessages}
+        />
+      )}
     </div>
   );
 }

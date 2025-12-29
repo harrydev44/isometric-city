@@ -171,6 +171,45 @@ export function RoNSidebar() {
       }
     }
     
+    // Units from dock (naval)
+    if (selectedBuilding.type === 'dock') {
+      units.push({ type: 'fishing_boat', name: 'Fishing Boat' });
+      if (ageIndex >= AGE_ORDER.indexOf('classical')) {
+        units.push({ type: 'galley', name: 'Galley' });
+        units.push({ type: 'trireme', name: 'Trireme' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
+        units.push({ type: 'carrack', name: 'Carrack' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('enlightenment')) {
+        units.push({ type: 'frigate', name: 'Frigate' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
+        units.push({ type: 'ironclad', name: 'Ironclad' });
+        units.push({ type: 'battleship', name: 'Battleship' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('modern')) {
+        units.push({ type: 'destroyer', name: 'Destroyer' });
+        units.push({ type: 'cruiser', name: 'Cruiser' });
+        units.push({ type: 'aircraft_carrier', name: 'Aircraft Carrier' });
+        units.push({ type: 'submarine', name: 'Submarine' });
+      }
+    }
+    
+    // Units from siege factory
+    if (selectedBuilding.type === 'siege_factory') {
+      units.push({ type: 'catapult', name: 'Catapult' });
+      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
+        units.push({ type: 'trebuchet', name: 'Trebuchet' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('enlightenment')) {
+        units.push({ type: 'cannon', name: 'Cannon' });
+      }
+      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
+        units.push({ type: 'howitzer', name: 'Howitzer' });
+      }
+    }
+    
     return units;
   }, [selectedBuilding, ageIndex]);
   

@@ -952,4 +952,5 @@ export type UnitTask =
   | 'repair'
   | 'attack'
   | 'patrol'
-  | 'garrison';
+  | 'garrison'
+  | 'flee';
