@@ -47,6 +47,25 @@ export default function RiseGame() {
     return { age, x: state.lastDamageAt.x, y: state.lastDamageAt.y };
   }, [state.lastDamageAt, state.elapsedSeconds]);
 
+  const hotkeyInfo = React.useMemo(
+    () => [
+      { label: 'Speed 1/2/3/0', keys: '1/2/3/0' },
+      { label: 'Pause', keys: 'Space' },
+      { label: 'Spawn citizen', keys: 'C' },
+      { label: 'Age up', keys: 'A' },
+      { label: 'Build barracks', keys: 'B' },
+      { label: 'Build farm', keys: 'F' },
+      { label: 'Idle worker', keys: 'I' },
+      { label: 'Army group', keys: 'M' },
+      { label: 'Center on city/enemy', keys: 'H / E' },
+      { label: 'Jump to alert', keys: 'J' },
+      { label: 'Toggle alerts', keys: 'L' },
+      { label: 'Pan', keys: 'WASD / Arrows' },
+      { label: 'Cancel/Clear', keys: 'Esc' },
+    ],
+    []
+  );
+
   const panCamera = React.useCallback((dx: number, dy: number) => {
     setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
   }, []);
@@ -363,6 +382,21 @@ export default function RiseGame() {
             >
               Alerts: {showAlerts ? 'On' : 'Off'}
             </button>
+            <div className="relative group">
+              <button className="px-2 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+                Hotkeys
+              </button>
+              <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-30">
+                <div className="bg-slate-900/95 border border-slate-800 rounded-lg shadow-xl p-3 text-[11px] text-slate-200 w-64 space-y-1">
+                  {hotkeyInfo.map(h => (
+                    <div key={h.label} className="flex justify-between gap-2">
+                      <span className="text-slate-400">{h.label}</span>
+                      <span className="font-semibold text-slate-100">{h.keys}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
