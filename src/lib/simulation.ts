@@ -1800,11 +1800,11 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
   expenses += Math.floor(budget.power.cost * budget.power.funding / 100);
   expenses += Math.floor(budget.water.cost * budget.water.funding / 100);
 
-  // Calculate ratings
-  const avgPoliceCoverage = calculateAverageCoverage(services.police);
-  const avgFireCoverage = calculateAverageCoverage(services.fire);
-  const avgHealthCoverage = calculateAverageCoverage(services.health);
-  const avgEducationCoverage = calculateAverageCoverage(services.education);
+  // Calculate ratings - only count coverage for developed zones (not empty tiles)
+  const avgPoliceCoverage = calculateAverageCoverageForDevelopedZones(services.police, grid, size);
+  const avgFireCoverage = calculateAverageCoverageForDevelopedZones(services.fire, grid, size);
+  const avgHealthCoverage = calculateAverageCoverageForDevelopedZones(services.health, grid, size);
+  const avgEducationCoverage = calculateAverageCoverageForDevelopedZones(services.education, grid, size);
 
   const safety = Math.min(100, avgPoliceCoverage * 0.7 + avgFireCoverage * 0.3);
   const health = Math.min(100, avgHealthCoverage * 0.8 + (100 - totalPollution / (size * size)) * 0.2);
@@ -1843,16 +1843,28 @@ function calculateStats(grid: Tile[][], size: number, budget: Budget, taxRate: n
   };
 }
 
-function calculateAverageCoverage(coverage: number[][]): number {
+// Calculate average coverage only for developed zones (residential, commercial, industrial)
+// This ensures coverage percentages reflect actual city needs, not empty grid space
+function calculateAverageCoverageForDevelopedZones(coverage: number[][], grid: Tile[][], size: number): number {
   let total = 0;
   let count = 0;
-  for (const row of coverage) {
-    for (const value of row) {
-      total += value;
-      count++;
+  
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const tile = grid[y][x];
+      
+      // Only count tiles in residential, commercial, or industrial zones that have buildings
+      // Skip grass/empty tiles and non-zoned areas
+      if ((tile.zone === 'residential' || tile.zone === 'commercial' || tile.zone === 'industrial') &&
+          tile.building.type !== 'grass' && tile.building.type !== 'empty') {
+        total += coverage[y][x];
+        count++;
+      }
     }
   }
-  return count > 0 ? total / count : 0;
+  
+  // If no developed zones exist, return 100 (no coverage needed)
+  return count > 0 ? total / count : 100;
 }
 
 // PERF: Update budget costs based on buildings - single pass through grid
