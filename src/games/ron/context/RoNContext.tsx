@@ -62,6 +62,9 @@ interface RoNContextValue {
   // Helpers
   getCurrentPlayer: () => RoNPlayer | undefined;
   getPlayerById: (id: string) => RoNPlayer | undefined;
+  
+  // Debug
+  debugAddResources: () => void;
 }
 
 const RoNContext = createContext<RoNContextValue | null>(null);
@@ -513,7 +516,29 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const getPlayerById = useCallback((id: string): RoNPlayer | undefined => {
     return state.players.find(p => p.id === id);
   }, [state.players]);
-  
+
+  // Debug: Add 50 of each resource to current player
+  const debugAddResources = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      players: prev.players.map(p => 
+        p.id === prev.currentPlayerId
+          ? {
+              ...p,
+              resources: {
+                food: p.resources.food + 50,
+                wood: p.resources.wood + 50,
+                metal: p.resources.metal + 50,
+                gold: p.resources.gold + 50,
+                knowledge: p.resources.knowledge + 50,
+                oil: p.resources.oil + 50,
+              }
+            }
+          : p
+      ),
+    }));
+  }, []);
+
   const value: RoNContextValue = {
     state,
     latestStateRef,
@@ -534,6 +559,7 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     newGame,
     getCurrentPlayer,
     getPlayerById,
+    debugAddResources,
   };
   
   return (

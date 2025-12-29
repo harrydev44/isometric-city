@@ -335,13 +335,61 @@ export function createInitialRoNGameState(
     }
   }
   
-  // Add oil and metal deposits (only on grass, not in forests)
+  // Generate 3-5 metal deposit clusters (mountain ranges) - larger like forests
+  const numMetalClusters = 3 + Math.floor(Math.random() * 3);
+  for (let c = 0; c < numMetalClusters; c++) {
+    // Find a valid starting point for metal cluster
+    let attempts = 0;
+    let startX = -1, startY = -1;
+
+    while (attempts < 50) {
+      const x = minDistFromEdge + Math.floor(Math.random() * (gridSize - 2 * minDistFromEdge));
+      const y = minDistFromEdge + Math.floor(Math.random() * (gridSize - 2 * minDistFromEdge));
+      
+      // Check if valid (grass, no forest, not too close to lake centers or other features)
+      if (grid[y][x].terrain === 'grass' && 
+          grid[y][x].forestDensity === 0 &&
+          !lakeCenters.some(lc => Math.abs(lc.x - x) + Math.abs(lc.y - y) < 5)) {
+        startX = x;
+        startY = y;
+        break;
+      }
+      attempts++;
+    }
+    
+    if (startX === -1) continue;
+    
+    // Grow the metal cluster (6-12 tiles) - larger mountain ranges
+    const clusterTiles: { x: number; y: number }[] = [{ x: startX, y: startY }];
+    const clusterSize = 6 + Math.floor(Math.random() * 7);
+    
+    for (let i = 1; i < clusterSize; i++) {
+      if (clusterTiles.length === 0) break;
+      const base = clusterTiles[Math.floor(Math.random() * clusterTiles.length)];
+      const dir = directions[Math.floor(Math.random() * directions.length)];
+      const nx = base.x + dir[0];
+      const ny = base.y + dir[1];
+      
+      if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize &&
+          grid[ny][nx].terrain === 'grass' &&
+          grid[ny][nx].forestDensity === 0 &&
+          !clusterTiles.some(t => t.x === nx && t.y === ny)) {
+        clusterTiles.push({ x: nx, y: ny });
+      }
+    }
+    
+    // Mark all cluster tiles as having metal deposits
+    for (const tile of clusterTiles) {
+      grid[tile.y][tile.x].hasMetalDeposit = true;
+    }
+  }
+  
+  // Add oil deposits (scattered, only on grass without forests or metal)
   for (let y = 0; y < gridSize; y++) {
     for (let x = 0; x < gridSize; x++) {
       const tile = grid[y][x];
-      if (tile.terrain === 'grass' && tile.forestDensity === 0) {
+      if (tile.terrain === 'grass' && tile.forestDensity === 0 && !tile.hasMetalDeposit) {
         tile.hasOilDeposit = Math.random() < OIL_DEPOSIT_CHANCE;
-        tile.hasMetalDeposit = Math.random() < 0.02;
       }
     }
   }

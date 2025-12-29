@@ -20,7 +20,6 @@ export function RoNSidebar() {
     state, 
     selectedBuildingPos,  // Now from separate state
     setTool, 
-    setSpeed, 
     setActivePanel,
     canAdvanceAge, 
     advanceAge,
@@ -185,61 +184,6 @@ export function RoNSidebar() {
             Advance Age
           </Button>
         )}
-      </div>
-      
-      {/* Resources */}
-      <div className="px-4 py-2 border-b border-slate-700">
-        <div className="text-xs text-slate-400 uppercase font-bold mb-2">Resources</div>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(RESOURCE_INFO).map(([key, info]) => {
-            const resource = key as ResourceType;
-            const amount = Math.floor(currentPlayer.resources[resource]);
-            const rate = currentPlayer.resourceRates[resource];
-            
-            // Hide oil before industrial age
-            if (resource === 'oil' && ageIndex < AGE_ORDER.indexOf('industrial')) {
-              return null;
-            }
-            
-            return (
-              <div 
-                key={resource}
-                className="flex items-center gap-1 text-sm"
-                style={{ color: info.color }}
-              >
-                <span>{info.icon}</span>
-                <span className="font-mono">{amount}</span>
-                {rate > 0 && (
-                  <span className="text-xs text-green-400">+{rate.toFixed(1)}</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        
-        {/* Population */}
-        <div className="mt-2 flex items-center gap-2 text-sm text-white">
-          <span>👥</span>
-          <span>{currentPlayer.population} / {currentPlayer.populationCap}</span>
-        </div>
-      </div>
-      
-      {/* Speed Control */}
-      <div className="px-4 py-2 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Speed:</span>
-          {[0, 1, 2, 3].map(speed => (
-            <Button
-              key={speed}
-              size="sm"
-              variant={state.gameSpeed === speed ? 'default' : 'ghost'}
-              onClick={() => setSpeed(speed as 0 | 1 | 2 | 3)}
-              className="w-8 h-8 p-0"
-            >
-              {speed === 0 ? '⏸' : speed === 1 ? '▶' : speed === 2 ? '▶▶' : '▶▶▶'}
-            </Button>
-          ))}
-        </div>
       </div>
       
       {/* Tools */}

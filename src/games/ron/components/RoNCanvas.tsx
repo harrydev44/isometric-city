@@ -20,6 +20,7 @@ import {
   TILE_HEIGHT,
   gridToScreen,
   screenToGrid,
+  screenToGridRaw,
   loadImage,
   loadSpriteImage,
   getCachedImage,
@@ -28,7 +29,6 @@ import {
   drawWaterTile,
   drawTileHighlight,
   drawSelectionBox,
-  drawUnit,
   drawHealthBar,
   drawSkyBackground,
   setupCanvas,
@@ -36,6 +36,7 @@ import {
   isTileVisible,
   WATER_ASSET_PATH,
 } from '@/components/game/shared';
+import { drawRoNUnit } from '../lib/drawUnits';
 
 /**
  * Find the origin tile of a multi-tile building by searching backwards from a clicked position.
@@ -82,6 +83,58 @@ function findBuildingOrigin(
   }
 
   return null;
+}
+
+/**
+ * Check if a tile position is adjacent to a forest tile.
+ * Used for validating woodcutter's camp placement.
+ */
+function isAdjacentToForest(
+  gridX: number,
+  gridY: number,
+  grid: import('../types/game').RoNTile[][],
+  gridSize: number
+): boolean {
+  // Check all 8 adjacent tiles (including diagonals)
+  const directions = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
+  ];
+
+  for (const [dx, dy] of directions) {
+    const nx = gridX + dx;
+    const ny = gridY + dy;
+    
+    if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue;
+    
+    const tile = grid[ny]?.[nx];
+    if (tile && tile.forestDensity > 0) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a building placement is valid at the given position.
+ * Returns true if valid, false if invalid.
+ */
+function isBuildingPlacementValid(
+  buildingType: RoNBuildingType,
+  gridX: number,
+  gridY: number,
+  grid: import('../types/game').RoNTile[][],
+  gridSize: number
+): boolean {
+  // Woodcutter's camp must be adjacent to forest
+  if (buildingType === 'woodcutters_camp') {
+    return isAdjacentToForest(gridX, gridY, grid, gridSize);
+  }
+  
+  // Other buildings - add more validation as needed
+  return true;
 }
 
 // IsoCity sprite sheet path for trees
@@ -249,9 +302,11 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
     selectUnitsInArea,
     moveSelectedUnits,
     selectBuilding,
+    selectedBuildingPos,
     placeBuilding,
     attackTarget,
     assignTask,
+    setTool,
   } = useRoN();
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -420,7 +475,12 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         // Building placement
         const toolInfo = RON_TOOL_INFO[currentTool];
         if (toolInfo?.buildingType) {
-          placeBuilding(gridX, gridY, toolInfo.buildingType);
+          const gameState = latestStateRef.current;
+          // Check if placement is valid
+          if (isBuildingPlacementValid(toolInfo.buildingType, gridX, gridY, gameState.grid, gameState.gridSize)) {
+            placeBuilding(gridX, gridY, toolInfo.buildingType);
+          }
+          // If invalid, do nothing (red highlight on hover shows it's not allowed)
         }
       } else if (currentTool === 'select') {
         // Start selection box
@@ -549,15 +609,15 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
           }
         }
       } else {
-        // Box selection - convert screen box to grid coordinates
-        // The units have fractional positions, so we need to include a buffer
-        const startGrid = screenToGrid(
+        // Box selection - convert screen box to raw grid coordinates (non-rounded)
+        // This gives us precise area bounds for accurate unit selection
+        const startGrid = screenToGridRaw(
           startX / zoomRef.current,
           startY / zoomRef.current,
           offsetRef.current.x / zoomRef.current,
           offsetRef.current.y / zoomRef.current
         );
-        const endGrid = screenToGrid(
+        const endGrid = screenToGridRaw(
           endX / zoomRef.current,
           endY / zoomRef.current,
           offsetRef.current.x / zoomRef.current,
@@ -607,6 +667,27 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
       onNavigationComplete?.();
     }
   }, [navigationTarget, zoom, onNavigationComplete]);
+
+  // Keyboard handler for ESC and other shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Deselect building if selected
+        if (selectedBuildingPos) {
+          selectBuilding(null);
+        }
+        // Deselect units
+        selectUnits([]);
+        // Reset to select tool
+        setTool('select');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedBuildingPos, selectBuilding, selectUnits, setTool]);
   
   // Main render loop
   useEffect(() => {
@@ -687,8 +768,16 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
             
             // Apply slight tinting for special tiles
             if (tile.hasMetalDeposit) {
-              // Grey tint for metal
-              ctx.fillStyle = '#6b7280';
+              // Draw complex mountainous terrain for metal deposits
+              // Base rocky ground with gradient
+              const gradient = ctx.createLinearGradient(
+                screenX, screenY,
+                screenX + TILE_WIDTH, screenY + TILE_HEIGHT
+              );
+              gradient.addColorStop(0, '#6b7280');
+              gradient.addColorStop(0.5, '#78716c');
+              gradient.addColorStop(1, '#57534e');
+              ctx.fillStyle = gradient;
               ctx.beginPath();
               ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
               ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
@@ -696,8 +785,148 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
               ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
               ctx.closePath();
               ctx.fill();
-              ctx.strokeStyle = '#4b5563';
+              
+              // Deterministic seed for this tile
+              const seed = x * 1000 + y;
+              
+              // Draw multiple layered mountain peaks (6-10 mountains per tile)
+              const numMountains = 6 + (seed % 5);
+              
+              // Mountain positions spread across the tile
+              const mountainPositions = [
+                { dx: 0.5, dy: 0.25, sizeMult: 1.4, heightMult: 1.5 },   // Back center - tallest
+                { dx: 0.3, dy: 0.3, sizeMult: 1.2, heightMult: 1.3 },   // Back left
+                { dx: 0.7, dy: 0.3, sizeMult: 1.1, heightMult: 1.2 },   // Back right
+                { dx: 0.2, dy: 0.45, sizeMult: 1.0, heightMult: 1.0 },  // Mid left
+                { dx: 0.5, dy: 0.45, sizeMult: 1.3, heightMult: 1.4 },  // Mid center
+                { dx: 0.8, dy: 0.45, sizeMult: 0.9, heightMult: 1.1 },  // Mid right
+                { dx: 0.35, dy: 0.6, sizeMult: 0.8, heightMult: 0.9 },  // Front left
+                { dx: 0.65, dy: 0.6, sizeMult: 0.85, heightMult: 0.95 }, // Front right
+                { dx: 0.5, dy: 0.7, sizeMult: 0.7, heightMult: 0.8 },   // Front center
+                { dx: 0.15, dy: 0.55, sizeMult: 0.6, heightMult: 0.7 }, // Far left
+              ];
+              
+              // Draw mountains from back to front for proper layering
+              for (let m = 0; m < Math.min(numMountains, mountainPositions.length); m++) {
+                const pos = mountainPositions[m];
+                const mSeed = seed * 7 + m * 13;
+                
+                // Base position with slight randomization
+                const baseX = screenX + TILE_WIDTH * pos.dx + ((mSeed % 20) - 10) * 0.5;
+                const baseY = screenY + TILE_HEIGHT * pos.dy + ((mSeed * 3 % 10) - 5) * 0.3;
+                
+                // Mountain dimensions
+                const baseWidth = (12 + (mSeed % 8)) * pos.sizeMult;
+                const peakHeight = (18 + (mSeed * 2 % 12)) * pos.heightMult;
+                const peakX = baseX + ((mSeed * 5 % 10) - 5) * 0.3;
+                const peakY = baseY - peakHeight;
+                
+                // Left face (shadow)
+                ctx.fillStyle = '#3f3f46';
+                ctx.beginPath();
+                ctx.moveTo(peakX, peakY);
+                ctx.lineTo(baseX - baseWidth * 0.5, baseY);
+                ctx.lineTo(baseX, baseY);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Right face (lit)
+                ctx.fillStyle = '#a1a1aa';
+                ctx.beginPath();
+                ctx.moveTo(peakX, peakY);
+                ctx.lineTo(baseX + baseWidth * 0.5, baseY);
+                ctx.lineTo(baseX, baseY);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Snow cap on taller mountains
+                if (pos.heightMult > 1.2) {
+                  const snowHeight = peakHeight * 0.25;
+                  ctx.fillStyle = '#e5e5e5';
+                  ctx.beginPath();
+                  ctx.moveTo(peakX, peakY);
+                  ctx.lineTo(peakX - baseWidth * 0.15, peakY + snowHeight);
+                  ctx.lineTo(peakX + baseWidth * 0.15, peakY + snowHeight);
+                  ctx.closePath();
+                  ctx.fill();
+                }
+                
+                // Ridge lines for texture
+                ctx.strokeStyle = '#52525b';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(peakX, peakY);
+                ctx.lineTo(baseX - baseWidth * 0.25, baseY);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(peakX, peakY);
+                ctx.lineTo(baseX + baseWidth * 0.2, baseY);
+                ctx.stroke();
+              }
+              
+              // Draw ore deposits (black/dark diamonds at base of mountains)
+              const numOreDeposits = 3 + (seed % 3);
+              const orePositions = [
+                { dx: 0.3, dy: 0.65 },
+                { dx: 0.5, dy: 0.72 },
+                { dx: 0.7, dy: 0.68 },
+                { dx: 0.4, dy: 0.58 },
+                { dx: 0.6, dy: 0.55 },
+              ];
+              
+              for (let o = 0; o < Math.min(numOreDeposits, orePositions.length); o++) {
+                const oPos = orePositions[o];
+                const oSeed = seed * 11 + o * 17;
+                const oreX = screenX + TILE_WIDTH * oPos.dx + ((oSeed % 10) - 5) * 0.5;
+                const oreY = screenY + TILE_HEIGHT * oPos.dy + ((oSeed * 2 % 6) - 3) * 0.3;
+                const oreSize = 4 + (oSeed % 4);
+                
+                // Dark ore diamond shape
+                ctx.fillStyle = '#1c1917';
+                ctx.beginPath();
+                ctx.moveTo(oreX, oreY - oreSize * 0.6);
+                ctx.lineTo(oreX + oreSize * 0.5, oreY);
+                ctx.lineTo(oreX, oreY + oreSize * 0.4);
+                ctx.lineTo(oreX - oreSize * 0.5, oreY);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Metallic glint
+                ctx.fillStyle = '#71717a';
+                ctx.beginPath();
+                ctx.arc(oreX - oreSize * 0.15, oreY - oreSize * 0.2, oreSize * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              
+              // Add scattered smaller rocks/boulders
+              const numBoulders = 4 + (seed % 3);
+              for (let b = 0; b < numBoulders; b++) {
+                const bSeed = seed * 19 + b * 23;
+                const bx = screenX + TILE_WIDTH * 0.15 + ((bSeed % 100) / 100) * TILE_WIDTH * 0.7;
+                const by = screenY + TILE_HEIGHT * 0.5 + ((bSeed * 3 % 60) / 100) * TILE_HEIGHT * 0.4;
+                const bSize = 2 + (bSeed % 3);
+                
+                ctx.fillStyle = '#52525b';
+                ctx.beginPath();
+                ctx.arc(bx, by, bSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Highlight
+                ctx.fillStyle = '#a1a1aa';
+                ctx.beginPath();
+                ctx.arc(bx - bSize * 0.3, by - bSize * 0.3, bSize * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              
+              // Subtle border
+              ctx.strokeStyle = '#44403c';
               ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
+              ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+              ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+              ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
+              ctx.closePath();
               ctx.stroke();
             } else if (tile.hasOilDeposit && AGE_ORDER.indexOf(playerAge) >= AGE_ORDER.indexOf('industrial')) {
               // Dark tint for oil (only visible in industrial+)
@@ -727,29 +956,35 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
                 const treeSx = 0 * treeTileWidth;  // col 0
                 const treeSy = 3 * treeTileHeight; // row 3
                 
-                // Number of trees based on forest density (1-4 trees)
-                const numTrees = Math.min(4, Math.floor(tile.forestDensity / 25) + 1);
+                // Number of trees based on forest density (6-8 trees for dense forests)
+                const numTrees = 6 + Math.floor((tile.forestDensity / 100) * 2);
                 
-                // Tree positions within the tile (deterministic based on position)
+                // Tree positions within the tile - spread across the diamond
                 const treePositions = [
-                  { dx: 0.5, dy: 0.5 },   // center
-                  { dx: 0.25, dy: 0.35 }, // top-left
-                  { dx: 0.75, dy: 0.35 }, // top-right
-                  { dx: 0.5, dy: 0.7 },   // bottom-center
+                  { dx: 0.5, dy: 0.35 },   // top-center
+                  { dx: 0.3, dy: 0.45 },   // upper-left
+                  { dx: 0.7, dy: 0.45 },   // upper-right
+                  { dx: 0.2, dy: 0.55 },   // mid-left
+                  { dx: 0.5, dy: 0.55 },   // center
+                  { dx: 0.8, dy: 0.55 },   // mid-right
+                  { dx: 0.35, dy: 0.65 },  // lower-left
+                  { dx: 0.65, dy: 0.65 },  // lower-right
                 ];
                 
-                // Tree size
-                const treeScale = 0.5;
-                const treeDestWidth = TILE_WIDTH * treeScale;
                 const treeAspect = treeTileHeight / treeTileWidth;
-                const treeDestHeight = treeDestWidth * treeAspect;
                 
                 for (let t = 0; t < numTrees; t++) {
                   const pos = treePositions[t];
-                  // Use tile position to create slight variation
+                  // Use tile position to create variation in size and position
                   const seed = (x * 31 + y * 17 + t * 7) % 100;
-                  const offsetX = (seed % 10 - 5) * 0.02 * TILE_WIDTH;
+                  const offsetX = (seed % 10 - 5) * 0.03 * TILE_WIDTH;
                   const offsetY = (Math.floor(seed / 10) - 5) * 0.02 * TILE_HEIGHT;
+                  
+                  // Vary tree size (0.35 to 0.55 scale)
+                  const sizeSeed = (x * 13 + y * 23 + t * 11) % 100;
+                  const treeScale = 0.35 + (sizeSeed / 100) * 0.2;
+                  const treeDestWidth = TILE_WIDTH * treeScale;
+                  const treeDestHeight = treeDestWidth * treeAspect;
                   
                   const treeDrawX = screenX + TILE_WIDTH * pos.dx - treeDestWidth / 2 + offsetX;
                   const treeDrawY = screenY + TILE_HEIGHT * pos.dy - treeDestHeight + TILE_HEIGHT * 0.3 + offsetY;
@@ -784,7 +1019,22 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
           
           // Draw hover/selection highlight
           if (isHovered) {
-            drawTileHighlight(ctx, screenX, screenY, 'hover');
+            // Check if we're in building mode and if placement would be invalid
+            const currentTool = gameState.selectedTool;
+            const toolInfo = RON_TOOL_INFO[currentTool];
+            if (toolInfo?.buildingType) {
+              // Building placement mode - check if valid
+              const isValidPlacement = isBuildingPlacementValid(
+                toolInfo.buildingType, 
+                x, 
+                y, 
+                gameState.grid, 
+                gameState.gridSize
+              );
+              drawTileHighlight(ctx, screenX, screenY, isValidPlacement ? 'hover' : 'invalid');
+            } else {
+              drawTileHighlight(ctx, screenX, screenY, 'hover');
+            }
           } else if (isSelected) {
             drawTileHighlight(ctx, screenX, screenY, 'selected');
           }
@@ -866,7 +1116,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         }
       }
       
-      // Fourth pass: Draw units
+      // Fourth pass: Draw units with pedestrian-like sprites
       gameState.units.forEach(unit => {
         const { screenX, screenY } = gridToScreen(unit.x, unit.y, 0, 0);
         
@@ -876,22 +1126,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         const playerIndex = gameState.players.findIndex(p => p.id === unit.ownerId);
         const color = PLAYER_COLORS[playerIndex] || '#ffffff';
         
-        // Get unit symbol
-        const symbol = unit.type === 'citizen' ? 'C' : 
-                      unit.type.includes('tank') ? 'T' :
-                      unit.type.includes('cavalry') || unit.type.includes('knight') ? 'H' :
-                      'M';
-        
-        // Draw unit larger for visibility (scale 1.5 instead of 1)
-        drawUnit(ctx, screenX, screenY, color, unit.isSelected, symbol, 1.5);
-        
-        // Health bar if damaged
-        const healthPercent = unit.health / unit.maxHealth;
-        if (healthPercent < 1) {
-          const barWidth = 14;
-          const unitCenterX = screenX + TILE_WIDTH / 4;
-          drawHealthBar(ctx, unitCenterX - barWidth / 2, screenY - 24, barWidth, healthPercent, 1);
-        }
+        // Draw unit with pedestrian-like appearance and task activities
+        drawRoNUnit(ctx, unit, 0, 0, currentZoom, color, gameState.tick);
       });
       
       ctx.restore();

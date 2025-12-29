@@ -18,7 +18,7 @@ import { SpeedControl } from '@/components/game/shared';
 import { StatBadge } from '@/components/game/TopBar';
 
 function GameContent({ onExit }: { onExit?: () => void }) {
-  const { state, getCurrentPlayer, newGame, selectedBuildingPos } = useRoN();
+  const { state, getCurrentPlayer, newGame, selectedBuildingPos, setSpeed, debugAddResources } = useRoN();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
   
   const currentPlayer = getCurrentPlayer();
@@ -81,34 +81,79 @@ function GameContent({ onExit }: { onExit?: () => void }) {
       {/* Main game area - uses flex-col like IsoCity */}
       <div className="flex-1 flex flex-col ml-56">
         {/* Top bar - as flex child (not absolute) like IsoCity */}
-        <div className="h-12 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            {state.players.map((player, index) => (
-              <div 
-                key={player.id}
-                className={`flex items-center gap-2 px-3 py-1 rounded ${
-                  player.id === currentPlayer?.id ? 'bg-slate-700' : ''
-                }`}
-              >
+        <div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+          {/* Left section: Players, Speed control */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              {state.players.map((player, index) => (
                 <div 
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: PLAYER_COLORS[index] }}
-                />
-                <span className="text-white text-sm">{player.name}</span>
-                <span className="text-xs" style={{ color: AGE_INFO[player.age].color }}>
-                  ({AGE_INFO[player.age].name})
-                </span>
-                {player.isDefeated && (
-                  <span className="text-red-400 text-xs">☠️</span>
-                )}
-              </div>
-            ))}
+                  key={player.id}
+                  className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${
+                    player.id === currentPlayer?.id ? 'bg-secondary' : ''
+                  }`}
+                >
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: PLAYER_COLORS[index] }}
+                  />
+                  <span className="text-foreground">{player.name}</span>
+                  <span className="text-xs" style={{ color: AGE_INFO[player.age].color }}>
+                    ({AGE_INFO[player.age].name})
+                  </span>
+                  {player.isDefeated && (
+                    <span className="text-red-500 text-xs">☠️</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {/* Speed control - same component as IsoCity */}
+            <SpeedControl 
+              speed={state.gameSpeed as 0 | 1 | 2 | 3} 
+              onSpeedChange={setSpeed} 
+            />
           </div>
           
-          <div className="flex items-center gap-4">
-            <span className="text-white text-sm">
-              Tick: {state.tick}
+          {/* Center section: Population and resources like IsoCity */}
+          <div className="flex items-center gap-3">
+            {currentPlayer && (
+              <>
+                <StatBadge 
+                  value={`${currentPlayer.population}/${currentPlayer.populationCap}`} 
+                  label="Population" 
+                />
+                <StatBadge 
+                  value={Math.floor(currentPlayer.resources.food).toString()} 
+                  label="Food"
+                  variant={currentPlayer.resources.food < 50 ? 'warning' : 'default'}
+                />
+                <StatBadge 
+                  value={Math.floor(currentPlayer.resources.wood).toString()} 
+                  label="Wood"
+                  variant={currentPlayer.resources.wood < 50 ? 'warning' : 'default'}
+                />
+                <StatBadge 
+                  value={Math.floor(currentPlayer.resources.gold).toString()} 
+                  label="Gold"
+                  variant={currentPlayer.resources.gold < 50 ? 'warning' : 'default'}
+                />
+              </>
+            )}
+          </div>
+          
+          {/* Right section: Tick, Debug, and Exit - fixed width to prevent jitter */}
+          <div className="flex items-center gap-2 min-w-[160px] justify-end">
+            <span className="text-muted-foreground text-xs font-mono tabular-nums w-16 text-right">
+              {state.tick}
             </span>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={debugAddResources}
+              title="Add 50 of each resource (debug)"
+            >
+              +50
+            </Button>
             {onExit && (
               <Button size="sm" variant="ghost" onClick={onExit}>
                 Exit
@@ -131,15 +176,6 @@ function GameContent({ onExit }: { onExit?: () => void }) {
           {selectedBuildingPos && (
             <RoNBuildingPanel onClose={() => {}} />
           )}
-          
-          {/* Help overlay */}
-          <div className="absolute bottom-4 left-4 z-20 bg-slate-800/80 backdrop-blur-sm p-2 rounded text-xs text-slate-300">
-            <div>Left Click: Select / Place</div>
-            <div>Right Click: Move / Attack</div>
-            <div>Middle Click / Alt+Drag: Pan</div>
-            <div>Scroll: Zoom</div>
-            <div>Drag: Box Select</div>
-          </div>
         </div>
       </div>
     </div>

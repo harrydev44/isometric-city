@@ -6,7 +6,7 @@
  */
 
 import { TILE_WIDTH, TILE_HEIGHT } from '../types';
-import { gridToScreen, screenToGrid } from '../utils';
+import { gridToScreen, screenToGrid, screenToGridRaw } from '../utils';
 import { 
   drawGreenBaseTile, 
   drawGreyBaseTile, 
@@ -19,11 +19,12 @@ import { loadImage, loadSpriteImage, getCachedImage, onImageLoaded } from '../im
 import { WATER_ASSET_PATH } from '../constants';
 
 // Re-export commonly used items
-export { 
-  TILE_WIDTH, 
-  TILE_HEIGHT, 
-  gridToScreen, 
+export {
+  TILE_WIDTH,
+  TILE_HEIGHT,
+  gridToScreen,
   screenToGrid,
+  screenToGridRaw,
   loadImage,
   loadSpriteImage,
   getCachedImage,
@@ -107,7 +108,7 @@ export function drawTileHighlight(
   ctx: CanvasRenderingContext2D,
   screenX: number,
   screenY: number,
-  style: 'hover' | 'selected' | 'attack' | 'move' = 'hover'
+  style: 'hover' | 'selected' | 'attack' | 'move' | 'invalid' = 'hover'
 ): void {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
@@ -118,6 +119,7 @@ export function drawTileHighlight(
     selected: { fill: 'rgba(34, 197, 94, 0.3)', stroke: '#22c55e', lineWidth: 2.5 },
     attack: { fill: 'rgba(239, 68, 68, 0.3)', stroke: '#ef4444', lineWidth: 2.5 },
     move: { fill: 'rgba(59, 130, 246, 0.25)', stroke: '#3b82f6', lineWidth: 2 },
+    invalid: { fill: 'rgba(239, 68, 68, 0.4)', stroke: '#dc2626', lineWidth: 2.5 },
   };
   
   const s = styles[style];

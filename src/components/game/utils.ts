@@ -415,10 +415,23 @@ export function screenToGrid(screenX: number, screenY: number, offsetX: number, 
   // diamond tile is at (screenX + TILE_WIDTH/2, screenY + TILE_HEIGHT/2)
   const adjustedX = screenX - offsetX - TILE_WIDTH / 2;
   const adjustedY = screenY - offsetY - TILE_HEIGHT / 2;
-  
+
   const gridX = (adjustedX / (TILE_WIDTH / 2) + adjustedY / (TILE_HEIGHT / 2)) / 2;
   const gridY = (adjustedY / (TILE_HEIGHT / 2) - adjustedX / (TILE_WIDTH / 2)) / 2;
-  
+
   // Use Math.round for accurate tile selection - this gives us the tile whose center is closest
   return { gridX: Math.round(gridX), gridY: Math.round(gridY) };
+}
+
+// Convert screen coordinates to raw (non-rounded) grid coordinates
+// Used for drag selection where we need precise area bounds
+export function screenToGridRaw(screenX: number, screenY: number, offsetX: number, offsetY: number): { gridX: number; gridY: number } {
+  const adjustedX = screenX - offsetX - TILE_WIDTH / 2;
+  const adjustedY = screenY - offsetY - TILE_HEIGHT / 2;
+
+  const gridX = (adjustedX / (TILE_WIDTH / 2) + adjustedY / (TILE_HEIGHT / 2)) / 2;
+  const gridY = (adjustedY / (TILE_HEIGHT / 2) - adjustedX / (TILE_WIDTH / 2)) / 2;
+
+  // Return raw values without rounding
+  return { gridX, gridY };
 }
