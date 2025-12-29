@@ -698,8 +698,6 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         setSelectionBox({ startX: screenX, startY: screenY, endX: screenX, endY: screenY });
       } else if (currentTool === 'move' && state.selectedUnitIds.length > 0) {
         moveSelectedUnits(gridX, gridY);
-      } else if (currentTool === 'attack' && state.selectedUnitIds.length > 0) {
-        attackTarget({ x: gridX, y: gridY });
       }
     }
   }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, latestStateRef]);

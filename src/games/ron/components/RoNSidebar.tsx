@@ -208,13 +208,6 @@ export function RoNSidebar() {
           >
             Move
           </Button>
-          <Button
-            size="sm"
-            variant={state.selectedTool === 'attack' ? 'default' : 'ghost'}
-            onClick={() => setTool('attack')}
-          >
-            Attack
-          </Button>
         </div>
       </div>
       

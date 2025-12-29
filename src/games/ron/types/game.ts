@@ -89,7 +89,6 @@ export interface RoNGameState {
 export type RoNTool =
   | 'select'
   | 'move'
-  | 'attack'
   | 'build_city_center'
   | 'build_farm'
   | 'build_woodcutters_camp'
@@ -128,7 +127,6 @@ export interface RoNToolInfo {
 export const RON_TOOL_INFO: Record<RoNTool, RoNToolInfo> = {
   select: { name: 'Select', description: 'Select units and buildings' },
   move: { name: 'Move', description: 'Move selected units', hotkey: 'M' },
-  attack: { name: 'Attack', description: 'Attack target', hotkey: 'A' },
   build_city_center: { name: 'City Center', buildingType: 'city_center', description: 'Place city center - spawns citizens' },
   build_farm: { name: 'Farm', buildingType: 'farm', description: 'Build farm for food production' },
   build_woodcutters_camp: { name: 'Woodcutter', buildingType: 'woodcutters_camp', description: 'Build camp for wood gathering' },
