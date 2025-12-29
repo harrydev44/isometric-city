@@ -48,6 +48,17 @@ export const GAME_TICKS_PER_MINUTE = 200;
 export const TARGET_GAME_DURATION_MINUTES = 40;
 export const TARGET_GAME_TICKS = GAME_TICKS_PER_MINUTE * TARGET_GAME_DURATION_MINUTES;
 
+// Population cap bonus per age (cumulative from ancient)
+// Ancient starts at base pop cap, each subsequent age adds this bonus
+export const AGE_POPULATION_BONUS: Record<Age, number> = {
+  ancient: 0,        // Base starting cap (10 from buildings)
+  classical: 25,     // +25 = 35 total possible
+  medieval: 50,      // +50 = 85 total possible
+  enlightenment: 75, // +75 = 160 total possible
+  industrial: 100,   // +100 = 260 total possible
+  modern: 150,       // +150 = 410 total possible
+};
+
 // Age display information
 export const AGE_INFO: Record<Age, { name: string; description: string; color: string }> = {
   ancient: { 

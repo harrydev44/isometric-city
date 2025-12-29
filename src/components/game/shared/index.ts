@@ -7,3 +7,6 @@
 
 export * from './isometricRenderer';
 export * from './SpeedControl';
+
+// Re-export beach drawing from drawing.ts for shared use
+export { drawBeachOnWater, BEACH_COLORS } from '../drawing';

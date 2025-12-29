@@ -35,6 +35,7 @@ import {
   calculateViewBounds,
   isTileVisible,
   WATER_ASSET_PATH,
+  drawBeachOnWater,
 } from '@/components/game/shared';
 import { drawRoNUnit } from '../lib/drawUnits';
 
@@ -975,12 +976,17 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
                 const treeRows = 6;
                 const treeTileWidth = isoCitySprite.width / treeCols;
                 const treeTileHeight = isoCitySprite.height / treeRows;
-                const treeSx = 0 * treeTileWidth;  // col 0
-                const treeSy = 3 * treeTileHeight; // row 3
                 
+                // Crop top 15% to avoid bleeding from asset above, and bottom 5%
+                const cropTop = treeTileHeight * 0.15;
+                const cropBottom = treeTileHeight * 0.05;
+                const treeSx = 0 * treeTileWidth;  // col 0
+                const treeSy = 3 * treeTileHeight + cropTop; // row 3, offset down to avoid asset above
+                const treeSrcHeight = treeTileHeight - cropTop - cropBottom;
+
                 // Number of trees based on forest density (6-8 trees for dense forests)
                 const numTrees = 6 + Math.floor((tile.forestDensity / 100) * 2);
-                
+
                 // Tree positions within the tile - spread across the diamond
                 const treePositions = [
                   { dx: 0.5, dy: 0.35 },   // top-center
@@ -992,28 +998,29 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
                   { dx: 0.35, dy: 0.65 },  // lower-left
                   { dx: 0.65, dy: 0.65 },  // lower-right
                 ];
-                
-                const treeAspect = treeTileHeight / treeTileWidth;
-                
+
+                const treeAspect = treeSrcHeight / treeTileWidth;
+
                 for (let t = 0; t < numTrees; t++) {
                   const pos = treePositions[t];
                   // Use tile position to create variation in size and position
                   const seed = (x * 31 + y * 17 + t * 7) % 100;
                   const offsetX = (seed % 10 - 5) * 0.03 * TILE_WIDTH;
                   const offsetY = (Math.floor(seed / 10) - 5) * 0.02 * TILE_HEIGHT;
-                  
+
                   // Vary tree size (0.35 to 0.55 scale)
                   const sizeSeed = (x * 13 + y * 23 + t * 11) % 100;
                   const treeScale = 0.35 + (sizeSeed / 100) * 0.2;
                   const treeDestWidth = TILE_WIDTH * treeScale;
                   const treeDestHeight = treeDestWidth * treeAspect;
-                  
+
                   const treeDrawX = screenX + TILE_WIDTH * pos.dx - treeDestWidth / 2 + offsetX;
-                  const treeDrawY = screenY + TILE_HEIGHT * pos.dy - treeDestHeight + TILE_HEIGHT * 0.3 + offsetY;
-                  
+                  // Position trees higher (reduced the 0.3 to 0.15 offset)
+                  const treeDrawY = screenY + TILE_HEIGHT * pos.dy - treeDestHeight + TILE_HEIGHT * 0.15 + offsetY;
+
                   ctx.drawImage(
                     isoCitySprite,
-                    treeSx, treeSy, treeTileWidth, treeTileHeight,
+                    treeSx, treeSy, treeTileWidth, treeSrcHeight,
                     treeDrawX, treeDrawY, treeDestWidth, treeDestHeight
                   );
                 }
@@ -1139,18 +1146,29 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
               const drawX = screenX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = screenY + TILE_HEIGHT - destHeight + (-0.1 * TILE_HEIGHT);
               
-              // Construction progress transparency
-              if (tile.building.constructionProgress < 100) {
-                ctx.globalAlpha = 0.4 + (tile.building.constructionProgress / 100) * 0.6;
+              // Use construction sprite for dock under construction
+              const isUnderConstruction = tile.building.constructionProgress < 100;
+              const constructionSprite = getCachedImage(ISOCITY_CONSTRUCTION_PATH, true);
+              
+              if (isUnderConstruction && constructionSprite) {
+                // Use a generic construction sprite from the construction sheet
+                const constrCols = 5;
+                const constrRows = 6;
+                const constrTileWidth = constructionSprite.width / constrCols;
+                const constrTileHeight = constructionSprite.height / constrRows;
+                // Use row 0, col 0 as a generic construction placeholder
+                ctx.drawImage(
+                  constructionSprite,
+                  0, 0, constrTileWidth, constrTileHeight,
+                  drawX, drawY, destWidth, destHeight
+                );
+              } else {
+                ctx.drawImage(
+                  parksSprite,
+                  sx, sy, parksTileWidth, sh,
+                  drawX, drawY, destWidth, destHeight
+                );
               }
-              
-              ctx.drawImage(
-                parksSprite,
-                sx, sy, parksTileWidth, sh,
-                drawX, drawY, destWidth, destHeight
-              );
-              
-              ctx.globalAlpha = 1;
             }
             continue; // Skip regular sprite drawing for dock
           }
@@ -1209,18 +1227,35 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
               const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush;
               
-              // Construction progress transparency
-              if (tile.building.constructionProgress < 100) {
-                ctx.globalAlpha = 0.4 + (tile.building.constructionProgress / 100) * 0.6;
+              // Use construction sprite for buildings under construction
+              const isUnderConstruction = tile.building.constructionProgress < 100;
+              const constructionSprite = getCachedImage(ISOCITY_CONSTRUCTION_PATH, true);
+              
+              if (isUnderConstruction && constructionSprite) {
+                // Use IsoCity construction sprite sheet (same layout as regular sprites)
+                // The construction sheet has the same 5x6 grid layout
+                const constrCols = 5;
+                const constrRows = 6;
+                const constrTileWidth = constructionSprite.width / constrCols;
+                const constrTileHeight = constructionSprite.height / constrRows;
+                
+                // Use the same sprite position but from the construction sheet
+                const constrSx = spritePos.col * constrTileWidth;
+                const constrSy = spritePos.row * constrTileHeight;
+                
+                ctx.drawImage(
+                  constructionSprite,
+                  constrSx, constrSy, constrTileWidth, constrTileHeight,
+                  drawX, drawY, destWidth, destHeight
+                );
+              } else {
+                // Draw completed building normally
+                ctx.drawImage(
+                  spriteSheet,
+                  sx, sy, tileWidth, tileHeight,
+                  drawX, drawY, destWidth, destHeight
+                );
               }
-              
-              ctx.drawImage(
-                spriteSheet,
-                sx, sy, tileWidth, tileHeight,
-                drawX, drawY, destWidth, destHeight
-              );
-              
-              ctx.globalAlpha = 1;
 
               // Health bar for damaged buildings
               if (tile.building.health < tile.building.maxHealth) {

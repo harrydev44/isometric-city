@@ -9,7 +9,7 @@
  */
 
 import { RoNGameState, RoNPlayer, RoNTile } from '../types/game';
-import { Age, AGE_ORDER, AGE_REQUIREMENTS } from '../types/ages';
+import { Age, AGE_ORDER, AGE_REQUIREMENTS, AGE_POPULATION_BONUS } from '../types/ages';
 import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_PRODUCTION_BUILDINGS } from '../types/buildings';
 import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
@@ -127,10 +127,30 @@ function updatePlayers(state: RoNGameState): RoNGameState {
       );
     }
     
+    // Calculate population cap from age bonus + buildings with providesHousing
+    let populationCap = AGE_POPULATION_BONUS[player.age];
+    
+    // Add housing from buildings
+    state.grid.forEach(row => {
+      row.forEach(tile => {
+        if (!tile.building || tile.ownerId !== player.id) return;
+        if (tile.building.constructionProgress < 100) return; // Not complete
+        
+        const stats = BUILDING_STATS[tile.building.type as RoNBuildingType];
+        if (stats?.providesHousing) {
+          populationCap += stats.providesHousing;
+        }
+      });
+    });
+    
+    // Minimum cap of 5
+    populationCap = Math.max(5, populationCap);
+    
     return {
       ...player,
       resources: newResources,
       resourceRates: rates,
+      populationCap,
     };
   });
   
