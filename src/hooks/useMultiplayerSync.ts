@@ -61,7 +61,11 @@ export function useMultiplayerSync() {
   const multiplayer = useMultiplayerOptional();
   const game = useGame();
   const lastActionRef = useRef<string | null>(null);
-  const initialStateLoadedRef = useRef(false);
+  // Prevent saving local "blank" state before we finish hydrating from multiplayer.
+  // Note: `game.loadState()` updates React state asynchronously, so we track hydration
+  // by matching the expected (id,tick) once the state update lands.
+  const expectedInitialStateKeyRef = useRef<string | null>(null);
+  const hasHydratedInitialStateRef = useRef(false);
   
   // Batching for placements - use refs to avoid stale closures
   const placementBufferRef = useRef<Array<{ x: number; y: number; tool: Tool }>>([]);
@@ -75,25 +79,29 @@ export function useMultiplayerSync() {
 
   // Load initial state when joining a room (received from other players)
   // This can happen even if we already loaded from cache - network state takes priority
-  const lastInitialStateRef = useRef<string | null>(null);
   useEffect(() => {
     if (!multiplayer || !multiplayer.initialState) return;
     
-    // Only load if this is a new state (prevent duplicate loads of same state)
-    const stateKey = JSON.stringify(multiplayer.initialState.tick || 0);
-    if (lastInitialStateRef.current === stateKey && initialStateLoadedRef.current) return;
-    
     console.log('[useMultiplayerSync] Received initial state from network, loading...');
     
+    // Track the expected state so we don't start persisting until hydration completes.
+    expectedInitialStateKeyRef.current = `${multiplayer.initialState.id}:${multiplayer.initialState.tick}`;
+    hasHydratedInitialStateRef.current = false;
+
     // Use loadState to load the received game state
     const stateString = JSON.stringify(multiplayer.initialState);
-    const success = game.loadState(stateString);
-    
-    if (success) {
-      initialStateLoadedRef.current = true;
-      lastInitialStateRef.current = stateKey;
+    game.loadState(stateString);
+  }, [multiplayer, game]);
+
+  // Mark hydration complete once the expected state has landed in GameContext
+  useEffect(() => {
+    const expectedKey = expectedInitialStateKeyRef.current;
+    if (!expectedKey) return;
+    const currentKey = `${game.state.id}:${game.state.tick}`;
+    if (currentKey === expectedKey) {
+      hasHydratedInitialStateRef.current = true;
     }
-  }, [multiplayer?.initialState, game]);
+  }, [game.state.id, game.state.tick]);
 
   // Apply a remote action to the local game state
   const applyRemoteAction = useCallback((action: GameAction) => {
@@ -251,9 +259,11 @@ export function useMultiplayerSync() {
       return;
     }
     
-    game.setBridgeCallback(({ pathTiles, trackType }) => {
+    game.setBridgeCallback(
+      ({ pathTiles, trackType }: { pathTiles: Array<{ x: number; y: number }>; trackType: 'road' | 'rail' }) => {
       multiplayer.dispatchAction({ type: 'createBridges', pathTiles, trackType });
-    });
+      }
+    );
     
     return () => {
       game.setBridgeCallback(null);
@@ -267,6 +277,12 @@ export function useMultiplayerSync() {
   const lastIndexUpdateRef = useRef<number>(0);
   useEffect(() => {
     if (!multiplayer || multiplayer.connectionState !== 'connected') return;
+    if (!game.isStateReady) return;
+
+    // Prevent overwriting the room with an unhydrated local state.
+    // Creators can persist immediately; joiners must wait until initial state is applied.
+    const isCreator = multiplayer.provider?.isCreator ?? false;
+    if (!isCreator && !hasHydratedInitialStateRef.current) return;
     
     const now = Date.now();
     if (now - lastUpdateRef.current < 2000) return; // Throttle to 2 second intervals
@@ -280,7 +296,7 @@ export function useMultiplayerSync() {
       lastIndexUpdateRef.current = now;
       updateSavedCitiesIndex(game.state, multiplayer.roomCode);
     }
-  }, [multiplayer, game.state]);
+  }, [multiplayer, game.isStateReady, game.state]);
 
   // Broadcast a local action to peers
   const broadcastAction = useCallback((action: GameActionInput) => {
