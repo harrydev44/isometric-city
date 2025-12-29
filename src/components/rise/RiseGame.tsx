@@ -58,20 +58,23 @@ export default function RiseGame() {
     [player]
   );
 
-  const centerOnTile = (tx: number, ty: number) => {
+  const centerOnTile = React.useCallback((tx: number, ty: number) => {
     const canvasW = 1400;
     const canvasH = 900;
     const ox = canvasW / 2 - (tx - ty) * (TILE_WIDTH / 2);
     const oy = canvasH / 2 - (tx + ty) * (TILE_HEIGHT / 2);
     setOffset({ x: ox, y: oy });
-  };
+  }, []);
 
-  const centerOnCity = (ownerId: string) => {
-    const city = state.buildings.find(b => b.ownerId === ownerId && b.type === 'city_center');
-    if (city) {
-      centerOnTile(city.tile.x, city.tile.y);
-    }
-  };
+  const centerOnCity = React.useCallback(
+    (ownerId: string) => {
+      const city = state.buildings.find(b => b.ownerId === ownerId && b.type === 'city_center');
+      if (city) {
+        centerOnTile(city.tile.x, city.tile.y);
+      }
+    },
+    [state.buildings, centerOnTile]
+  );
 
   const selectNextIdleCitizen = React.useCallback(() => {
     const idle = state.units.filter(
@@ -154,6 +157,8 @@ export default function RiseGame() {
       if (e.key.toLowerCase() === 'f') setActiveBuild('farm');
       if (e.key.toLowerCase() === 'i') selectNextIdleCitizen();
       if (e.key.toLowerCase() === 'm') selectNextArmyGroup();
+      if (e.key.toLowerCase() === 'h') centerOnCity(state.localPlayerId);
+      if (e.key.toLowerCase() === 'e') centerOnCity('ai');
       if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
         panCamera(0, -40);
@@ -177,7 +182,7 @@ export default function RiseGame() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setSpeed, restart, spawnCitizen, ageUp, selectNextIdleCitizen, selectNextArmyGroup, selectUnits, panCamera]);
+  }, [setSpeed, restart, spawnCitizen, ageUp, selectNextIdleCitizen, selectNextArmyGroup, selectUnits, panCamera, centerOnCity, state.localPlayerId]);
 
   if (!player) return null;
 
