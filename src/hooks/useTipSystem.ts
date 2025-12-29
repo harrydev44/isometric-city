@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { GameState } from '@/types/game';
 import { msg } from 'gt-next';
 
@@ -173,7 +173,9 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
   
   // Use a ref to always have the latest state without causing effect re-runs
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Load preferences from localStorage
   useEffect(() => {
@@ -182,14 +184,17 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
     try {
       const disabled = localStorage.getItem(STORAGE_KEY);
       if (disabled === 'true') {
-        setTipsEnabledState(false);
+        // Avoid synchronous setState inside effect (eslint rule).
+        queueMicrotask(() => setTipsEnabledState(false));
       }
       
       const shown = localStorage.getItem(SHOWN_TIPS_KEY);
       if (shown) {
         const parsed = JSON.parse(shown);
         if (Array.isArray(parsed)) {
-          setShownTips(new Set(parsed as TipId[]));
+          // Avoid synchronous setState inside effect (eslint rule).
+          const next = new Set(parsed as TipId[]);
+          queueMicrotask(() => setShownTips(next));
         }
       }
     } catch (e) {

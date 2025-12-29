@@ -17,6 +17,7 @@ import {
 } from '../drawing';
 import { loadImage, loadSpriteImage, getCachedImage, onImageLoaded } from '../imageLoader';
 import { WATER_ASSET_PATH } from '../constants';
+import { getPattern, hash2D, mixHex } from './terrainTextures';
 
 // Re-export commonly used items
 export {
@@ -154,29 +155,81 @@ export function drawGroundTile(
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
   const colors = ZONE_COLORS[zone];
-  
-  // Draw the base diamond
-  ctx.fillStyle = colors.top;
+
+  const cx = screenX + w / 2;
+  const cy = screenY + h / 2;
+
+  // Slight per-tile tone variance to avoid flat repeating look.
+  // (Use screen coords for stability across grid transforms.)
+  const seed = hash2D((screenX / 4) | 0, (screenY / 4) | 0, zone.length);
+  const t = (seed % 1000) / 1000;
+
+  // Base lighting gradient across the tile (gives "form" / sun direction).
+  const light = mixHex(colors.top, '#7ddf6a', 0.12 * t);
+  const dark = mixHex(colors.top, '#1b2a1b', 0.14 * (1 - t));
+  const g = ctx.createLinearGradient(screenX, screenY, screenX + w, screenY + h);
+  g.addColorStop(0, light);
+  g.addColorStop(0.55, colors.top);
+  g.addColorStop(1, dark);
+
+  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(screenX + w / 2, screenY);
-  ctx.lineTo(screenX + w, screenY + h / 2);
-  ctx.lineTo(screenX + w / 2, screenY + h);
-  ctx.lineTo(screenX, screenY + h / 2);
+  ctx.moveTo(cx, screenY);
+  ctx.lineTo(screenX + w, cy);
+  ctx.lineTo(cx, screenY + h);
+  ctx.lineTo(screenX, cy);
   ctx.closePath();
-  ctx.fill();
-  
-  // Draw grid lines when zoomed in
-  if (zoom >= 0.6) {
-    ctx.strokeStyle = colors.stroke;
-    ctx.lineWidth = 0.5;
+  ctx.clip();
+
+  // Base fill
+  ctx.fillStyle = g;
+  ctx.fillRect(screenX - 2, screenY - 2, w + 4, h + 4);
+
+  // Texture overlay (cached patterns)
+  // Keep subtle at low zoom; increase slightly when zoomed in.
+  const textureAlpha = Math.max(0.08, Math.min(0.22, 0.08 + (zoom - 0.5) * 0.10));
+  ctx.globalAlpha = textureAlpha;
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.translate(-((screenX + (seed % 17)) % 128), -((screenY + ((seed >> 8) % 17)) % 128));
+  ctx.fillStyle = getPattern(ctx, zone === 'industrial' ? 'dirt' : 'grass');
+  ctx.fillRect(screenX - 130, screenY - 130, w + 260, h + 260);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Subtle specular highlight
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.06 + (zoom >= 1 ? 0.04 : 0);
+  const hg = ctx.createRadialGradient(cx - w * 0.15, cy - h * 0.20, 0, cx - w * 0.15, cy - h * 0.20, w * 0.85);
+  hg.addColorStop(0, 'rgba(255,255,255,0.9)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(screenX - 2, screenY - 2, w + 4, h + 4);
+
+  ctx.restore();
+
+  // Crisp edge + faint micro-shadow gives much more depth.
+  if (zoom >= 0.55) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, screenY);
+    ctx.lineTo(screenX + w, cy);
+    ctx.lineTo(cx, screenY + h);
+    ctx.lineTo(screenX, cy);
+    ctx.closePath();
     ctx.stroke();
   }
-  
-  // Draw zone border for zoned tiles
+
+  // Zone border for zoned tiles
   if (zone !== 'none' && zoom >= 0.95) {
     ctx.strokeStyle = colors.stroke;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 2]);
+    ctx.beginPath();
+    ctx.moveTo(cx, screenY);
+    ctx.lineTo(screenX + w, cy);
+    ctx.lineTo(cx, screenY + h);
+    ctx.lineTo(screenX, cy);
+    ctx.closePath();
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -195,11 +248,13 @@ export function drawWaterTile(
   screenY: number,
   gridX: number,
   gridY: number,
-  adjacentWater?: { north: boolean; east: boolean; south: boolean; west: boolean }
+  adjacentWater?: { north: boolean; east: boolean; south: boolean; west: boolean },
+  timeSeconds?: number
 ): void {
   const waterImage = getCachedImage(WATER_ASSET_PATH);
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
+  const t = timeSeconds ?? performance.now() / 1000;
   
   if (!waterImage) {
     // Fallback: draw solid blue tile
@@ -243,16 +298,29 @@ export function drawWaterTile(
   ctx.lineTo(screenX, screenY + h / 2);
   ctx.closePath();
   ctx.clip();
+
+  // Base water gradient (deep -> shallow) + subtle lighting
+  const base = ctx.createLinearGradient(screenX, screenY, screenX + w, screenY + h);
+  base.addColorStop(0, '#0b2a4a');
+  base.addColorStop(0.55, '#0f4c6a');
+  base.addColorStop(1, '#0a5a73');
+  ctx.fillStyle = base;
+  ctx.fillRect(screenX - 2, screenY - 2, w + 4, h + 4);
   
   const aspectRatio = cropH / cropW;
   const jitterX = (seedX - 0.5) * w * 0.3;
   const jitterY = (seedY - 0.5) * h * 0.3;
   
-  // Draw water texture
+  // Draw water texture (as a mid-frequency detail layer)
   const destWidth = w * 1.15;
   const destHeight = destWidth * aspectRatio;
-  
-  ctx.globalAlpha = 0.95;
+
+  const prevSmoothing = ctx.imageSmoothingEnabled;
+  const prevQuality = (ctx as any).imageSmoothingQuality;
+  ctx.imageSmoothingEnabled = true;
+  (ctx as any).imageSmoothingQuality = 'high';
+
+  ctx.globalAlpha = 0.55;
   ctx.drawImage(
     waterImage,
     srcX, srcY, cropW, cropH,
@@ -261,6 +329,68 @@ export function drawWaterTile(
     Math.round(destWidth),
     Math.round(destHeight)
   );
+
+  // Animated ripples + caustics-like highlights (cheap: repeating pattern + translation)
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.10;
+  const ripplePattern = getPattern(ctx, 'ripples');
+  ctx.translate(-((tileCenterX + t * 14 + gridX * 7) % 256), -((tileCenterY + t * 9 + gridY * 11) % 256));
+  ctx.fillStyle = ripplePattern;
+  ctx.fillRect(screenX - 260, screenY - 260, w + 520, h + 520);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Edge deepening where this water meets land (pre-beach pass)
+  if (adjacentWater) {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#062035';
+    const cx = screenX + w / 2;
+    const cy = screenY + h / 2;
+    // north edge (left->top)
+    if (!adjacentWater.north) {
+      ctx.beginPath();
+      ctx.moveTo(screenX, cy);
+      ctx.lineTo(cx, screenY);
+      ctx.lineTo(cx, screenY + h * 0.18);
+      ctx.lineTo(screenX + w * 0.18, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // east edge (top->right)
+    if (!adjacentWater.east) {
+      ctx.beginPath();
+      ctx.moveTo(cx, screenY);
+      ctx.lineTo(screenX + w, cy);
+      ctx.lineTo(screenX + w - w * 0.18, cy);
+      ctx.lineTo(cx, screenY + h * 0.18);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // south edge (right->bottom)
+    if (!adjacentWater.south) {
+      ctx.beginPath();
+      ctx.moveTo(screenX + w, cy);
+      ctx.lineTo(cx, screenY + h);
+      ctx.lineTo(cx, screenY + h - h * 0.18);
+      ctx.lineTo(screenX + w - w * 0.18, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // west edge (bottom->left)
+    if (!adjacentWater.west) {
+      ctx.beginPath();
+      ctx.moveTo(cx, screenY + h);
+      ctx.lineTo(screenX, cy);
+      ctx.lineTo(screenX + w * 0.18, cy);
+      ctx.lineTo(cx, screenY + h - h * 0.18);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Restore smoothing state
+  ctx.imageSmoothingEnabled = prevSmoothing;
+  (ctx as any).imageSmoothingQuality = prevQuality;
   
   ctx.restore();
 }

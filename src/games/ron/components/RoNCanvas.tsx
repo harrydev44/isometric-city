@@ -41,6 +41,7 @@ import {
 } from '@/components/game/shared';
 import { drawRoNUnit } from '../lib/drawUnits';
 import { getTerritoryOwner, extractCityCenters } from '../lib/simulation';
+import { getPattern } from '@/components/game/shared/terrainTextures';
 
 /**
  * Find the origin tile of a multi-tile building by searching backwards from a clicked position.
@@ -622,6 +623,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
   const [zoom, setZoom] = useState(1);
   const offsetRef = useRef(offset);
   const zoomRef = useRef(zoom);
+
+  // Cursor is derived from interaction state; keep it in state to satisfy hook purity rules.
+  const [cursor, setCursor] = useState<'default' | 'grabbing' | 'crosshair'>('default');
   
   // Interaction state
   const isPanningRef = useRef(false);
@@ -638,7 +642,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
   
   // Fire animation time
   const fireAnimTimeRef = useRef(0);
-  const lastFrameTimeRef = useRef(performance.now());
+  const lastFrameTimeRef = useRef(0);
   const [roadDrawDirection, setRoadDrawDirection] = useState<'h' | 'v' | null>(null);
   const placedRoadTilesRef = useRef<Set<string>>(new Set());
   const [roadDragEnd, setRoadDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -878,6 +882,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
         offsetX: offsetRef.current.x,
         offsetY: offsetRef.current.y,
       };
+      setCursor('grabbing');
       return;
     }
     
@@ -915,9 +920,10 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
         isSelectingRef.current = true;
         selectionStartScreenRef.current = { x: screenX, y: screenY };
         setSelectionBox({ startX: screenX, startY: screenY, endX: screenX, endY: screenY });
+        setCursor('crosshair');
       }
     }
-  }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, latestStateRef]);
+  }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, assignTask, latestStateRef]);
   
   // Handle mouse move
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -1106,6 +1112,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       selectionStartScreenRef.current = null;
       setSelectionBox(null);
     }
+
+    // Reset cursor when interactions end
+    setCursor('default');
   }, [selectionBox, selectUnits, selectUnitsInArea, selectBuilding, latestStateRef]);
   
   // Handle wheel zoom (matching IsoCity's smoother zoom)
@@ -1191,15 +1200,19 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       
       // Calculate delta time for animations
       const now = performance.now();
-      const delta = (now - lastFrameTimeRef.current) / 1000;
+      const prev = lastFrameTimeRef.current || now;
+      const delta = (now - prev) / 1000;
       lastFrameTimeRef.current = now;
       fireAnimTimeRef.current += delta;
+      const timeSeconds = now / 1000;
       
       // PERF: Pre-compute city centers ONCE per frame for all territory lookups
       const cityCenters = extractCityCenters(gameState.grid, gameState.gridSize);
       
-      // Disable image smoothing for crisp pixel art
-      ctx.imageSmoothingEnabled = false;
+      // RoN targets higher-fidelity scaling (terrain/water + large sprites).
+      ctx.imageSmoothingEnabled = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (ctx as any).imageSmoothingQuality = 'high';
       
       // Draw sky background
       drawSkyBackground(ctx, canvas, 'day');
@@ -1248,7 +1261,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               south: x < gameState.gridSize - 1 && gameState.grid[y]?.[x + 1]?.terrain === 'water',
               west: y < gameState.gridSize - 1 && gameState.grid[y + 1]?.[x]?.terrain === 'water',
             };
-            drawWaterTile(ctx, screenX, screenY, x, y, adjacentWater);
+            drawWaterTile(ctx, screenX, screenY, x, y, adjacentWater, timeSeconds);
             
             // Draw fishing spot indicator
             if (tile.hasFishingSpot) {
@@ -1306,7 +1319,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               south: x < gameState.gridSize - 1 && (gameState.grid[y]?.[x + 1]?.terrain === 'water' || hasDock(gameState.grid, x + 1, y, gameState.gridSize)),
               west: y < gameState.gridSize - 1 && (gameState.grid[y + 1]?.[x]?.terrain === 'water' || hasDock(gameState.grid, x, y + 1, gameState.gridSize)),
             };
-            drawWaterTile(ctx, screenX, screenY, x, y, adjacentWater);
+            drawWaterTile(ctx, screenX, screenY, x, y, adjacentWater, timeSeconds);
           } else {
             // Determine zone color based on ownership/deposits
             let zoneType: 'none' | 'residential' | 'commercial' | 'industrial' = 'none';
@@ -2284,6 +2297,27 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       });
       
       ctx.restore();
+
+      // Screen-space post FX (subtle): vignette + fine grain.
+      // Helps unify sprites/terrain and adds perceived fidelity without heavy cost.
+      ctx.save();
+      const cw = canvas.width;
+      const ch = canvas.height;
+
+      // Vignette
+      ctx.globalCompositeOperation = 'multiply';
+      const vignette = ctx.createRadialGradient(cw * 0.5, ch * 0.55, Math.min(cw, ch) * 0.15, cw * 0.5, ch * 0.55, Math.max(cw, ch) * 0.75);
+      vignette.addColorStop(0, 'rgba(255,255,255,1)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.78)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, cw, ch);
+
+      // Grain
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = getPattern(ctx, 'grain');
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
       
       // Draw selection box (in screen space, not world space)
       if (selectionBox) {
@@ -2313,9 +2347,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       ref={containerRef} 
       className="relative w-full h-full overflow-hidden touch-none"
       style={{ 
-        cursor: isPanningRef.current ? 'grabbing' : 
-                isSelectingRef.current ? 'crosshair' : 
-                'default' 
+        cursor
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

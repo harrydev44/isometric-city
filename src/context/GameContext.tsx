@@ -1,7 +1,7 @@
 // Consolidated GameContext for the SimCity-like game
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import { serializeAndCompressAsync } from '@/lib/saveWorkerManager';
 import { simulateTick } from '@/lib/simulation';
@@ -672,34 +672,37 @@ export function GameProvider({ children, startFresh = false }: { children: React
     // Load sprite pack preference
     const savedPackId = loadSpritePackId();
     const pack = getSpritePack(savedPackId);
-    setCurrentSpritePack(pack);
-    setActiveSpritePack(pack);
-    
-    // Load day/night mode preference
-    const savedDayNightMode = loadDayNightMode();
-    setDayNightModeState(savedDayNightMode);
-    
-    // Load saved cities index
-    const cities = loadSavedCitiesIndex();
-    setSavedCities(cities);
-    
-    // Load game state (unless startFresh is true - used for co-op to start with a new city)
-    if (!startFresh) {
-      const saved = loadGameState();
-      if (saved) {
-        skipNextSaveRef.current = true; // Set skip flag BEFORE updating state
-        setState(saved);
-        setHasExistingGame(true);
+    // Avoid synchronous setState inside effect (eslint rule).
+    queueMicrotask(() => {
+      setCurrentSpritePack(pack);
+      setActiveSpritePack(pack);
+      
+      // Load day/night mode preference
+      const savedDayNightMode = loadDayNightMode();
+      setDayNightModeState(savedDayNightMode);
+      
+      // Load saved cities index
+      const cities = loadSavedCitiesIndex();
+      setSavedCities(cities);
+      
+      // Load game state (unless startFresh is true - used for co-op to start with a new city)
+      if (!startFresh) {
+        const saved = loadGameState();
+        if (saved) {
+          skipNextSaveRef.current = true; // Set skip flag BEFORE updating state
+          setState(saved);
+          setHasExistingGame(true);
+        } else {
+          setHasExistingGame(false);
+        }
       } else {
         setHasExistingGame(false);
       }
-    } else {
-      setHasExistingGame(false);
-    }
+    });
     // Mark as loaded immediately - the skipNextSaveRef will handle skipping the first save
     hasLoadedRef.current = true;
     // Mark state as ready - consumers should wait for this before using state
-    setIsStateReady(true);
+    queueMicrotask(() => setIsStateReady(true));
   }, [startFresh]);
   
   // Track the state that needs to be saved
@@ -710,7 +713,10 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // PERF: Just mark that state has changed - defer expensive deep copy to actual save time
   const stateChangedRef = useRef(false);
   const latestStateRef = useRef(state);
-  latestStateRef.current = state;
+  // Keep latest state in a ref for event handlers without violating hook purity rules.
+  useLayoutEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
   
   useEffect(() => {
     if (!hasLoadedRef.current) {

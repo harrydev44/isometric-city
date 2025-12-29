@@ -8,6 +8,28 @@
 import { Unit, UnitTask, UNIT_STATS } from '../types/units';
 import { TILE_WIDTH, TILE_HEIGHT, gridToScreen } from '@/components/game/shared';
 
+function setUnitStrokeStyle(ctx: CanvasRenderingContext2D) {
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+}
+
+function drawSoftShadow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  alpha: number
+) {
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry) * 1.15);
+  g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 // Skin tone colors (similar to IsoCity)
 const SKIN_TONES = ['#f5d0c5', '#e8beac', '#d4a574', '#c68642', '#8d5524', '#5c3317'];
 
@@ -187,6 +209,7 @@ function drawMilitaryUnit(
   zoom: number,
   tick: number
 ): void {
+  setUnitStrokeStyle(ctx);
   const stats = UNIT_STATS[unit.type];
   // Naval units largest, cavalry/tanks and air medium-large, infantry smaller
   // All scales increased by 50% for better visibility
@@ -1378,6 +1401,45 @@ function drawNavalUnit(
   animPhase: number
 ): void {
   const bob = Math.sin(animPhase * 2) * 1 * scale;
+  const movingBoost = unit.isMoving ? 1 : 0;
+  
+  // Unified wake layer: adds perceived motion + water interaction across all ships
+  // (kept lightweight; drawn once before ship body)
+  {
+    const wakeLen = (14 + movingBoost * 10) * scale;
+    const wakeWid = (4 + movingBoost * 4) * scale;
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.globalCompositeOperation = 'screen';
+    // Main wake streak
+    const wg = ctx.createLinearGradient(centerX - wakeLen * 0.6, centerY + bob + 2, centerX + wakeLen * 0.6, centerY + bob + 2);
+    wg.addColorStop(0, 'rgba(255,255,255,0)');
+    wg.addColorStop(0.5, `rgba(255,255,255,${0.35 + movingBoost * 0.25})`);
+    wg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = wg;
+    ctx.beginPath();
+    ctx.ellipse(centerX - wakeLen * 0.15, centerY + bob + 4, wakeLen * 0.55, wakeWid * 0.55, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    // Secondary ripples
+    ctx.globalAlpha = 0.28 + movingBoost * 0.10;
+    for (let i = 0; i < 2 + (movingBoost ? 2 : 0); i++) {
+      const ph = animPhase * (2.2 + i * 0.7);
+      ctx.beginPath();
+      ctx.ellipse(
+        centerX - wakeLen * (0.2 + i * 0.12),
+        centerY + bob + 6 + i * 1.3,
+        wakeLen * (0.25 + 0.05 * Math.sin(ph)),
+        wakeWid * (0.25 + 0.04 * Math.cos(ph)),
+        0.2,
+        0,
+        Math.PI * 2
+      );
+      ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   
   // Draw based on specific ship type
   switch (unit.type) {
@@ -1427,11 +1489,8 @@ function drawNavalUnit(
 function drawFishingBoat(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string, dark: string, s: number, bob: number): void {
   const w = 18 * s, h = 10 * s;
   
-  // Shadow on water
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 6, w * 0.5, h * 0.2, 0, 0, Math.PI * 2);
-  ctx.fill();
+  // Shadow on water (soft gradient reads more "real" than a flat ellipse)
+  drawSoftShadow(ctx, cx, cy + 6, w * 0.55, h * 0.22, 0.18);
   
   // Wake/ripples
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
@@ -1450,9 +1509,15 @@ function drawFishingBoat(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   ctx.closePath();
   ctx.fill();
   
-  // Hull outline
-  ctx.strokeStyle = '#5c3d1e';
+  // Hull outline + subtle highlight edge
+  ctx.strokeStyle = 'rgba(20,10,5,0.65)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
   ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.4, cy + bob - h * 0.25);
+  ctx.lineTo(cx + w * 0.35, cy + bob - h * 0.22);
   ctx.stroke();
   
   // Hull planks

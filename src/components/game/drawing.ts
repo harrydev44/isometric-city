@@ -612,8 +612,16 @@ function drawBeachEdgeOnWater(
     actualEndY = endY - edgeDirY * shortenDist;
   }
 
-  // Draw beach fill (from edge inward)
-  ctx.fillStyle = BEACH_COLORS.fill;
+  // Draw beach fill (from edge inward) with a subtle gradient for depth
+  const midOuterX = (actualStartX + actualEndX) * 0.5;
+  const midOuterY = (actualStartY + actualEndY) * 0.5;
+  const midInnerX = midOuterX + inwardDx * beachWidth;
+  const midInnerY = midOuterY + inwardDy * beachWidth;
+  const sandGradient = ctx.createLinearGradient(midOuterX, midOuterY, midInnerX, midInnerY);
+  sandGradient.addColorStop(0, '#e3c59b');
+  sandGradient.addColorStop(0.55, BEACH_COLORS.fill);
+  sandGradient.addColorStop(1, '#c59a64');
+  ctx.fillStyle = sandGradient;
   ctx.beginPath();
   ctx.moveTo(actualStartX, actualStartY);
   ctx.lineTo(actualEndX, actualEndY);
@@ -622,12 +630,21 @@ function drawBeachEdgeOnWater(
   ctx.closePath();
   ctx.fill();
 
-  // Draw curb (darker line at outer edge - the water's edge)
-  ctx.strokeStyle = BEACH_COLORS.curb;
-  ctx.lineWidth = BEACH_CONFIG.curbWidth;
+  // Waterline foam (bright), plus a faint wet-sand shadow for separation
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = Math.max(1, BEACH_CONFIG.curbWidth);
+  ctx.setLineDash([4, 3]);
   ctx.beginPath();
   ctx.moveTo(actualStartX + inwardDx * beachWidth, actualStartY + inwardDy * beachWidth);
   ctx.lineTo(actualEndX + inwardDx * beachWidth, actualEndY + inwardDy * beachWidth);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(actualStartX + inwardDx * (beachWidth * 0.85), actualStartY + inwardDy * (beachWidth * 0.85));
+  ctx.lineTo(actualEndX + inwardDx * (beachWidth * 0.85), actualEndY + inwardDy * (beachWidth * 0.85));
   ctx.stroke();
 }
 
@@ -656,7 +673,18 @@ function drawBeachCornerOnWater(
     beachWidth
   );
 
-  ctx.fillStyle = BEACH_COLORS.fill;
+  // Slightly brighter corner sand
+  const cornerGrad = ctx.createRadialGradient(
+    cornerPoint.x + (edge1Inward.dx + edge2Inward.dx) * beachWidth * 0.25,
+    cornerPoint.y + (edge1Inward.dy + edge2Inward.dy) * beachWidth * 0.25,
+    0,
+    cornerPoint.x,
+    cornerPoint.y,
+    beachWidth * 0.95
+  );
+  cornerGrad.addColorStop(0, '#ead1ad');
+  cornerGrad.addColorStop(1, BEACH_COLORS.fill);
+  ctx.fillStyle = cornerGrad;
   ctx.beginPath();
   ctx.moveTo(cornerPoint.x, cornerPoint.y);
   ctx.lineTo(inner1.x, inner1.y);
