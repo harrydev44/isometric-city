@@ -660,8 +660,8 @@ function updateBuildings(state: RoNGameState): RoNGameState {
   return { ...state, grid: newGrid, units: newUnits, players: newPlayers };
 }
 
-// Detection range for auto-attack (in tiles)
-const AUTO_ATTACK_RANGE = 3;
+// Detection range for auto-attack (in tiles) - should be large enough for units to see enemies approaching
+const AUTO_ATTACK_RANGE = 5;
 // Detection range for civilian flee behavior (in tiles)
 const CIVILIAN_FLEE_RANGE = 4;
 // Reaction delay before civilians start fleeing (in ticks) - takes time to notice danger
@@ -1029,6 +1029,8 @@ function updateUnits(state: RoNGameState): RoNGameState {
           updatedUnit.targetX = target.x;
           updatedUnit.targetY = target.y;
           updatedUnit.isMoving = true;
+          // Reset cooldown so unit can attack immediately when in range
+          updatedUnit.attackCooldown = 0;
         }
       }
     }
@@ -1225,46 +1227,92 @@ function updateUnits(state: RoNGameState): RoNGameState {
             }
           }
         } else if ('x' in updatedUnit.taskTarget) {
-          // Target is a building position - capture the typed value
+          // Target is a position - could be a building OR we should attack nearby enemies
           const targetPos = updatedUnit.taskTarget as { x: number; y: number };
-          const targetTile = state.grid[Math.floor(targetPos.y)]?.[Math.floor(targetPos.x)];
-          if (targetTile?.building) {
-            const dist = Math.sqrt(
-              (targetPos.x - updatedUnit.x) ** 2 + 
-              (targetPos.y - updatedUnit.y) ** 2
+          const distToTarget = Math.sqrt(
+            (targetPos.x - updatedUnit.x) ** 2 + 
+            (targetPos.y - updatedUnit.y) ** 2
+          );
+          
+          // First, look for enemy units near this unit (within attack range)
+          // This allows units ordered to attack-move to a position to engage enemies they encounter
+          const nearbyEnemies = findNearbyEnemies(updatedUnit, state.units, attackRange + 1);
+          
+          if (nearbyEnemies.length > 0) {
+            // Found enemy units - attack the closest one
+            const targetEnemy = nearbyEnemies[0];
+            const distToEnemy = Math.sqrt(
+              (targetEnemy.x - updatedUnit.x) ** 2 + 
+              (targetEnemy.y - updatedUnit.y) ** 2
             );
             
-            if (dist <= attackRange) {
-              // Attack building
+            if (distToEnemy <= attackRange) {
+              // Attack the enemy unit!
               const damage = unitStats?.attack || 1;
-              const newBuilding = {
-                ...targetTile.building,
-                health: targetTile.building.health - damage,
-              };
-              
-              // Update grid
-              newGrid = newGrid.map((row, gy) =>
-                row.map((tile, gx) => {
-                  if (gx === Math.floor(targetPos.x) && 
-                      gy === Math.floor(targetPos.y)) {
-                    if (newBuilding.health <= 0) {
-                      return { ...tile, building: null, ownerId: null };
-                    }
-                    return { ...tile, building: newBuilding };
-                  }
-                  return tile;
-                })
-              );
-              
+              const targetIndex = newUnits.findIndex(u => u.id === targetEnemy.id);
+              if (targetIndex >= 0) {
+                newUnits[targetIndex] = {
+                  ...newUnits[targetIndex],
+                  health: newUnits[targetIndex].health - damage,
+                };
+              }
               updatedUnit.attackCooldown = ATTACK_COOLDOWN;
               updatedUnit.lastAttackTime = state.tick;
-              updatedUnit.isAttacking = true; // Show attack animation
-              updatedUnit.isMoving = false; // Stop moving while attacking
+              updatedUnit.isAttacking = true;
+              updatedUnit.isMoving = false;
             } else {
-              // Move toward target - must get in range first
+              // Move toward the enemy
+              updatedUnit.targetX = targetEnemy.x;
+              updatedUnit.targetY = targetEnemy.y;
+              updatedUnit.isMoving = true;
+            }
+          } else {
+            // No enemy units nearby - check for building at target position
+            const targetTile = state.grid[Math.floor(targetPos.y)]?.[Math.floor(targetPos.x)];
+            if (targetTile?.building && targetTile.building.ownerId !== updatedUnit.ownerId) {
+              if (distToTarget <= attackRange) {
+                // Attack building
+                const damage = unitStats?.attack || 1;
+                const newBuilding = {
+                  ...targetTile.building,
+                  health: targetTile.building.health - damage,
+                };
+                
+                // Update grid
+                newGrid = newGrid.map((row, gy) =>
+                  row.map((tile, gx) => {
+                    if (gx === Math.floor(targetPos.x) && 
+                        gy === Math.floor(targetPos.y)) {
+                      if (newBuilding.health <= 0) {
+                        return { ...tile, building: null, ownerId: null };
+                      }
+                      return { ...tile, building: newBuilding };
+                    }
+                    return tile;
+                  })
+                );
+                
+                updatedUnit.attackCooldown = ATTACK_COOLDOWN;
+                updatedUnit.lastAttackTime = state.tick;
+                updatedUnit.isAttacking = true;
+                updatedUnit.isMoving = false;
+              } else {
+                // Move toward target building
+                updatedUnit.targetX = targetPos.x;
+                updatedUnit.targetY = targetPos.y;
+                updatedUnit.isMoving = true;
+              }
+            } else if (distToTarget > 1) {
+              // No building and not at target yet - keep moving toward target position
+              // (in case there are enemies there we haven't seen yet)
               updatedUnit.targetX = targetPos.x;
               updatedUnit.targetY = targetPos.y;
               updatedUnit.isMoving = true;
+            } else {
+              // Arrived at target position with no enemies or buildings - go idle
+              updatedUnit.task = 'idle';
+              updatedUnit.taskTarget = undefined;
+              updatedUnit.isMoving = false;
             }
           }
         }

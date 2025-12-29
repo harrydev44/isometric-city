@@ -115,59 +115,53 @@ export const SPRITE_ORDER = [
   'special_4',       // col 4 - amusement park equivalent
 ] as const;
 
-// Mapping from RoN building types to sprite sheet positions (row, col)
-// Based on the 5x6 grid layout - see SPRITE_AUDIT.md for details
+// Default building sprite positions (used when age-specific mapping not available)
+// Based on comprehensive sprite audit - see docs/sprite-audit/SPRITE_AUDIT.md
 //
 // IMPORTANT: Some buildings use IsoCity sheets instead of age sheets:
 // - Farms use sprites_red_water_new_farm.png (has actual crop/barn sprites)
-// - Some modern buildings use dedicated IsoCity building sprites
-//
-// Age sheet layouts vary by era but generally:
-// Classical: temples, coliseums, markets, villas, docks
-// Medieval: castles, markets, harbors, churches
-// Industrial: factories, train stations, brick buildings
-// Modern: skyscrapers, airports, stadiums
+// - Airbase uses dedicated IsoCity airport sprite
 export const BUILDING_SPRITE_MAP: Partial<Record<RoNBuildingType, { row: number; col: number }>> = {
-  // City buildings - Large temple/government at row 5, col 2
+  // City buildings
   city_center: { row: 5, col: 2 },
   small_city: { row: 5, col: 2 },
   large_city: { row: 5, col: 2 },
   major_city: { row: 5, col: 2 },
 
-  // Economic buildings - NOTE: farm uses IsoCity farm sheet (see ISOCITY_FARM_POSITIONS)
+  // Economic buildings - NOTE: farm uses IsoCity farm sheet
   farm: { row: -2, col: -2 },        // Special: uses IsoCity farm sheet
-  woodcutters_camp: { row: 3, col: 4 }, // Cart/stable area
+  woodcutters_camp: { row: 3, col: 0 }, // Tree/nature area
   granary: { row: 4, col: 0 },       // Warehouse
   lumber_mill: { row: 4, col: 1 },   // Industrial building
-  mine: { row: 4, col: 2 },          // Quarry/ruins
+  mine: { row: 4, col: 2 },          // Quarry/mining
   smelter: { row: 4, col: 3 },       // Kilns/furnaces
-  market: { row: 3, col: 2 },        // FIXED: Market stalls (was temple at 1,3)
-  oil_well: { row: 2, col: 4 },      // FIXED: Oil derrick/tower (industrial age)
+  market: { row: 3, col: 2 },        // Market stalls
+  oil_well: { row: 2, col: 4 },      // Oil derrick (industrial+)
   oil_platform: { row: 4, col: 4 },  // Dock area (offshore)
-  refinery: { row: 4, col: 3 },      // Industrial kilns/factory
+  refinery: { row: 4, col: 4 },      // Industrial refinery
 
   // Knowledge buildings
   library: { row: 0, col: 1 },       // Temple with columns
-  university: { row: 1, col: 2 },    // Stadium/large institution
-  temple: { row: 5, col: 3 },        // Small temple
+  university: { row: 2, col: 0 },    // Large institution
+  temple: { row: 5, col: 3 },        // Temple
   senate: { row: 0, col: 0 },        // Large palace
 
   // Military buildings
-  barracks: { row: 3, col: 1 },      // FIXED: Villa/barracks building (not colosseum)
-  stable: { row: 3, col: 4 },        // Cart/stable building
-  siege_factory: { row: 4, col: 1 }, // Industrial/workshop
+  barracks: { row: 1, col: 3 },      // Fortress compound
+  stable: { row: 1, col: 2 },        // Stable area
+  siege_factory: { row: 4, col: 1 }, // Workshop
   dock: { row: 4, col: 4 },          // Dock with crane
-  auto_plant: { row: 4, col: 3 },    // Industrial factory
-  factory: { row: 4, col: 3 },       // Industrial kilns/factory
+  auto_plant: { row: 0, col: 1 },    // Factory (modern)
+  factory: { row: 4, col: 2 },       // Factory
   airbase: { row: -3, col: -3 },     // Special: uses IsoCity airport sprite
 
   // Defensive buildings
-  tower: { row: 2, col: 1 },         // Tower/lighthouse
-  stockade: { row: 3, col: 0 },      // Villa (small fort)
-  fort: { row: 1, col: 3 },          // FIXED: Fortified building
-  fortress: { row: 0, col: 2 },      // Large fortification (aqueduct style)
-  castle: { row: 0, col: 0 },        // Large palace
-  bunker: { row: 4, col: 0 },        // Warehouse/bunker style
+  tower: { row: 2, col: 1 },         // Tower
+  stockade: { row: 0, col: 1 },      // Small fort/keep
+  fort: { row: 1, col: 3 },          // Fortified building
+  fortress: { row: 1, col: 3 },      // Large fortress
+  castle: { row: 0, col: 0 },        // Castle
+  bunker: { row: 4, col: 0 },        // Bunker style
   
   // Roads and terrain
   road: { row: -1, col: -1 },        // Special handling
@@ -176,14 +170,214 @@ export const BUILDING_SPRITE_MAP: Partial<Record<RoNBuildingType, { row: number;
   empty: { row: -1, col: -1 },
 };
 
+// Age-specific building sprite overrides
+// These override the default BUILDING_SPRITE_MAP for specific ages
+// Based on comprehensive visual audit of each sprite sheet
+export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType, { row: number; col: number }>>> = {
+  classical: {
+    // City - Row 5, Col 2 is temple (good city center)
+    city_center: { row: 5, col: 2 },
+    // Market - Row 3, Col 2 is open-air market with stalls
+    market: { row: 3, col: 2 },
+    // Library - Row 0, Col 3 is smaller temple/academy
+    library: { row: 0, col: 3 },
+    // University - Row 2, Col 0 is theater/amphitheater (cultural/education)
+    university: { row: 2, col: 0 },
+    // Temple - Row 2, Col 2 is fire temple/sanctuary
+    temple: { row: 2, col: 2 },
+    // Senate - Row 1, Col 3 is large government building
+    senate: { row: 1, col: 3 },
+    // Barracks - Row 2, Col 3 is Colosseum (training arena)
+    barracks: { row: 2, col: 3 },
+    // Dock - Row 4, Col 4 is dock with crane
+    dock: { row: 4, col: 4 },
+    // Mine - Row 4, Col 2 is quarry
+    mine: { row: 4, col: 2 },
+    // Smelter - Row 4, Col 3 is kilns/furnaces
+    smelter: { row: 4, col: 3 },
+    // Granary - Row 5, Col 0 is warehouse
+    granary: { row: 5, col: 0 },
+    // Tower - Row 2, Col 1 is watchtower
+    tower: { row: 2, col: 1 },
+    // Fort - Row 2, Col 4 is lighthouse/tower
+    fort: { row: 2, col: 4 },
+    // Castle - Row 0, Col 0 is large palace
+    castle: { row: 0, col: 0 },
+  },
+  medieval: {
+    // City - Row 1, Col 0 is walled courtyard/garden
+    city_center: { row: 1, col: 0 },
+    // Market - Row 2, Col 0 is market square with stalls
+    market: { row: 2, col: 0 },
+    // Library - Row 0, Col: 4 is church/chapel
+    library: { row: 0, col: 4 },
+    // University - Row 3, Col 2 is gothic stone university
+    university: { row: 3, col: 2 },
+    // Temple - Row 5, Col 3 is gothic cathedral
+    temple: { row: 5, col: 3 },
+    // Senate - Row 5, Col: 2 is classical dome building
+    senate: { row: 5, col: 2 },
+    // Barracks - Row 1, Col 3 is walled fortress compound
+    barracks: { row: 1, col: 3 },
+    // Stable - Row 1, Col 2 is horse paddock - PERFECT!
+    stable: { row: 1, col: 2 },
+    // Dock - Row 5, Col 0 is waterfront building
+    dock: { row: 5, col: 0 },
+    // Mine - Row 4, Col 2 is mining complex with hoist
+    mine: { row: 4, col: 2 },
+    // Smelter - Row 0, Col 2 is windmill + forge
+    smelter: { row: 0, col: 2 },
+    // Granary - Row 4, Col 1 is large barn
+    granary: { row: 4, col: 1 },
+    // Lumber mill - Row 0, Col 3 is windmill
+    lumber_mill: { row: 0, col: 3 },
+    // Tower - Row 0, Col 1 is stone keep
+    tower: { row: 0, col: 1 },
+    // Fort - Row 5, Col 1 is stone fortress
+    fort: { row: 5, col: 1 },
+    // Castle - Row 0, Col 0 is gray stone castle
+    castle: { row: 0, col: 0 },
+    // Siege factory - Row 3, Col 4 is workshop
+    siege_factory: { row: 3, col: 4 },
+  },
+  enlightenment: {
+    // City - Row 0, Col 0 is Georgian mansion
+    city_center: { row: 0, col: 0 },
+    // Market - Row 0, Col 3 is colonnade building
+    market: { row: 0, col: 3 },
+    // Library - Row 0, Col 4 is classical columns building
+    library: { row: 0, col: 4 },
+    // University - Row 2, Col 0 is OBSERVATORY - perfect for Age of Science!
+    university: { row: 2, col: 0 },
+    // Temple - Row 5, Col 3 is Greek temple
+    temple: { row: 5, col: 3 },
+    // Senate - Row 5, Col 2 is domed capitol
+    senate: { row: 5, col: 2 },
+    // Barracks - Row 1, Col 4 is civic building with courtyard
+    barracks: { row: 1, col: 4 },
+    // Stable - Row 5, Col 0 is stagecoach station - PERFECT!
+    stable: { row: 5, col: 0 },
+    // Dock - Row 2, Col 4 is amphitheater with harbor
+    dock: { row: 2, col: 4 },
+    // Mine - Row 4, Col 3 is stone mill
+    mine: { row: 4, col: 3 },
+    // Smelter - Row 3, Col 3 is blacksmith forge
+    smelter: { row: 3, col: 3 },
+    // Granary - Row 4, Col 1 is warehouse with cart
+    granary: { row: 4, col: 1 },
+    // Lumber mill - Row 2, Col 2 is watermill
+    lumber_mill: { row: 2, col: 2 },
+    // Factory - Row 0, Col 2 is early factory with waterwheel
+    factory: { row: 0, col: 2 },
+    // Fort - Row 5, Col 1 is stone arch/tunnel
+    fort: { row: 5, col: 1 },
+  },
+  industrial: {
+    // City - Row 5, Col 2 is grand city hall with clock tower
+    city_center: { row: 5, col: 2 },
+    // Market - Row 3, Col 4 is storefront shop
+    market: { row: 3, col: 4 },
+    // Library - Row 0, Col 0 is institutional building
+    library: { row: 0, col: 0 },
+    // University - Row 2, Col 0 is large Victorian school
+    university: { row: 2, col: 0 },
+    // Temple - Row 1, Col 4 is church with steeple
+    temple: { row: 1, col: 4 },
+    // Senate - Row 5, Col 3 is classical columns building
+    senate: { row: 5, col: 3 },
+    // Barracks - Row 0, Col 2 is red brick building
+    barracks: { row: 0, col: 2 },
+    // Stable - Row 3, Col 3 is cottage (rustic)
+    stable: { row: 3, col: 3 },
+    // Dock - Row 5, Col 0 is train station
+    dock: { row: 5, col: 0 },
+    // Mine - Row 4, Col 2 is mining complex
+    mine: { row: 4, col: 2 },
+    // Smelter - Row 4, Col 3 is steel facility
+    smelter: { row: 4, col: 3 },
+    // Granary - Row 4, Col 0 is warehouse
+    granary: { row: 4, col: 0 },
+    // Lumber mill - Row 4, Col 2 is industrial complex
+    lumber_mill: { row: 4, col: 2 },
+    // Factory - Row 0, Col 1 is large factory - PERFECT!
+    factory: { row: 0, col: 1 },
+    // Oil well - Row 2, Col 4 is oil derrick - PERFECT!
+    oil_well: { row: 2, col: 4 },
+    // Refinery - Row 4, Col 4 is industrial refinery
+    refinery: { row: 4, col: 4 },
+    // Siege factory - Row 4, Col 1 is factory
+    siege_factory: { row: 4, col: 1 },
+    // Bunker - Row 4, Col 0 is warehouse/fortified
+    bunker: { row: 4, col: 0 },
+  },
+  modern: {
+    // City - Row 0, Col 1 is tall skyscraper
+    city_center: { row: 0, col: 1 },
+    // Small city - Row 0, Col 0 is glass office tower
+    small_city: { row: 0, col: 0 },
+    // Market - Row 4, Col 0 is gas station/convenience
+    market: { row: 4, col: 0 },
+    // Library - Row 2, Col 0 is neoclassical building
+    library: { row: 2, col: 0 },
+    // University - Row 0, Col 3 is brick institution
+    university: { row: 0, col: 3 },
+    // Temple - Row 0, Col 4 is modern church
+    temple: { row: 0, col: 4 },
+    // Senate - Row 5, Col 2 is domed capitol - PERFECT!
+    senate: { row: 5, col: 2 },
+    // Barracks - Row 5, Col 1 is military radar base
+    barracks: { row: 5, col: 1 },
+    // Dock - Row 5, Col 0 is airport (can repurpose)
+    dock: { row: 4, col: 1 },
+    // Mine - Row 4, Col: 2 is factory (no mine visible)
+    mine: { row: 4, col: 2 },
+    // Smelter - Row 2, Col 2 is nuclear plant / Row 0, Col 2 is power plant
+    smelter: { row: 0, col: 2 },
+    // Granary - Row 3, Col 4 is warehouse
+    granary: { row: 3, col: 4 },
+    // Factory - Row 4, Col 2 is smokestack factory
+    factory: { row: 4, col: 2 },
+    // Oil well - Row 4, Col 4 is refinery towers
+    oil_well: { row: 4, col: 4 },
+    // Refinery - Row 4, Col 3 is heavy industrial
+    refinery: { row: 4, col: 3 },
+    // Auto plant - Row 1, Col 4 is brick factory
+    auto_plant: { row: 1, col: 4 },
+    // Siege factory - Row 4, Col 1 is hangar
+    siege_factory: { row: 4, col: 1 },
+    // Bunker - Row 5, Col 1 is military base
+    bunker: { row: 5, col: 1 },
+    // Fort/Fortress - Row 5, Col 1 is military compound
+    fort: { row: 5, col: 1 },
+    fortress: { row: 5, col: 1 },
+  },
+};
+
+// Helper to get age-specific sprite position
+export function getAgeSpritePosition(
+  buildingType: RoNBuildingType,
+  age: Age
+): { row: number; col: number } | null {
+  // Check for age-specific override first
+  const ageOverride = AGE_BUILDING_OVERRIDES[age]?.[buildingType];
+  if (ageOverride) return ageOverride;
+  
+  // Fall back to default mapping
+  const defaultPos = BUILDING_SPRITE_MAP[buildingType];
+  if (defaultPos && defaultPos.row >= 0) return defaultPos;
+  
+  return null;
+}
+
 // IsoCity Farm Sheet positions - for age-appropriate farm sprites
 // Sheet: /assets/sprites_red_water_new_farm.png (5x6 grid)
+// Based on detailed audit of farm sheet - each age gets distinct look
 export const ISOCITY_FARM_POSITIONS: Record<Age, { row: number; col: number }> = {
-  classical: { row: 0, col: 1 },    // Wheat field - simple ancient crop
-  medieval: { row: 1, col: 0 },     // Dairy barn with cows
-  enlightenment: { row: 2, col: 0 }, // Farmhouse with garden
-  industrial: { row: 2, col: 3 },   // Tractor shed - early mechanization
-  modern: { row: 5, col: 1 },       // Combine harvester - modern farming
+  classical: { row: 3, col: 1 },    // Vineyard - ancient Mediterranean agriculture
+  medieval: { row: 2, col: 4 },     // Windmill - ICONIC medieval farming
+  enlightenment: { row: 2, col: 2 }, // Storage barn - larger scale operations
+  industrial: { row: 1, col: 0 },   // Dairy farm with red barn + silo
+  modern: { row: 3, col: 4 },       // Greenhouse - high-tech agriculture
 };
 
 // IsoCity sheet path for farms

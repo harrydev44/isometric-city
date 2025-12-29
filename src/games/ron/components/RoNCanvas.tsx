@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useRoN } from '../context/RoNContext';
-import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, BUILDING_SCALES, PLAYER_COLORS } from '../lib/renderConfig';
+import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, BUILDING_SCALES, PLAYER_COLORS, getAgeSpritePosition } from '../lib/renderConfig';
 import { BUILDING_STATS } from '../types/buildings';
 import { AGE_ORDER } from '../types/ages';
 import { RoNBuildingType } from '../types/buildings';
@@ -1770,29 +1770,42 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
             continue; // Skip regular sprite drawing for dock
           }
           
-          // Special handling for farm - use IsoCity farm sprite sheet with random crop (1x1 size)
+          // Special handling for farm - use IsoCity farm sprite sheet with age-specific sprites
           if (buildingType === 'farm') {
             const farmSprite = getCachedImage(ISOCITY_FARM_PATH, true);
             if (farmSprite) {
               const farmTileWidth = farmSprite.width / FARM_SPRITE_COLS;
               const farmTileHeight = farmSprite.height / FARM_SPRITE_ROWS;
+
+              // Get age-specific farm position
+              // - Classical: Vineyard (row 3, col 1)
+              // - Medieval: Windmill (row 2, col 4) - ICONIC!
+              // - Enlightenment: Storage barn (row 2, col 2)
+              // - Industrial: Dairy farm with silo (row 1, col 0)
+              // - Modern: Greenhouse (row 3, col 4)
+              const farmPositions: Record<string, { row: number; col: number }> = {
+                classical: { row: 3, col: 1 },
+                medieval: { row: 2, col: 4 },
+                enlightenment: { row: 2, col: 2 },
+                industrial: { row: 1, col: 0 },
+                modern: { row: 3, col: 4 },
+              };
+              const farmPos = farmPositions[playerAge] || { row: 0, col: 1 };
               
-              // Use deterministic random based on tile position for consistent appearance
-              const variantIndex = ((x * 7 + y * 13) % FARM_VARIANTS);
-              const sx = variantIndex * farmTileWidth;
-              const sy = 0; // First row only
-              
+              const sx = farmPos.col * farmTileWidth;
+              const sy = farmPos.row * farmTileHeight;
+
               // 1x1 farm - scale to fit tile nicely
               const scale = 0.9;
               const destWidth = TILE_WIDTH * scale;
               const destHeight = destWidth * (farmTileHeight / farmTileWidth);
-              
+
               // Vertical offset for 1x1 building
               const buildingOffset = -0.2 * TILE_HEIGHT;
-              
+
               const drawX = screenX + TILE_WIDTH / 2 - destWidth / 2;
               const drawY = screenY + TILE_HEIGHT - destHeight + buildingOffset;
-              
+
               // Farms are instant - no construction phase, always show farm sprite
               ctx.drawImage(
                 farmSprite,
@@ -1840,9 +1853,10 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           }
           
           if (spriteSheet) {
-            const spritePos = BUILDING_SPRITE_MAP[buildingType];
-            
-            if (spritePos && spritePos.row >= 0) {
+            // Use age-specific sprite position for better era-appropriate visuals
+            const spritePos = getAgeSpritePosition(buildingType, playerAge);
+
+            if (spritePos) {
               const tileWidth = spriteSheet.width / spritePack.cols;
               const tileHeight = spriteSheet.height / spritePack.rows;
               

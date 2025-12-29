@@ -1,171 +1,211 @@
 # Rise of Nations Sprite Audit Report
 
-Generated: December 2024
+**Generated: December 2024**
+**Status: COMPREHENSIVE AUDIT COMPLETE**
 
 ## Executive Summary
 
-**Critical Finding**: Many RoN building sprites are completely incorrect. The age-specific sprite sheets (classical, medieval, enlightenment, industrial, modern) contain era-appropriate buildings like temples, coliseums, factories, and modern buildings - but NOT farms, mines (in some ages), or other resource buildings.
+This audit reviewed all 5 age-specific sprite sheets and IsoCity sprite sheets to find the optimal sprite mapping for each RoN building type across all ages.
 
-The IsoCity base game has dedicated sprite sheets for:
-- Farms (`sprites_red_water_new_farm.png`) - crops, barns, silos, tractors
-- Industrial buildings (`sprites_red_water_new.png`, `industrial.png`)
-- Various other specialized buildings
-
-## Recommended Solution
-
-1. **Use IsoCity farm sprites for ALL ages** - The farm sheet has era-appropriate farm variations
-2. **Create a hybrid sprite system** - Age sheets for government/military buildings, IsoCity sheets for economic buildings
-3. **Fix incorrect mappings** in the current age sheets
+### Key Improvements Made:
+1. **Age-specific sprite mappings** - Each age now uses the most appropriate sprite for each building
+2. **Farm sprites** - Now use IsoCity farm sheet with era-appropriate sprites (windmill for medieval, greenhouse for modern, etc.)
+3. **Fixed incorrect mappings** - Market, stable, library, university, and many more now use correct sprites
 
 ---
 
-## Classical Age Sprite Sheet Analysis
+## Sprite Sheets Audited
 
-**Source**: `public/assets/ages/classics.png` (5×6 grid, 2048×2048px)
-
-### Grid Layout (row, col):
-
-| Row | Col 0 | Col 1 | Col 2 | Col 3 | Col 4 |
-|-----|-------|-------|-------|-------|-------|
-| 0 | Palace | Temple | Aqueduct | Columns | Bath/Pool |
-| 1 | Fountain Park | Pool Garden | Stadium | Temple | Temple |
-| 2 | Colosseum | Water Tower | Fire Temple | Colosseum | Lighthouse |
-| 3 | Dome | Villa | Market Stalls | Market | Villa+Cart |
-| 4 | Warehouse | Industrial | Quarry | Kilns | Dock+Cranes |
-| 5 | Trading Post | Arch | Large Temple | Small Temple | Amphitheater |
-
-### Current Mappings vs Reality:
-
-| Building | Current (row,col) | Actual Sprite | Status |
-|----------|-------------------|---------------|--------|
-| city_center | (5,2) | Large Temple | ✅ OK |
-| farm | (5,0) | Trading Post | ❌ WRONG - Not a farm! |
-| market | (1,3) | Temple | ❌ WRONG - Should be (3,2) or (3,3) |
-| library | (0,1) | Temple with columns | ✅ OK |
-| barracks | (2,0) | Colosseum | ⚠️ Debatable |
-| dock | (4,4) | Dock with cranes | ✅ OK |
-| mine | (4,2) | Quarry | ✅ OK |
-| smelter | (4,3) | Kilns/Furnaces | ✅ OK |
+| Sheet | Path | Grid | Status |
+|-------|------|------|--------|
+| Classical | `/assets/ages/classics.png` | 5×6 | ✅ Audited |
+| Medieval | `/assets/ages/medeival.png` | 5×6 | ✅ Audited |
+| Enlightenment | `/assets/ages/enlightenment.png` | 5×6 | ✅ Audited |
+| Industrial | `/assets/ages/industrial.png` | 5×6 | ✅ Audited |
+| Modern | `/assets/ages/modern.png` | 5×6 | ✅ Audited |
+| IsoCity Farm | `/assets/sprites_red_water_new_farm.png` | 5×6 | ✅ Audited |
+| IsoCity Main | `/assets/sprites_red_water_new.png` | 5×6 | ✅ Audited |
 
 ---
 
-## Industrial Age Sprite Sheet Analysis
+## Farm Sprites - IsoCity Farm Sheet
 
-**Source**: `public/assets/ages/industrial.png` (5×6 grid)
+Farms now use age-appropriate sprites from the IsoCity farm sheet:
 
-### Grid Layout (row, col):
-
-| Row | Col 0 | Col 1 | Col 2 | Col 3 | Col 4 |
-|-----|-------|-------|-------|-------|-------|
-| 0 | Factory | Factory+Smokestacks | Brick Factory | Brick Building | Solar Roof |
-| 1 | Park | Gazebo Park | Stadium | Victorian | Church |
-| 2 | Government | Water Tower | Factory Complex | Sports Field | Oil Derrick |
-| 3 | Tree | Victorian | Gothic | Cottage | Shop |
-| 4 | Building | Factory | Factory | Steel Mill | Refinery |
-| 5 | Train Station | Factories | Clock Tower | Temple | Ferris Wheel |
-
-### Current Issues:
-
-| Building | Current (row,col) | Actual Sprite | Status |
-|----------|-------------------|---------------|--------|
-| farm | (5,0) | Train Station | ❌ CRITICAL - Completely wrong! |
-| airbase | (3,3) | Cottage | ❌ CRITICAL - Should be airport! |
-| factory | (4,3) | Steel Mill | ✅ OK |
-| oil_well | (4,3) | Steel Mill | ⚠️ Should be (2,4) - Oil Derrick |
+| Age | Position | Sprite | Description |
+|-----|----------|--------|-------------|
+| **Classical** | (3,1) | 🍇 Vineyard | Ancient Mediterranean agriculture |
+| **Medieval** | (2,4) | 🌬️ Windmill | ICONIC medieval farming symbol |
+| **Enlightenment** | (2,2) | 🏚️ Storage Barn | Larger-scale agricultural operations |
+| **Industrial** | (1,0) | 🐄 Dairy Farm | Red barn with silo - quintessential industrial farm |
+| **Modern** | (3,4) | 🏠 Greenhouse | High-tech modern agriculture |
 
 ---
 
-## Modern Age Sprite Sheet Analysis
+## Classical Age Mappings
 
-**Source**: `public/assets/ages/modern.png` (5×6 grid)
-
-### Critical Issues:
-
-| Building | Current (row,col) | Actual Sprite | Status |
-|----------|-------------------|---------------|--------|
-| farm | (5,0) | Airport Tower | ❌ CRITICAL |
-| airbase | (3,3) | Small House | ❌ CRITICAL |
-
----
-
-## IsoCity Farm Sprite Sheet
-
-**Source**: `public/assets/sprites_red_water_new_farm.png` (5×6 grid)
-
-This sheet has proper farm assets that should be used:
-
-| Row | Contents |
-|-----|----------|
-| 0 | Crops: Corn, Wheat, Sunflowers, Pumpkins, Apple Trees |
-| 1 | Farm buildings: Dairy barn, Chicken coop, Sheep, Pigs, Horses |
-| 2 | Farm structures: Farmhouse, Silo, Barn, Tractor shed, Windmill |
-| 3 | Orchards: Fruit trees, Vineyard, Hay bales, Pond, Greenhouse |
-| 4 | Industrial: Dairy factory, Watermill, Grain storage, Barn, Market |
-| 5 | Vehicles: Tractor, Combine, Truck, Water tower, Tool shed |
-
-**Recommendation**: Use this sheet for farms in ALL ages, selecting appropriate sprites:
-- Classical: Row 0 (basic crops) or Row 1 col 0 (simple farm)
-- Medieval: Row 2 col 4 (windmill) or Row 1 (animal farms)
-- Industrial+: Row 5 (tractors, machinery)
+| Building | Row | Col | Sprite Description |
+|----------|-----|-----|-------------------|
+| city_center | 5 | 2 | Large temple |
+| market | 3 | 2 | Open-air market stalls |
+| library | 0 | 3 | Small temple/academy |
+| university | 2 | 0 | Theater/amphitheater |
+| temple | 2 | 2 | Fire temple/sanctuary |
+| senate | 1 | 3 | Large government building |
+| barracks | 2 | 3 | Colosseum (training arena) |
+| dock | 4 | 4 | Dock with crane |
+| mine | 4 | 2 | Quarry |
+| smelter | 4 | 3 | Kilns/furnaces |
+| granary | 5 | 0 | Warehouse |
+| tower | 2 | 1 | Watchtower |
+| fort | 2 | 4 | Lighthouse/tower |
+| castle | 0 | 0 | Large palace |
 
 ---
 
-## Action Items
+## Medieval Age Mappings
 
-### Critical Fixes Needed:
+| Building | Row | Col | Sprite Description |
+|----------|-----|-----|-------------------|
+| city_center | 1 | 0 | Walled courtyard/garden |
+| market | 2 | 0 | Market square with stalls |
+| library | 0 | 4 | Church/chapel |
+| university | 3 | 2 | Gothic stone university |
+| temple | 5 | 3 | Gothic cathedral |
+| senate | 5 | 2 | Classical dome building |
+| barracks | 1 | 3 | Walled fortress compound |
+| **stable** | **1** | **2** | **Horse paddock - PERFECT!** |
+| dock | 5 | 0 | Waterfront building |
+| mine | 4 | 2 | Mining complex with hoist |
+| smelter | 0 | 2 | Windmill + forge |
+| granary | 4 | 1 | Large barn |
+| lumber_mill | 0 | 3 | Windmill |
+| tower | 0 | 1 | Stone keep |
+| fort | 5 | 1 | Stone fortress |
+| castle | 0 | 0 | Gray stone castle |
+| siege_factory | 3 | 4 | Workshop |
 
-1. **Farm sprites**: Use IsoCity farm sheet instead of age sheets
-2. **Market (Classical)**: Change from (1,3) to (3,2) - actual market stalls
-3. **Airbase (Modern/Industrial)**: Need to find/create proper airport sprite
-4. **Oil Well (Industrial)**: Change from (4,3) to (2,4) - oil derrick
+---
 
-### Recommended Sprite Mapping Updates:
+## Enlightenment Age Mappings
 
-```typescript
-// PROPOSED FIXES for renderConfig.ts
+| Building | Row | Col | Sprite Description |
+|----------|-----|-----|-------------------|
+| city_center | 0 | 0 | Georgian mansion |
+| market | 0 | 3 | Colonnade building |
+| library | 0 | 4 | Classical columns building |
+| **university** | **2** | **0** | **OBSERVATORY - Perfect for Age of Science!** |
+| temple | 5 | 3 | Greek temple |
+| senate | 5 | 2 | Domed capitol |
+| barracks | 1 | 4 | Civic building with courtyard |
+| **stable** | **5** | **0** | **Stagecoach station - PERFECT!** |
+| dock | 2 | 4 | Amphitheater with harbor |
+| mine | 4 | 3 | Stone mill |
+| smelter | 3 | 3 | Blacksmith forge |
+| granary | 4 | 1 | Warehouse with cart |
+| lumber_mill | 2 | 2 | Watermill |
+| factory | 0 | 2 | Early factory with waterwheel |
+| fort | 5 | 1 | Stone arch/tunnel |
 
-// Use IsoCity farm sheet for farms (all ages)
-farm: { useIsoCityFarm: true, row: 0, col: 0 }, // Crops
+---
 
-// Fix market to use actual market sprite
-market: { row: 3, col: 2 }, // Market stalls, not temple
+## Industrial Age Mappings
 
-// Fix oil_well to use oil derrick
-oil_well: { row: 2, col: 4 }, // Oil derrick in industrial
+| Building | Row | Col | Sprite Description |
+|----------|-----|-----|-------------------|
+| city_center | 5 | 2 | Grand city hall with clock tower |
+| market | 3 | 4 | Storefront shop |
+| library | 0 | 0 | Institutional building |
+| university | 2 | 0 | Large Victorian school |
+| temple | 1 | 4 | Church with steeple |
+| senate | 5 | 3 | Classical columns building |
+| barracks | 0 | 2 | Red brick building |
+| stable | 3 | 3 | Cottage (rustic) |
+| dock | 5 | 0 | Train station |
+| mine | 4 | 2 | Mining complex |
+| smelter | 4 | 3 | Steel facility |
+| granary | 4 | 0 | Warehouse |
+| **factory** | **0** | **1** | **Large factory - PERFECT!** |
+| **oil_well** | **2** | **4** | **Oil derrick - PERFECT!** |
+| **refinery** | **4** | **4** | **Industrial refinery** |
+| siege_factory | 4 | 1 | Factory |
+| bunker | 4 | 0 | Warehouse/fortified |
 
-// airbase needs special handling - use IsoCity airport or custom
-airbase: { useIsoCity: true, sheet: 'buildings/airport' },
+---
+
+## Modern Age Mappings
+
+| Building | Row | Col | Sprite Description |
+|----------|-----|-----|-------------------|
+| city_center | 0 | 1 | Tall skyscraper |
+| small_city | 0 | 0 | Glass office tower |
+| market | 4 | 0 | Gas station/convenience |
+| library | 2 | 0 | Neoclassical building |
+| university | 0 | 3 | Brick institution |
+| temple | 0 | 4 | Modern church |
+| **senate** | **5** | **2** | **Domed capitol - PERFECT!** |
+| barracks | 5 | 1 | Military radar base |
+| dock | 4 | 1 | Large hangar |
+| smelter | 0 | 2 | Power plant |
+| factory | 4 | 2 | Smokestack factory |
+| **oil_well** | **4** | **4** | **Refinery towers** |
+| refinery | 4 | 3 | Heavy industrial |
+| auto_plant | 1 | 4 | Brick factory |
+| bunker | 5 | 1 | Military base |
+| fort/fortress | 5 | 1 | Military compound |
+
+---
+
+## Problem Sprites Identified
+
+### Era-Inappropriate Sprites in Medieval Sheet:
+- (2,1) Water tower - Should be medieval well
+- (2,2) Industrial factory - Should be blacksmith
+- (2,3) Modern stadium - Should be jousting grounds
+- (2,4) Observatory - Should be scriptorium
+- (4,4) Industrial refinery - Should be brewery
+
+### Era-Inappropriate Sprites in Enlightenment Sheet:
+- (1,2) Tennis court - Wrong era
+- (2,3) Wind turbines - 21st century!
+- (4,4) Modern oil refinery - Too modern
+- (5,4) Carousel - 19th century
+
+---
+
+## Missing Building Types
+
+Buildings that need special handling:
+- **Airbase** - Uses IsoCity airport sprite (`/assets/buildings/airport.webp`)
+- **Farms** - Uses IsoCity farm sheet with age-specific sprites
+- **Dock** - Some ages lack proper waterfront buildings
+
+---
+
+## Scripts Created
+
+### `scripts/extract-sprite.mjs`
+Extract RoN building sprites:
+```bash
+node scripts/extract-sprite.mjs farm classical
+node scripts/extract-sprite.mjs --all
+node scripts/extract-sprite.mjs --list medieval
+```
+
+### `scripts/extract-isocity-sprite.mjs`
+Extract IsoCity sprites:
+```bash
+node scripts/extract-isocity-sprite.mjs farm 2 4  # Windmill
+node scripts/extract-isocity-sprite.mjs --list
+node scripts/extract-isocity-sprite.mjs --farm-recommendations
 ```
 
 ---
 
-## Full Building Audit
+## Implementation
 
-### Buildings with CORRECT sprites:
-- ✅ city_center - Temple works as government center
-- ✅ library - Temple with columns (classical learning)
-- ✅ dock - Dock with cranes
-- ✅ mine - Quarry
-- ✅ smelter - Kilns/furnaces
-- ✅ factory (industrial) - Steel mill
+The sprite mappings are implemented in:
+- `src/games/ron/lib/renderConfig.ts` - `AGE_BUILDING_OVERRIDES` for age-specific mappings
+- `src/games/ron/components/RoNCanvas.tsx` - Uses `getAgeSpritePosition()` for rendering
 
-### Buildings with WRONG sprites:
-- ❌ farm (all ages) - Using random buildings, not farms
-- ❌ market (classical) - Using temple instead of market stalls
-- ❌ airbase (modern) - Using cottage instead of airport
-- ❌ oil_well - Using steel mill instead of oil derrick
-- ❌ barracks - Colosseum is debatable for training
-
-### Buildings needing review:
-- ⚠️ university - Colosseum may not be ideal
-- ⚠️ stable - Cart building is marginal
-- ⚠️ granary - Warehouse is acceptable
-
----
-
-## Next Steps
-
-1. Create hybrid rendering system that can pull from multiple sprite sheets
-2. Map farms to IsoCity farm sprite sheet
-3. Fix individual building mappings as noted above
-4. Consider age-specific variants where available
+Age-specific farm sprites are hardcoded in `RoNCanvas.tsx` for each age.
