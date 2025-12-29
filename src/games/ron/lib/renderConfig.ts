@@ -343,6 +343,8 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     barracks: { row: 0, col: 3 },
     // Airbase - Row 5, Col 0 is AIRPORT with runway! Use native sprite
     airbase: { row: 5, col: 0 },
+    // Auto plant - Row 4, Col 2 is industrial manufacturing facility
+    auto_plant: { row: 4, col: 2 },
     // Dock - Row 5, col 0 is airport area (or use different)
     dock: { row: 5, col: 0 },
     // Mine - Row 4, Col 2 is factory (repurpose)
@@ -357,8 +359,8 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     oil_well: { row: 4, col: 4 },
     // Refinery - Row 4, Col 3 is heavy industrial
     refinery: { row: 4, col: 3 },
-    // Auto plant - Row 1, Col 4 is brick factory
-    auto_plant: { row: 1, col: 4 },
+    // Auto plant - Row 4, Col 0 is large industrial facility
+    auto_plant: { row: 4, col: 0 },
     // Siege factory - Row 4, Col 1 is hangar/warehouse
     siege_factory: { row: 4, col: 1 },
     // Bunker - Row 1, Col 3 police station (fortified)
@@ -473,6 +475,7 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
   },
   enlightenment: {
     market: 0.2,        // Shift DOWN (well-cropped, just needs position adjustment)
+    fort: 0.6,          // Same as medieval fort (uses medieval sprite)
   },
   industrial: {
     market: -1.0,       // Much lower cropping needed - still seeing blue base
@@ -493,6 +496,7 @@ export const CONSTRUCTION_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, numb
   lumber_mill: 0.3,     // Shift down 0.3 tiles
   smelter: 0.1,         // Slight shift for construction
   market: 0.0,          // Will use cropTop instead
+  auto_plant: -0.3,     // Shift up 0.3 tiles
 };
 
 // Construction-specific top cropping (fraction of sprite height to remove from top)
@@ -506,6 +510,16 @@ export const CONSTRUCTION_CROP_TOP: Partial<Record<RoNBuildingType, number>> = {
 export const CONSTRUCTION_CROP_BOTTOM: Partial<Record<RoNBuildingType, number>> = {
   smelter: 0.05,        // Crop bottom slightly
   market: 0.05,         // Crop bottom slightly
+};
+
+// Age-specific cropping for FINISHED buildings (not construction)
+// Format: { age: { building: { cropTop: fraction, cropBottom: fraction } } }
+export const AGE_BUILDING_CROP: Partial<Record<Age, Partial<Record<RoNBuildingType, { cropTop?: number; cropBottom?: number }>>>> = {
+  industrial: {
+    market: { cropTop: 0.25, cropBottom: 0.1 },  // 0.5 tiles lower at top (~25%), 0.2 lower at bottom (~10%)
+    library: { cropTop: 0.15, cropBottom: 0.15 }, // 0.3 tiles lower at top and bottom (~15% each)
+    university: { cropTop: 0.15, cropBottom: 0.15 }, // 0.3 tiles lower at top and bottom (~15% each)
+  },
 };
 
 // Scale adjustments per building type
@@ -529,6 +543,12 @@ export const BUILDING_SCALES: Partial<Record<RoNBuildingType, number>> = {
 export const AGE_BUILDING_SCALES: Partial<Record<Age, Partial<Record<RoNBuildingType, number>>>> = {
   medieval: {
     fort: 1.3,  // Scale up by 30%
+  },
+  enlightenment: {
+    fort: 1.3,  // Same as medieval (uses medieval sprite)
+  },
+  industrial: {
+    fort: 1.3,  // Same as medieval (uses medieval sprite)
   },
 };
 

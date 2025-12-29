@@ -152,13 +152,29 @@ const SYSTEM_PROMPT = `You are an AGGRESSIVE AI in Rise of Nations. Goal: DEFEAT
 - Other buildings: "General" tiles
 
 ## DECISION TREE:
-1. Pop capped? → Save for small_city, don't build anything else!
-2. No barracks? → Build barracks
-3. Food rate < 2? → Build farm
-4. Wood rate < 1? → Build woodcutters_camp
-5. Metal rate = 0? → Build mine
-6. Military < 5? → Train militia
-7. Military >= 5? → ATTACK!
+1. UNDER ATTACK? → Send ALL military to defend! Train more units!
+2. Wood rate = 0 AND wood < 400? → BUILD WOODCUTTERS_CAMP FIRST! (you can't save for small_city if you can't generate wood!)
+3. Pop capped AND wood >= 400? → Build small_city immediately!
+4. Pop capped AND wood < 400? → Save for small_city, only build resource buildings if rate is 0
+5. No barracks AND wood >= 200? → Build barracks
+6. Food rate < 2? → Build farm
+7. Wood rate < 1? → Build woodcutters_camp  
+8. Metal rate = 0? → Build mine
+9. Military < 5 AND have barracks? → Train militia
+10. Military >= 5? → ATTACK!
+
+## CRITICAL ECONOMY RULES:
+- You CANNOT save for small_city if wood rate is 0! You must have income!
+- Always ensure at least 1 of each: farm (food), woodcutters_camp (wood)
+- Train more citizens when you have idle buildings and food
+- Build multiple small_city to expand population - don't stop at just one!
+
+## DEFENDING:
+If you see "🚨 THREATS" or "⚠️ UNDER ATTACK":
+- IMMEDIATELY send all military units to the threatened location!
+- Train more militia urgently!
+- Protect your city_center at all costs!
+- Use send_units tool with your military unit IDs and the threat coordinates
 
 Be strategic, not spam. Save resources when needed!`;
 
@@ -299,8 +315,32 @@ General: ${(condensed.emptyTerritoryTiles || []).slice(0, 5).map(t => `(${t.x},$
 🌲 For woodcutters_camp (near forest): ${(condensed.tilesNearForest || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none in territory'}
 ⛏️ For mine (near metal): ${(condensed.tilesNearMetal || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none in territory'}
 
-## ENEMY POSITIONS:
-${condensed.enemyBuildings.slice(0, 5).map(b => `- ${b.type} at (${b.x},${b.y})`).join('\n') || '(not visible)'}
+## ENEMY INFO:
+Buildings: ${condensed.enemyBuildings.slice(0, 5).map(b => `${b.type}@(${b.x},${b.y})`).join(', ') || 'none visible'}
+Units: ${condensed.enemyUnits.slice(0, 8).map(u => `${u.type}@(${Math.round(u.x)},${Math.round(u.y)})`).join(', ') || 'none visible'}
+${(() => {
+  // Detect if enemy units are near AI buildings (attack warning)
+  const myBuildingPositions = condensed.myBuildings.map(b => ({ x: b.x, y: b.y, type: b.type }));
+  const threats: string[] = [];
+  for (const enemy of condensed.enemyUnits) {
+    for (const building of myBuildingPositions) {
+      const dist = Math.sqrt(Math.pow(enemy.x - building.x, 2) + Math.pow(enemy.y - building.y, 2));
+      if (dist < 15) {
+        threats.push(`⚠️ UNDER ATTACK! Enemy ${enemy.type} near your ${building.type} at (${building.x},${building.y})!`);
+      }
+    }
+  }
+  // Also check if enemy near AI units
+  for (const enemy of condensed.enemyUnits) {
+    for (const myUnit of condensed.myUnits) {
+      const dist = Math.sqrt(Math.pow(enemy.x - myUnit.x, 2) + Math.pow(enemy.y - myUnit.y, 2));
+      if (dist < 10 && myUnit.type === 'citizen') {
+        threats.push(`⚠️ Your worker at (${Math.round(myUnit.x)},${Math.round(myUnit.y)}) is in danger from enemy ${enemy.type}!`);
+      }
+    }
+  }
+  return threats.length > 0 ? '\n🚨 THREATS:\n' + threats.slice(0, 3).join('\n') : '';
+})()}
 
 ## TRAINING LOCATIONS:
 - Citizens: city_center at ${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city') ? `(${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.x},${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.y})` : '(none!)'}
@@ -318,25 +358,40 @@ ${(() => {
   const forestTile = condensed.tilesNearForest?.[0];
   const metalTile = condensed.tilesNearMetal?.[0];
   const popCapped = p.population >= p.populationCap;
-  
+
+  // CRITICAL: Deadlock detection - can't save for small_city if wood rate is 0!
+  if (p.resourceRates.wood === 0 && p.resources.wood < 400) {
+    if (forestTile) {
+      suggestions.push(`🚨 CRITICAL DEADLOCK! Wood rate is 0 - you can NEVER save for small_city! BUILD woodcutters_camp at (${forestTile.x},${forestTile.y}) IMMEDIATELY!`);
+    }
+  }
+
   // #1 PRIORITY: Pop cap - must expand!
   if (popCapped) {
     if (p.resources.wood >= 400 && p.resources.metal >= 100 && cityTile) {
       suggestions.push(`🚨 URGENT: BUILD small_city at (${cityTile.x},${cityTile.y}) NOW! You have resources!`);
-    } else {
+    } else if (p.resourceRates.wood > 0) {
       const needWood = Math.max(0, 400 - p.resources.wood);
       const needMetal = Math.max(0, 100 - p.resources.metal);
-      suggestions.push(`⏳ POP CAPPED! Save for small_city - need ${needWood} more wood, ${needMetal} more metal. DON'T BUILD anything else!`);
+      suggestions.push(`⏳ Saving for small_city - need ${needWood} more wood, ${needMetal} more metal.`);
     }
   }
-  
+
+  // Always need resource income - even if pop-capped!
+  if (p.resourceRates.food < 1 && cityTile) {
+    suggestions.push(`🌾 LOW FOOD! BUILD farm at (${cityTile.x},${cityTile.y})`);
+  }
+  if (p.resourceRates.wood < 1 && forestTile) {
+    suggestions.push(`🪵 LOW WOOD! BUILD woodcutters_camp at (${forestTile.x},${forestTile.y})`);
+  }
+  if (p.resourceRates.metal === 0 && metalTile) {
+    suggestions.push(`⛏️ NO METAL! BUILD mine at (${metalTile.x},${metalTile.y})`);
+  }
+
   // Only suggest other builds if NOT pop-capped or already have enough for small_city
   if (!popCapped || (p.resources.wood >= 400 && p.resources.metal >= 100)) {
     if (!barracksExists && p.resources.wood >= 100 && cityTile) {
       suggestions.push(`⚔️ BUILD barracks at (${cityTile.x},${cityTile.y})`);
-    }
-    if (p.resourceRates.food < 2 && farmCount < 4 && cityTile) {
-      suggestions.push(`🌾 BUILD farm at (${cityTile.x},${cityTile.y})`);
     }
     if (p.resourceRates.metal === 0 && mineCount < 2 && metalTile) {
       suggestions.push(`⛏️ BUILD mine at (${metalTile.x},${metalTile.y})`);
@@ -346,6 +401,13 @@ ${(() => {
     }
   }
   
+  // Citizen training - need workers for economy!
+  const citizenCount = condensed.myUnits.filter(u => u.type === 'citizen').length;
+  const cityCenter = condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city');
+  if (!popCapped && cityCenter && citizenCount < 15 && p.resources.food >= 50) {
+    suggestions.push(`👷 TRAIN citizen at (${cityCenter.x},${cityCenter.y}) - need more workers!`);
+  }
+
   // Military actions
   if (barracksExists && militaryCount < 5 && !popCapped) {
     suggestions.push(`🗡️ TRAIN militia at barracks`);
@@ -354,7 +416,12 @@ ${(() => {
     const enemy = condensed.enemyBuildings[0];
     suggestions.push(`⚔️ ATTACK enemy at (${enemy.x},${enemy.y})!`);
   }
-  
+
+  // Expansion reminder
+  if (!popCapped && p.resources.wood >= 400 && cityTile) {
+    suggestions.push(`🏙️ Build another small_city at (${cityTile.x},${cityTile.y}) to expand population cap!`);
+  }
+
   return suggestions.length > 0 ? suggestions.join('\n') : 'Economy stable - build small_city to expand!';
 })()}`;
 

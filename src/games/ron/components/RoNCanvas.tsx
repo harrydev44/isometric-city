@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useRoN } from '../context/RoNContext';
-import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, AGE_VERTICAL_OFFSETS, BUILDING_SCALES, AGE_BUILDING_SCALES, CONSTRUCTION_VERTICAL_OFFSETS, CONSTRUCTION_CROP_TOP, CONSTRUCTION_CROP_BOTTOM, PLAYER_COLORS, getAgeSpritePosition } from '../lib/renderConfig';
+import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, AGE_VERTICAL_OFFSETS, BUILDING_SCALES, AGE_BUILDING_SCALES, CONSTRUCTION_VERTICAL_OFFSETS, CONSTRUCTION_CROP_TOP, CONSTRUCTION_CROP_BOTTOM, AGE_BUILDING_CROP, PLAYER_COLORS, getAgeSpritePosition } from '../lib/renderConfig';
 import { BUILDING_STATS } from '../types/buildings';
 import { AGE_ORDER } from '../types/ages';
 import { RoNBuildingType } from '../types/buildings';
@@ -2257,12 +2257,28 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
                   drawX, constrDrawY, destWidth, adjustedDestHeight
                 );
               } else {
-                // Draw completed building normally
-                ctx.drawImage(
-                  spriteSheet,
-                  sx, sy, tileWidth, tileHeight,
-                  drawX, drawY, destWidth, destHeight
-                );
+                // Draw completed building with optional age-specific cropping
+                const ageCrop = AGE_BUILDING_CROP[playerAge]?.[buildingType];
+                if (ageCrop) {
+                  const cropTopPx = tileHeight * (ageCrop.cropTop || 0);
+                  const cropBottomPx = tileHeight * (ageCrop.cropBottom || 0);
+                  const croppedSrcHeight = tileHeight - cropTopPx - cropBottomPx;
+                  const cropRatio = croppedSrcHeight / tileHeight;
+                  const croppedDestHeight = destHeight * cropRatio;
+                  const croppedDrawY = drawY + (destHeight - croppedDestHeight);
+                  
+                  ctx.drawImage(
+                    spriteSheet,
+                    sx, sy + cropTopPx, tileWidth, croppedSrcHeight,
+                    drawX, croppedDrawY, destWidth, croppedDestHeight
+                  );
+                } else {
+                  ctx.drawImage(
+                    spriteSheet,
+                    sx, sy, tileWidth, tileHeight,
+                    drawX, drawY, destWidth, destHeight
+                  );
+                }
               }
 
               // Fire effect and health bar for damaged buildings (under attack)
