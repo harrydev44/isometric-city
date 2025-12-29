@@ -422,7 +422,7 @@ export const BUILDING_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>>
   granary: -0.35,
   
   // Industrial buildings (tall smokestacks!)
-  smelter: -1.0,        // Blast furnace is very tall
+  smelter: -0.7,        // Shifted down 0.3 tiles from -1.0
   factory: -0.6,        // Smokestacks extend high
   oil_well: -1.2,       // Oil derricks are tall
   refinery: -1.3,       // Tall distillation columns
@@ -468,7 +468,8 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
   },
   medieval: {
     market: -0.2,       // Additional shift for market
-    city_center: -0.2,  // Additional shift for city center
+    city_center: -0.5,  // Crop lower down
+    fort: 0.6,          // Shift DOWN 0.6 tiles
   },
   enlightenment: {
     market: 0.2,        // Shift DOWN (well-cropped, just needs position adjustment)
@@ -483,6 +484,28 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
   modern: {
     market: -0.8,       // Needs grey base + lower cropping
   },
+};
+
+// Construction-specific vertical offset adjustments
+// These are ADDITIONAL offsets for buildings under construction (scaffolding sprites)
+// Positive = shift down, Negative = shift up (crop from top)
+export const CONSTRUCTION_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>> = {
+  lumber_mill: 0.3,     // Shift down 0.3 tiles
+  smelter: 0.1,         // Slight shift for construction
+  market: 0.0,          // Will use cropTop instead
+};
+
+// Construction-specific top cropping (fraction of sprite height to remove from top)
+// This removes bleeding from adjacent sprites in the sprite sheet
+export const CONSTRUCTION_CROP_TOP: Partial<Record<RoNBuildingType, number>> = {
+  smelter: 0.1,         // Crop 0.2 tiles lower at top (~10% of sprite)
+  market: 0.15,         // Cut off 0.3 tiles lower (~15% of sprite)
+};
+
+// Construction-specific bottom cropping (fraction of sprite height to remove from bottom)
+export const CONSTRUCTION_CROP_BOTTOM: Partial<Record<RoNBuildingType, number>> = {
+  smelter: 0.05,        // Crop bottom slightly
+  market: 0.05,         // Crop bottom slightly
 };
 
 // Scale adjustments per building type

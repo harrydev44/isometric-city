@@ -104,13 +104,19 @@ export function useAgenticAI(
         }
 
         // Apply AI actions directly to current state
+        console.log('[AI SYNC] Result received:', { 
+          hasActions: !!result.actions, 
+          actionCount: result.actions?.length,
+          hasTick: !!result.newState?.tick 
+        });
+        
         const actions = result.actions as Array<{
           type: 'build' | 'unit_task' | 'train' | 'resource_update';
           data: Record<string, unknown>;
         }> | undefined;
         
         if (actions && actions.length > 0) {
-          console.log(`[AI SYNC] Applying ${actions.length} actions from AI`);
+          console.log(`[AI SYNC] Applying ${actions.length} actions:`, actions.map(a => a.type).join(', '));
           
           setGameState((currentState) => {
             let newGrid = currentState.grid.map(row => [...row]);

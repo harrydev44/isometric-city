@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useRoN } from '../context/RoNContext';
-import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, AGE_VERTICAL_OFFSETS, BUILDING_SCALES, AGE_BUILDING_SCALES, PLAYER_COLORS, getAgeSpritePosition } from '../lib/renderConfig';
+import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP, BUILDING_VERTICAL_OFFSETS, AGE_VERTICAL_OFFSETS, BUILDING_SCALES, AGE_BUILDING_SCALES, CONSTRUCTION_VERTICAL_OFFSETS, CONSTRUCTION_CROP_TOP, CONSTRUCTION_CROP_BOTTOM, PLAYER_COLORS, getAgeSpritePosition } from '../lib/renderConfig';
 import { BUILDING_STATS } from '../types/buildings';
 import { AGE_ORDER } from '../types/ages';
 import { RoNBuildingType } from '../types/buildings';
@@ -2234,13 +2234,27 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
                   constrRow = 2; constrCol = 0; // Medium building construction
                 }
                 
+                // Apply construction-specific cropping
+                const cropTopFraction = CONSTRUCTION_CROP_TOP[buildingType] || 0;
+                const cropBottomFraction = CONSTRUCTION_CROP_BOTTOM[buildingType] || 0;
+                const constrVertOffset = CONSTRUCTION_VERTICAL_OFFSETS[buildingType] || 0;
+                
+                const cropTopPx = constrTileHeight * cropTopFraction;
+                const cropBottomPx = constrTileHeight * cropBottomFraction;
+                const actualSrcHeight = constrTileHeight - cropTopPx - cropBottomPx;
+                
                 const constrSx = constrCol * constrTileWidth;
-                const constrSy = constrRow * constrTileHeight;
+                const constrSy = constrRow * constrTileHeight + cropTopPx;
+                
+                // Adjust destination size to maintain aspect ratio after cropping
+                const cropRatio = actualSrcHeight / constrTileHeight;
+                const adjustedDestHeight = destHeight * cropRatio;
+                const constrDrawY = drawY + constrVertOffset * TILE_HEIGHT + (destHeight - adjustedDestHeight);
                 
                 ctx.drawImage(
                   constructionSprite,
-                  constrSx, constrSy, constrTileWidth, constrTileHeight,
-                  drawX, drawY, destWidth, destHeight
+                  constrSx, constrSy, constrTileWidth, actualSrcHeight,
+                  drawX, constrDrawY, destWidth, adjustedDestHeight
                 );
               } else {
                 // Draw completed building normally

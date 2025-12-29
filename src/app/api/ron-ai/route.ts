@@ -119,52 +119,48 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are an AGGRESSIVE AI opponent in a Rise of Nations RTS game. Your goal: RAPID EXPANSION and OVERWHELMING FORCE.
+const SYSTEM_PROMPT = `You are an AGGRESSIVE AI in Rise of Nations. Goal: DEFEAT THE HUMAN.
 
-## YOUR TURN PROCESS (DO ALL OF THESE EVERY TURN!):
-1. get_game_state → See current situation
-2. assign_workers → Keep ALL workers productive
-3. BUILD 2-3 BUILDINGS every turn! Economy first, then military
-4. TRAIN 2-3 UNITS every turn! Citizens early, military later
-5. ATTACK when you have 5+ military units
+## EVERY TURN:
+1. get_game_state
+2. assign_workers  
+3. BUILD something
+4. TRAIN units
+5. ATTACK when ready
 
-## AGGRESSIVE EXPANSION STRATEGY:
-**EARLY (pop < 15):**
-- Build 3-4 farms (food powers everything)
-- Build 2-3 woodcutters_camp on 🌲 tiles
-- Build 1-2 mines on ⛏️ tiles
-- Train citizens constantly until 10+ workers
-- Build barracks
+## KEY RULES:
+**POP CAP IS #1 PRIORITY!**
+- If population >= populationCap, you MUST save for small_city (400 wood, 100 metal)
+- DON'T waste wood on more woodcutters when pop-capped - SAVE IT!
+- Build small_city the MOMENT you have 400 wood + 100 metal
 
-**MID GAME (pop 15-30):**
-- Build small_city when pop capped (400 wood, 100 metal)
-- Build 1-2 more farms and woodcutters
-- Build library for research
-- Train militia constantly (3-5 at a time)
-- Build stable for cavalry
+**BALANCED ECONOMY:**
+- Need 3-4 farms (not just 1!)
+- Need 2-3 woodcutters on 🌲 tiles
+- Need 1-2 mines on ⛏️ tiles for metal
+- Don't overbuild one type - diversify!
 
-**LATE GAME (pop 30+):**
-- Build large_city, major_city
-- Build university, siege_workshop
-- Overwhelm with mixed army
+**MILITARY:**
+- Build barracks early (costs 100 wood)
+- Train militia (40 food, 20 wood each)
+- Attack enemy when you have 5+ military units
+- Target: enemy city_center first!
 
-## BUILD LOCATIONS (CRITICAL!)
-⚠️ woodcutters_camp: ONLY on "🌲 For woodcutters_camp" tiles
-⚠️ mine: ONLY on "⛏️ For mine" tiles
-Other buildings: Use any "General" buildable tile
+## BUILD LOCATIONS:
+- woodcutters_camp: ONLY on "🌲" tiles
+- mine: ONLY on "⛏️" tiles  
+- Other buildings: "General" tiles
 
-## ALWAYS DO THIS:
-- NEVER end a turn without building something!
-- NEVER end a turn without training something!
-- Call assign_workers after every build to staff new buildings
-- Build more farms if food < 100 or food rate < 3
-- Build more woodcutters if wood rate < 2
-- Build barracks ASAP, then train militia constantly
+## DECISION TREE:
+1. Pop capped? → Save for small_city, don't build anything else!
+2. No barracks? → Build barracks
+3. Food rate < 2? → Build farm
+4. Wood rate < 1? → Build woodcutters_camp
+5. Metal rate = 0? → Build mine
+6. Military < 5? → Train militia
+7. Military >= 5? → ATTACK!
 
-## COMMUNICATION:
-Send taunting messages! Mock the opponent's slow economy or weak military.
-
-BE AGGRESSIVE! Build constantly! Train constantly! Expand relentlessly!`;
+Be strategic, not spam. Save resources when needed!`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -310,59 +306,56 @@ ${condensed.enemyBuildings.slice(0, 5).map(b => `- ${b.type} at (${b.x},${b.y})`
 - Citizens: city_center at ${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city') ? `(${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.x},${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.y})` : '(none!)'}
 - Military: barracks at ${condensed.myBuildings.find(b => b.type === 'barracks') ? `(${condensed.myBuildings.find(b => b.type === 'barracks')!.x},${condensed.myBuildings.find(b => b.type === 'barracks')!.y})` : '(build one first!)'}
 
-## ⚡ RECOMMENDED ACTIONS NOW:
+## ⚡ PRIORITY ACTIONS:
 ${(() => {
-  const actions: string[] = [];
+  const suggestions: string[] = [];
   const farmCount = condensed.myBuildings.filter(b => b.type === 'farm').length;
   const woodCount = condensed.myBuildings.filter(b => b.type === 'woodcutters_camp').length;
   const mineCount = condensed.myBuildings.filter(b => b.type === 'mine').length;
   const barracksExists = condensed.myBuildings.some(b => b.type === 'barracks');
-  const libraryExists = condensed.myBuildings.some(b => b.type === 'library');
   const militaryCount = condensed.myUnits.filter(u => u.type !== 'citizen').length;
-  const citizenCount = condensed.myUnits.filter(u => u.type === 'citizen').length;
   const cityTile = condensed.emptyTerritoryTiles?.[0];
   const forestTile = condensed.tilesNearForest?.[0];
   const metalTile = condensed.tilesNearMetal?.[0];
+  const popCapped = p.population >= p.populationCap;
   
-  // Food rate problems
-  if (p.resourceRates.food < 2 && farmCount < 4 && cityTile) {
-    actions.push(`🌾 BUILD farm at (${cityTile.x},${cityTile.y}) - need more food!`);
+  // #1 PRIORITY: Pop cap - must expand!
+  if (popCapped) {
+    if (p.resources.wood >= 400 && p.resources.metal >= 100 && cityTile) {
+      suggestions.push(`🚨 URGENT: BUILD small_city at (${cityTile.x},${cityTile.y}) NOW! You have resources!`);
+    } else {
+      const needWood = Math.max(0, 400 - p.resources.wood);
+      const needMetal = Math.max(0, 100 - p.resources.metal);
+      suggestions.push(`⏳ POP CAPPED! Save for small_city - need ${needWood} more wood, ${needMetal} more metal. DON'T BUILD anything else!`);
+    }
   }
-  // Wood rate problems
-  if (p.resourceRates.wood < 2 && forestTile) {
-    actions.push(`🪵 BUILD woodcutters_camp at (${forestTile.x},${forestTile.y}) - need wood!`);
+  
+  // Only suggest other builds if NOT pop-capped or already have enough for small_city
+  if (!popCapped || (p.resources.wood >= 400 && p.resources.metal >= 100)) {
+    if (!barracksExists && p.resources.wood >= 100 && cityTile) {
+      suggestions.push(`⚔️ BUILD barracks at (${cityTile.x},${cityTile.y})`);
+    }
+    if (p.resourceRates.food < 2 && farmCount < 4 && cityTile) {
+      suggestions.push(`🌾 BUILD farm at (${cityTile.x},${cityTile.y})`);
+    }
+    if (p.resourceRates.metal === 0 && mineCount < 2 && metalTile) {
+      suggestions.push(`⛏️ BUILD mine at (${metalTile.x},${metalTile.y})`);
+    }
+    if (p.resourceRates.wood < 1 && woodCount < 3 && forestTile) {
+      suggestions.push(`🪵 BUILD woodcutters_camp at (${forestTile.x},${forestTile.y})`);
+    }
   }
-  // Metal needed
-  if (p.resourceRates.metal === 0 && metalTile) {
-    actions.push(`⛏️ BUILD mine at (${metalTile.x},${metalTile.y}) - need metal for expansion!`);
+  
+  // Military actions
+  if (barracksExists && militaryCount < 5 && !popCapped) {
+    suggestions.push(`🗡️ TRAIN militia at barracks`);
   }
-  // Need barracks
-  if (!barracksExists && p.resources.wood >= 100 && cityTile) {
-    actions.push(`⚔️ BUILD barracks at (${cityTile.x},${cityTile.y}) - need military!`);
-  }
-  // Need library
-  if (!libraryExists && p.resources.wood >= 150 && cityTile) {
-    actions.push(`📚 BUILD library at (${cityTile.x},${cityTile.y}) - for research!`);
-  }
-  // Pop capped
-  if (p.population >= p.populationCap && p.resources.wood >= 400 && p.resources.metal >= 100 && cityTile) {
-    actions.push(`🏰 BUILD small_city at (${cityTile.x},${cityTile.y}) - pop capped!`);
-  }
-  // Need more citizens
-  if (citizenCount < 10) {
-    actions.push(`👷 TRAIN citizen - need more workers!`);
-  }
-  // Need military
-  if (barracksExists && militaryCount < 5) {
-    actions.push(`🗡️ TRAIN militia - build up army!`);
-  }
-  // Attack if strong
   if (militaryCount >= 5 && condensed.enemyBuildings.length > 0) {
     const enemy = condensed.enemyBuildings[0];
-    actions.push(`⚔️ ATTACK enemy at (${enemy.x},${enemy.y}) with your ${militaryCount} units!`);
+    suggestions.push(`⚔️ ATTACK enemy at (${enemy.x},${enemy.y})!`);
   }
   
-  return actions.length > 0 ? actions.join('\n') : 'Economy is stable - keep expanding!';
+  return suggestions.length > 0 ? suggestions.join('\n') : 'Economy stable - build small_city to expand!';
 })()}`;
 
             result = { success: true, message: stateStr };
@@ -492,6 +485,9 @@ ${(() => {
     }
 
     console.log(`[AGENT] Turn complete after ${iterations} iterations, ${actions.length} actions`);
+    if (actions.length > 0) {
+      console.log(`[AGENT] Actions to sync:`, actions.map(a => `${a.type}:${JSON.stringify(a.data).slice(0, 50)}`).join(', '));
+    }
     console.log('='.repeat(60) + '\n');
 
     return NextResponse.json({
