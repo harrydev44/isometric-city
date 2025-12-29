@@ -169,6 +169,9 @@ export default function RiseGame() {
       if (e.key.toLowerCase() === 'f') setActiveBuild('farm');
       if (e.key.toLowerCase() === 'i') selectNextIdleCitizen();
       if (e.key.toLowerCase() === 'm') selectNextArmyGroup();
+      if (e.key.toLowerCase() === 'j') {
+        jumpToLastAttack();
+      }
       if (e.key.toLowerCase() === 'h') centerOnCity(state.localPlayerId);
       if (e.key.toLowerCase() === 'e') centerOnCity('ai');
       if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
@@ -194,7 +197,7 @@ export default function RiseGame() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setSpeed, restart, spawnCitizen, ageUp, selectNextIdleCitizen, selectNextArmyGroup, selectUnits, panCamera, centerOnCity, state.localPlayerId]);
+  }, [setSpeed, restart, spawnCitizen, ageUp, selectNextIdleCitizen, selectNextArmyGroup, selectUnits, panCamera, centerOnCity, state.localPlayerId, jumpToLastAttack]);
 
   if (!player) return null;
 
