@@ -180,30 +180,7 @@ export function RoNBuildingPanel({ onClose }: RoNBuildingPanelProps) {
           </div>
         )}
         
-        {/* Production Queue */}
-        {building.queuedUnits.length > 0 && (
-          <>
-            <Separator />
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Production Queue</div>
-            <div className="space-y-1">
-              {building.queuedUnits.map((unitType, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="capitalize text-xs">{unitType.replace(/_/g, ' ')}</span>
-                  {index === 0 && (
-                    <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-500 transition-all"
-                        style={{ width: `${building.productionProgress}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        
-        {/* Unit Production - only for your buildings */}
+        {/* Unit Production - only for your buildings (placed above queue to prevent layout shift) */}
         {canProduce && tile.ownerId === currentPlayer.id && (
           <>
             <Separator />
@@ -245,6 +222,29 @@ export function RoNBuildingPanel({ onClose }: RoNBuildingPanelProps) {
                 Population cap reached
               </div>
             )}
+          </>
+        )}
+        
+        {/* Production Queue (in progress) */}
+        {building.queuedUnits.length > 0 && (
+          <>
+            <Separator />
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">In Progress</div>
+            <div className="space-y-1">
+              {building.queuedUnits.map((unitType, index) => (
+                <div key={index} className="flex justify-between items-center">
+                  <span className="capitalize text-xs">{unitType.replace(/_/g, ' ')}</span>
+                  {index === 0 && (
+                    <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all"
+                        style={{ width: `${building.productionProgress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </>
         )}
       </CardContent>

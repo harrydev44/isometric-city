@@ -204,13 +204,22 @@ function updateBuildings(state: RoNGameState): RoNGameState {
           updatedBuilding.productionProgress += PRODUCTION_SPEED;
           
           if (updatedBuilding.productionProgress >= unitStats.buildTime) {
-            // Spawn the unit
+            // Get building size for spawn positioning
+            const buildingStats = BUILDING_STATS[building.type as RoNBuildingType];
+            const buildingWidth = buildingStats?.size?.width || 1;
+            const buildingHeight = buildingStats?.size?.height || 1;
+            
+            // Spawn unit at random position around the bottom/front of the building
+            // Spread across the width and slightly in front
+            const spawnOffsetX = (Math.random() - 0.5) * (buildingWidth + 1);
+            const spawnOffsetY = buildingHeight + 0.3 + Math.random() * 0.6;
+            
             const newUnit: Unit = {
               id: `unit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               type: unitType,
               ownerId: building.ownerId,
-              x: x + 0.5,
-              y: y + 1.5, // Spawn in front of building
+              x: x + buildingWidth / 2 + spawnOffsetX,
+              y: y + spawnOffsetY,
               health: unitStats.health,
               maxHealth: unitStats.health,
               isSelected: false,

@@ -20,18 +20,8 @@ export interface RoNSpritePack {
   globalScale: number;
 }
 
-// Age sprite packs - all share the same layout as sprites_red_water_new
+// Age sprite packs - one per asset in public/assets/ages/
 export const AGE_SPRITE_PACKS: Record<Age, RoNSpritePack> = {
-  ancient: {
-    id: 'ancient',
-    name: 'Ancient Age',
-    age: 'ancient',
-    src: '/assets/ages/classics.webp', // Use classics for ancient too
-    cols: 5,
-    rows: 6,
-    layout: 'row',
-    globalScale: 0.8,
-  },
   classical: {
     id: 'classical',
     name: 'Classical Age',

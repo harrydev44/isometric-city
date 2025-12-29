@@ -119,17 +119,17 @@ export const BUILDING_SPRITE_POSITIONS: Partial<Record<RoNBuildingType, { row: n
 };
 
 export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
-  empty: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'ancient', size: { width: 1, height: 1 } },
-  grass: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'ancient', size: { width: 1, height: 1 } },
-  water: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'ancient', size: { width: 1, height: 1 } },
-  road: { cost: { wood: 10 }, maxHealth: 100, buildTime: 10, minAge: 'ancient', size: { width: 1, height: 1 } },
+  empty: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
+  grass: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
+  water: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
+  road: { cost: { wood: 10 }, maxHealth: 100, buildTime: 10, minAge: 'classical', size: { width: 1, height: 1 } },
   
   // City centers - 3x3 buildings like IsoCity city hall
   city_center: { 
     cost: { wood: 200, gold: 100 }, 
     maxHealth: 2000, 
     buildTime: 100, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 3, height: 3 },
     providesHousing: 10,
     visionRange: 8,
@@ -167,21 +167,21 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 50 }, 
     maxHealth: 500, 
     buildTime: 40, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   woodcutters_camp: { 
     cost: { wood: 30 }, 
     maxHealth: 300, 
     buildTime: 30, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 1, height: 1 },
   },
   granary: { 
     cost: { wood: 80 }, 
     maxHealth: 600, 
     buildTime: 50, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 1, height: 1 },
     providesStorage: { food: 300 },
   },
@@ -243,7 +243,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 100, gold: 80 }, 
     maxHealth: 700, 
     buildTime: 80, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   university: { 
@@ -257,7 +257,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 150, gold: 100 }, 
     maxHealth: 800, 
     buildTime: 90, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   senate: { 
@@ -273,7 +273,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 100, gold: 50 }, 
     maxHealth: 1000, 
     buildTime: 60, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 2, height: 2 },
     garrisonSlots: 5,
   },
@@ -296,7 +296,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 150, gold: 80 }, 
     maxHealth: 1000, 
     buildTime: 80, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   auto_plant: { 
@@ -334,7 +334,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 50 }, 
     maxHealth: 500, 
     buildTime: 40, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 1, height: 1 },
     attackDamage: 10,
     attackRange: 5,
@@ -344,7 +344,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 100 }, 
     maxHealth: 800, 
     buildTime: 60, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 1, height: 1 },
   },
   fort: { 
@@ -394,7 +394,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 40 }, 
     maxHealth: 200, 
     buildTime: 20, 
-    minAge: 'ancient', 
+    minAge: 'classical', 
     size: { width: 1, height: 1 },
     visionRange: 10,
   },
@@ -448,7 +448,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   },
   
   // Wonders (expensive, unique effects)
-  pyramids: { cost: { wood: 500, gold: 500 }, maxHealth: 5000, buildTime: 500, minAge: 'ancient', size: { width: 3, height: 3 } },
+  pyramids: { cost: { wood: 500, gold: 500 }, maxHealth: 5000, buildTime: 500, minAge: 'classical', size: { width: 3, height: 3 } },
   colosseum: { cost: { wood: 400, gold: 600, metal: 200 }, maxHealth: 4000, buildTime: 400, minAge: 'classical', size: { width: 3, height: 3 } },
   colossus: { cost: { metal: 800, gold: 600 }, maxHealth: 3000, buildTime: 450, minAge: 'classical', size: { width: 2, height: 2 } },
   hanging_gardens: { cost: { wood: 600, gold: 400 }, maxHealth: 3500, buildTime: 400, minAge: 'classical', size: { width: 3, height: 3 } },

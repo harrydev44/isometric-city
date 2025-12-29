@@ -1,20 +1,18 @@
 /**
  * Rise of Nations - Age System Types
  * 
- * Ages progress through history from Ancient to Modern era.
+ * Ages progress through history matching the available sprite sheets.
  * Each age unlocks new buildings, units, and technologies.
  */
 
 export type Age = 
-  | 'ancient'      // Stone age / primitive (no sprite sheet yet - use classics)
-  | 'classical'    // Greek/Roman era -> classics.png
-  | 'medieval'     // Feudal era -> medeival.png (note: typo in filename)
-  | 'enlightenment'// Renaissance/Colonial -> enlightenment.png
-  | 'industrial'   // Steam/Victorian -> industrial.png
-  | 'modern';      // 20th century -> modern.png
+  | 'classical'    // Greek/Roman era -> classics.webp
+  | 'medieval'     // Feudal era -> medeival.webp (note: typo in filename)
+  | 'enlightenment'// Renaissance/Colonial -> enlightenment.webp
+  | 'industrial'   // Steam/Victorian -> industrial.webp
+  | 'modern';      // 20th century -> modern.webp
 
 export const AGE_ORDER: Age[] = [
-  'ancient',
   'classical',
   'medieval',
   'enlightenment',
@@ -33,8 +31,7 @@ export interface AgeRequirement {
 }
 
 export const AGE_REQUIREMENTS: Record<Age, AgeRequirement | null> = {
-  ancient: null, // Starting age
-  classical: { food: 200, wood: 200, metal: 0, gold: 100, knowledge: 0 },
+  classical: null, // Starting age
   medieval: { food: 400, wood: 400, metal: 200, gold: 250, knowledge: 100 },
   enlightenment: { food: 600, wood: 600, metal: 400, gold: 500, knowledge: 250 },
   industrial: { food: 1000, wood: 800, metal: 800, gold: 1000, knowledge: 500 },
@@ -43,29 +40,23 @@ export const AGE_REQUIREMENTS: Record<Age, AgeRequirement | null> = {
 
 // Time in game ticks for a typical 40-minute game to span all ages
 // At default speed, ~200 ticks per minute = 8000 ticks total
-// Each age should last ~1600 ticks at normal pace (though players can advance faster)
+// Each age should last ~2000 ticks at normal pace (though players can advance faster)
 export const GAME_TICKS_PER_MINUTE = 200;
 export const TARGET_GAME_DURATION_MINUTES = 40;
 export const TARGET_GAME_TICKS = GAME_TICKS_PER_MINUTE * TARGET_GAME_DURATION_MINUTES;
 
-// Population cap bonus per age (cumulative from ancient)
-// Ancient starts at base pop cap, each subsequent age adds this bonus
+// Population cap bonus per age
+// Classical starts at base pop cap, each subsequent age adds this bonus
 export const AGE_POPULATION_BONUS: Record<Age, number> = {
-  ancient: 0,        // Base starting cap (10 from buildings)
-  classical: 25,     // +25 = 35 total possible
-  medieval: 50,      // +50 = 85 total possible
-  enlightenment: 75, // +75 = 160 total possible
-  industrial: 100,   // +100 = 260 total possible
-  modern: 150,       // +150 = 410 total possible
+  classical: 0,      // Base starting cap (from buildings)
+  medieval: 25,      // +25
+  enlightenment: 50, // +50
+  industrial: 75,    // +75
+  modern: 100,       // +100
 };
 
 // Age display information
 export const AGE_INFO: Record<Age, { name: string; description: string; color: string }> = {
-  ancient: { 
-    name: 'Ancient Age', 
-    description: 'The dawn of civilization', 
-    color: '#8B4513' 
-  },
   classical: { 
     name: 'Classical Age', 
     description: 'The age of empires', 
