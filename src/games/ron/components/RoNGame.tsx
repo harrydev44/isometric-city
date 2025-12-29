@@ -20,6 +20,11 @@ import { StatBadge } from '@/components/game/TopBar';
 function GameContent({ onExit }: { onExit?: () => void }) {
   const { state, getCurrentPlayer, newGame, selectedBuildingPos, setSpeed, debugAddResources } = useRoN();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
+  const [viewport, setViewport] = useState<{ 
+    offset: { x: number; y: number }; 
+    zoom: number; 
+    canvasSize: { width: number; height: number } 
+  } | null>(null);
   
   const currentPlayer = getCurrentPlayer();
   
@@ -28,6 +33,15 @@ function GameContent({ onExit }: { onExit?: () => void }) {
     setNavigationTarget({ x, y });
     // Clear after a moment
     setTimeout(() => setNavigationTarget(null), 100);
+  }, []);
+  
+  // Handle viewport changes from canvas (for minimap)
+  const handleViewportChange = useCallback((newViewport: { 
+    offset: { x: number; y: number }; 
+    zoom: number; 
+    canvasSize: { width: number; height: number } 
+  }) => {
+    setViewport(newViewport);
   }, []);
   
   // Victory/Defeat overlay
@@ -49,9 +63,9 @@ function GameContent({ onExit }: { onExit?: () => void }) {
             </p>
           )}
           <div className="flex gap-4 justify-center">
-            <Button 
-              onClick={() => newGame({ 
-                gridSize: 50, 
+            <Button
+              onClick={() => newGame({
+                gridSize: 100,
                 playerConfigs: [
                   { name: 'Player', type: 'human', color: '#3b82f6' },
                   { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
@@ -97,9 +111,6 @@ function GameContent({ onExit }: { onExit?: () => void }) {
                     style={{ backgroundColor: PLAYER_COLORS[index] }}
                   />
                   <span className="text-foreground">{player.name}</span>
-                  <span className="text-xs" style={{ color: AGE_INFO[player.age].color }}>
-                    ({AGE_INFO[player.age].name})
-                  </span>
                   {player.isDefeated && (
                     <span className="text-red-500 text-xs">☠️</span>
                   )}
@@ -115,7 +126,7 @@ function GameContent({ onExit }: { onExit?: () => void }) {
           </div>
           
           {/* Center section: Population and resources like IsoCity */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
             {currentPlayer && (
               <>
                 <StatBadge 
@@ -133,19 +144,26 @@ function GameContent({ onExit }: { onExit?: () => void }) {
                   variant={currentPlayer.resources.wood < 50 ? 'warning' : 'default'}
                 />
                 <StatBadge 
+                  value={Math.floor(currentPlayer.resources.metal).toString()} 
+                  label="Metal"
+                  variant={currentPlayer.resources.metal < 50 ? 'warning' : 'default'}
+                />
+                <StatBadge 
                   value={Math.floor(currentPlayer.resources.gold).toString()} 
                   label="Gold"
                   variant={currentPlayer.resources.gold < 50 ? 'warning' : 'default'}
+                />
+                <StatBadge 
+                  value={Math.floor(currentPlayer.resources.knowledge).toString()} 
+                  label="Knowledge"
+                  variant={currentPlayer.resources.knowledge < 50 ? 'warning' : 'default'}
                 />
               </>
             )}
           </div>
           
-          {/* Right section: Tick, Debug, and Exit - fixed width to prevent jitter */}
-          <div className="flex items-center gap-2 min-w-[200px] justify-end">
-            <span className="text-muted-foreground text-xs font-mono tabular-nums w-16 text-right">
-              {state.tick}
-            </span>
+          {/* Right section: Debug and Exit */}
+          <div className="flex items-center gap-2 justify-end">
             <Button
               size="sm"
               variant="outline"
@@ -158,10 +176,10 @@ function GameContent({ onExit }: { onExit?: () => void }) {
               size="sm"
               variant="outline"
               onClick={() => newGame({
-                gridSize: 50,
+                gridSize: 100,
                 playerConfigs: [
                   { name: 'Player', type: 'human', color: '#3b82f6' },
-                  { name: 'AI Opponent', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
                 ],
               })}
               title="Reset game (debug)"
@@ -181,10 +199,11 @@ function GameContent({ onExit }: { onExit?: () => void }) {
           <RoNCanvas 
             navigationTarget={navigationTarget}
             onNavigationComplete={() => setNavigationTarget(null)}
+            onViewportChange={handleViewportChange}
           />
           
-          {/* MiniMap */}
-          <RoNMiniMap onNavigate={handleNavigate} />
+          {/* MiniMap with viewport indicator */}
+          <RoNMiniMap onNavigate={handleNavigate} viewport={viewport} />
           
           {/* Building Info Panel - absolute within canvas area like IsoCity's TileInfoPanel */}
           {selectedBuildingPos && (

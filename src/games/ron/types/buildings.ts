@@ -163,12 +163,12 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   },
   
   // Economic buildings
-  farm: { 
-    cost: { wood: 50 }, 
-    maxHealth: 500, 
-    buildTime: 40, 
-    minAge: 'classical', 
-    size: { width: 2, height: 2 },
+  farm: {
+    cost: { wood: 50 },
+    maxHealth: 500,
+    buildTime: 40,
+    minAge: 'classical',
+    size: { width: 1, height: 1 },
   },
   woodcutters_camp: { 
     cost: { wood: 30 }, 
@@ -185,20 +185,20 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     size: { width: 1, height: 1 },
     providesStorage: { food: 300 },
   },
-  lumber_mill: { 
-    cost: { wood: 100, gold: 30 }, 
-    maxHealth: 700, 
-    buildTime: 60, 
-    minAge: 'classical', 
-    size: { width: 2, height: 2 },
+  lumber_mill: {
+    cost: { wood: 100, gold: 30 },
+    maxHealth: 700,
+    buildTime: 60,
+    minAge: 'classical',
+    size: { width: 1, height: 1 },
     gatherBonus: { wood: 0.25 },
   },
-  mine: { 
-    cost: { wood: 80, gold: 50 }, 
-    maxHealth: 800, 
-    buildTime: 70, 
-    minAge: 'classical', 
-    size: { width: 2, height: 2 },
+  mine: {
+    cost: { wood: 80, gold: 50 },
+    maxHealth: 800,
+    buildTime: 70,
+    minAge: 'classical',
+    size: { width: 1, height: 1 },
   },
   smelter: { 
     cost: { wood: 120, gold: 80, metal: 50 }, 

@@ -36,8 +36,10 @@ import {
   isTileVisible,
   WATER_ASSET_PATH,
   drawBeachOnWater,
+  drawFireEffect,
 } from '@/components/game/shared';
 import { drawRoNUnit } from '../lib/drawUnits';
+import { getTerritoryOwner } from '../lib/simulation';
 
 /**
  * Find the origin tile of a multi-tile building by searching backwards from a clicked position.
@@ -88,7 +90,7 @@ function findBuildingOrigin(
 
 /**
  * Check if a tile position is adjacent to a forest tile.
- * Used for validating woodcutter's camp placement.
+ * Used for validating woodcutter's camp and lumber mill placement.
  */
 function isAdjacentToForest(
   gridX: number,
@@ -106,32 +108,141 @@ function isAdjacentToForest(
   for (const [dx, dy] of directions) {
     const nx = gridX + dx;
     const ny = gridY + dy;
-    
+
     if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue;
-    
+
     const tile = grid[ny]?.[nx];
     if (tile && tile.forestDensity > 0) {
       return true;
     }
   }
-  
+
+  return false;
+}
+
+/**
+ * Check if a tile position is adjacent to a metal deposit (mountain).
+ * Used for validating mine placement.
+ */
+function isAdjacentToMetal(
+  gridX: number,
+  gridY: number,
+  grid: import('../types/game').RoNTile[][],
+  gridSize: number
+): boolean {
+  const directions = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
+  ];
+
+  for (const [dx, dy] of directions) {
+    const nx = gridX + dx;
+    const ny = gridY + dy;
+
+    if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue;
+
+    const tile = grid[ny]?.[nx];
+    if (tile && tile.hasMetalDeposit) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if a tile position is adjacent to an oil deposit.
+ * Used for validating oil well/platform placement.
+ */
+function isAdjacentToOil(
+  gridX: number,
+  gridY: number,
+  grid: import('../types/game').RoNTile[][],
+  gridSize: number
+): boolean {
+  const directions = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
+  ];
+
+  for (const [dx, dy] of directions) {
+    const nx = gridX + dx;
+    const ny = gridY + dy;
+
+    if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue;
+
+    const tile = grid[ny]?.[nx];
+    if (tile && tile.hasOilDeposit) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 /**
  * Check if a building placement is valid at the given position.
  * Returns true if valid, false if invalid.
+ * Buildings can only be placed within player's territory (except city centers and roads).
  */
 function isBuildingPlacementValid(
   buildingType: RoNBuildingType,
   gridX: number,
   gridY: number,
   grid: import('../types/game').RoNTile[][],
-  gridSize: number
+  gridSize: number,
+  currentPlayerId?: string
 ): boolean {
-  // Woodcutter's camp must be adjacent to forest
-  if (buildingType === 'woodcutters_camp') {
+  // Roads can only be placed on empty/grass terrain, not on existing buildings
+  if (buildingType === 'road') {
+    const tile = grid[gridY]?.[gridX];
+    if (!tile) return false;
+    if (tile.terrain === 'water') return false;
+    // Only allow roads on empty terrain (no building, or grass/empty types)
+    if (tile.building && 
+        tile.building.type !== 'grass' && 
+        tile.building.type !== 'empty' && 
+        tile.building.type !== 'road') {
+      return false;
+    }
+    return true;
+  }
+  
+  // City centers can be placed outside territory (to expand)
+  // but must be far enough from existing city centers
+  if (buildingType === 'city_center' || buildingType === 'small_city' || 
+      buildingType === 'large_city' || buildingType === 'major_city') {
+    // Check territory isn't owned by enemy
+    const owner = getTerritoryOwner(grid, gridSize, gridX, gridY);
+    if (owner !== null && owner !== currentPlayerId) {
+      return false; // Can't place in enemy territory
+    }
+    return true;
+  }
+  
+  // All other buildings must be in player's territory
+  if (currentPlayerId) {
+    const territoryOwner = getTerritoryOwner(grid, gridSize, gridX, gridY);
+    if (territoryOwner !== currentPlayerId) {
+      return false; // Must be in own territory
+    }
+  }
+  
+  // Woodcutter's camp and lumber mill must be adjacent to forest
+  if (buildingType === 'woodcutters_camp' || buildingType === 'lumber_mill') {
     return isAdjacentToForest(gridX, gridY, grid, gridSize);
+  }
+
+  // Mine must be adjacent to metal deposit (mountain)
+  if (buildingType === 'mine') {
+    return isAdjacentToMetal(gridX, gridY, grid, gridSize);
+  }
+
+  // Oil well and oil platform must be adjacent to oil deposit
+  if (buildingType === 'oil_well' || buildingType === 'oil_platform') {
+    return isAdjacentToOil(gridX, gridY, grid, gridSize);
   }
 
   // Dock must be adjacent to water
@@ -214,7 +325,7 @@ function isAdjacentToWater(grid: import('../types/game').RoNTile[][], x: number,
 
 /**
  * Draw a road tile with proper corners/turns based on adjacent roads.
- * Adapts style based on age (ancient = dirt, modern = asphalt).
+ * Uses IsoCity's proven road drawing approach with age-based styling.
  */
 function drawRoNRoad(
   ctx: CanvasRenderingContext2D,
@@ -228,13 +339,15 @@ function drawRoNRoad(
 ): void {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
-  const cx = screenX + w / 2;
-  const cy = screenY + h / 2;
+  const x = screenX;
+  const y = screenY;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
 
-  // Check adjacency
-  const hasRoad = (x: number, y: number) => {
-    if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return false;
-    const tile = grid[y]?.[x];
+  // Check adjacency (in isometric coordinates)
+  const hasRoad = (gx: number, gy: number) => {
+    if (gx < 0 || gx >= gridSize || gy < 0 || gy >= gridSize) return false;
+    const tile = grid[gy]?.[gx];
     return tile?.building?.type === 'road';
   };
 
@@ -248,201 +361,146 @@ function drawRoNRoad(
   const ageIndex = AGE_ORDER_LOCAL.indexOf(age);
 
   let roadColor: string;
-  let roadHighlight: string;
-  let roadShadow: string;
-  let centerLineColor: string | null = null;
+  let borderColor: string;
+  let showCenterLine = false;
 
-  if (ageIndex <= 1) {
-    // Ancient/Classical - dirt road
+  if (ageIndex <= 0) {
+    // Classical - dirt road
     roadColor = '#9B8365';
-    roadHighlight = '#B89B7A';
-    roadShadow = '#7A6550';
-  } else if (ageIndex <= 2) {
+    borderColor = '#7A6550';
+  } else if (ageIndex <= 1) {
     // Medieval - cobblestone
     roadColor = '#7A7A7A';
-    roadHighlight = '#9A9A9A';
-    roadShadow = '#5A5A5A';
-  } else if (ageIndex <= 3) {
+    borderColor = '#5A5A5A';
+  } else if (ageIndex <= 2) {
     // Enlightenment - improved cobblestone
     roadColor = '#686868';
-    roadHighlight = '#888888';
-    roadShadow = '#484848';
+    borderColor = '#484848';
   } else {
-    // Industrial+ - asphalt with markings
+    // Industrial/Modern - asphalt with markings
     roadColor = '#4A4A4A';
-    roadHighlight = '#5A5A5A';
-    roadShadow = '#3A3A3A';
-    centerLineColor = '#FFD700';
+    borderColor = '#3A3A3A';
+    showCenterLine = true;
   }
 
-  // Road width (narrower than full tile)
-  const roadWidth = w * 0.38;
+  // Road width ratio (like IsoCity)
+  const roadW = w * 0.14;
+  const edgeStop = 0.98;
 
-  // Diamond corner points (isometric tile edges)
-  const topPt = { x: screenX + w / 2, y: screenY };
-  const rightPt = { x: screenX + w, y: screenY + h / 2 };
-  const bottomPt = { x: screenX + w / 2, y: screenY + h };
-  const leftPt = { x: screenX, y: screenY + h / 2 };
+  // Calculate edge midpoints (like IsoCity)
+  const northEdgeX = x + w * 0.25;
+  const northEdgeY = y + h * 0.25;
+  const eastEdgeX = x + w * 0.75;
+  const eastEdgeY = y + h * 0.25;
+  const southEdgeX = x + w * 0.75;
+  const southEdgeY = y + h * 0.75;
+  const westEdgeX = x + w * 0.25;
+  const westEdgeY = y + h * 0.75;
 
-  // Edge midpoints (where roads connect to neighbors)
-  const northMid = { x: (leftPt.x + topPt.x) / 2, y: (leftPt.y + topPt.y) / 2 };
-  const eastMid = { x: (topPt.x + rightPt.x) / 2, y: (topPt.y + rightPt.y) / 2 };
-  const southMid = { x: (rightPt.x + bottomPt.x) / 2, y: (rightPt.y + bottomPt.y) / 2 };
-  const westMid = { x: (bottomPt.x + leftPt.x) / 2, y: (bottomPt.y + leftPt.y) / 2 };
+  // Direction vectors
+  const northDx = (northEdgeX - cx) / Math.hypot(northEdgeX - cx, northEdgeY - cy);
+  const northDy = (northEdgeY - cy) / Math.hypot(northEdgeX - cx, northEdgeY - cy);
+  const eastDx = (eastEdgeX - cx) / Math.hypot(eastEdgeX - cx, eastEdgeY - cy);
+  const eastDy = (eastEdgeY - cy) / Math.hypot(eastEdgeX - cx, eastEdgeY - cy);
+  const southDx = (southEdgeX - cx) / Math.hypot(southEdgeX - cx, southEdgeY - cy);
+  const southDy = (southEdgeY - cy) / Math.hypot(southEdgeX - cx, southEdgeY - cy);
+  const westDx = (westEdgeX - cx) / Math.hypot(westEdgeX - cx, westEdgeY - cy);
+  const westDy = (westEdgeY - cy) / Math.hypot(westEdgeX - cx, westEdgeY - cy);
 
-  // Draw base tile (grass under road)
-  ctx.fillStyle = '#4a7c3f';
+  const getPerp = (dx: number, dy: number) => ({ nx: -dy, ny: dx });
+
+  // Draw road surface (like IsoCity)
+  ctx.fillStyle = roadColor;
+
+  // Draw road segments for each direction
+  if (north) {
+    const stopX = cx + (northEdgeX - cx) * edgeStop;
+    const stopY = cy + (northEdgeY - cy) * edgeStop;
+    const perp = getPerp(northDx, northDy);
+    const halfWidth = roadW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
+    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
+    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
+    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (east) {
+    const stopX = cx + (eastEdgeX - cx) * edgeStop;
+    const stopY = cy + (eastEdgeY - cy) * edgeStop;
+    const perp = getPerp(eastDx, eastDy);
+    const halfWidth = roadW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
+    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
+    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
+    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (south) {
+    const stopX = cx + (southEdgeX - cx) * edgeStop;
+    const stopY = cy + (southEdgeY - cy) * edgeStop;
+    const perp = getPerp(southDx, southDy);
+    const halfWidth = roadW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
+    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
+    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
+    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (west) {
+    const stopX = cx + (westEdgeX - cx) * edgeStop;
+    const stopY = cy + (westEdgeY - cy) * edgeStop;
+    const perp = getPerp(westDx, westDy);
+    const halfWidth = roadW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + perp.nx * halfWidth, cy + perp.ny * halfWidth);
+    ctx.lineTo(stopX + perp.nx * halfWidth, stopY + perp.ny * halfWidth);
+    ctx.lineTo(stopX - perp.nx * halfWidth, stopY - perp.ny * halfWidth);
+    ctx.lineTo(cx - perp.nx * halfWidth, cy - perp.ny * halfWidth);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Center intersection diamond
+  const centerSize = roadW * 1.4;
   ctx.beginPath();
-  ctx.moveTo(topPt.x, topPt.y);
-  ctx.lineTo(rightPt.x, rightPt.y);
-  ctx.lineTo(bottomPt.x, bottomPt.y);
-  ctx.lineTo(leftPt.x, leftPt.y);
+  ctx.moveTo(cx, cy - centerSize);
+  ctx.lineTo(cx + centerSize, cy);
+  ctx.lineTo(cx, cy + centerSize);
+  ctx.lineTo(cx - centerSize, cy);
   ctx.closePath();
   ctx.fill();
 
-  // Helper to get road edge points perpendicular to a direction
-  const getRoadEdgePoints = (fromX: number, fromY: number, toX: number, toY: number) => {
-    const dx = toX - fromX;
-    const dy = toY - fromY;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    const perpX = (-dy / len) * (roadWidth / 2);
-    const perpY = (dx / len) * (roadWidth / 2);
-    return { perpX, perpY };
-  };
+  // Add subtle border/shadow
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 0.5;
 
-  // Build a single unified road shape
-  const roadPoints: { x: number; y: number }[] = [];
-  const connections = [
-    { connected: north, mid: northMid },
-    { connected: east, mid: eastMid },
-    { connected: south, mid: southMid },
-    { connected: west, mid: westMid },
-  ];
-
-  const connectedDirs = connections.filter(c => c.connected);
-  const numConnections = connectedDirs.length;
-
-  // Draw unified road shape based on connections
-  ctx.fillStyle = roadColor;
-
-  if (numConnections === 0) {
-    // No connections - draw a small diamond placeholder
-    const size = roadWidth * 0.6;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - size * 0.5);
-    ctx.lineTo(cx + size, cy);
-    ctx.lineTo(cx, cy + size * 0.5);
-    ctx.lineTo(cx - size, cy);
-    ctx.closePath();
-    ctx.fill();
-  } else if (numConnections === 1) {
-    // Dead end - draw road segment to the edge
-    const dir = connectedDirs[0];
-    const { perpX, perpY } = getRoadEdgePoints(cx, cy, dir.mid.x, dir.mid.y);
-    
-    ctx.beginPath();
-    ctx.moveTo(dir.mid.x + perpX, dir.mid.y + perpY);
-    ctx.lineTo(cx + perpX * 0.8, cy + perpY * 0.8);
-    ctx.lineTo(cx - perpX * 0.8, cy - perpY * 0.8);
-    ctx.lineTo(dir.mid.x - perpX, dir.mid.y - perpY);
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    // Multiple connections - build a continuous road surface
-    // Collect all the outer edge points going around the road
-    const outerPoints: { x: number; y: number }[] = [];
-    
-    if (north) {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, northMid.x, northMid.y);
-      outerPoints.push({ x: northMid.x + perpX, y: northMid.y + perpY });
-      outerPoints.push({ x: northMid.x - perpX, y: northMid.y - perpY });
-    } else {
-      // No north connection - add center edge point
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, northMid.x, northMid.y);
-      outerPoints.push({ x: cx + perpX * 0.6, y: cy + perpY * 0.6 });
-    }
-    
-    if (east) {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, eastMid.x, eastMid.y);
-      outerPoints.push({ x: eastMid.x + perpX, y: eastMid.y + perpY });
-      outerPoints.push({ x: eastMid.x - perpX, y: eastMid.y - perpY });
-    } else {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, eastMid.x, eastMid.y);
-      outerPoints.push({ x: cx + perpX * 0.6, y: cy + perpY * 0.6 });
-    }
-    
-    if (south) {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, southMid.x, southMid.y);
-      outerPoints.push({ x: southMid.x + perpX, y: southMid.y + perpY });
-      outerPoints.push({ x: southMid.x - perpX, y: southMid.y - perpY });
-    } else {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, southMid.x, southMid.y);
-      outerPoints.push({ x: cx + perpX * 0.6, y: cy + perpY * 0.6 });
-    }
-    
-    if (west) {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, westMid.x, westMid.y);
-      outerPoints.push({ x: westMid.x + perpX, y: westMid.y + perpY });
-      outerPoints.push({ x: westMid.x - perpX, y: westMid.y - perpY });
-    } else {
-      const { perpX, perpY } = getRoadEdgePoints(cx, cy, westMid.x, westMid.y);
-      outerPoints.push({ x: cx + perpX * 0.6, y: cy + perpY * 0.6 });
-    }
-
-    // Draw the road surface
-    if (outerPoints.length >= 3) {
-      ctx.beginPath();
-      ctx.moveTo(outerPoints[0].x, outerPoints[0].y);
-      for (let i = 1; i < outerPoints.length; i++) {
-        ctx.lineTo(outerPoints[i].x, outerPoints[i].y);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  // Add subtle shading/highlights
-  ctx.strokeStyle = roadShadow;
-  ctx.lineWidth = 1.5;
-  
-  // Draw edge lines only on outer edges (not between connected roads)
-  if (north) {
-    const { perpX, perpY } = getRoadEdgePoints(cx, cy, northMid.x, northMid.y);
-    // Left edge highlight
-    ctx.strokeStyle = roadHighlight;
-    ctx.beginPath();
-    ctx.moveTo(northMid.x + perpX, northMid.y + perpY);
-    ctx.lineTo(cx + perpX * 0.7, cy + perpY * 0.7);
-    ctx.stroke();
-  }
-  
-  if (south) {
-    const { perpX, perpY } = getRoadEdgePoints(cx, cy, southMid.x, southMid.y);
-    // Right edge shadow
-    ctx.strokeStyle = roadShadow;
-    ctx.beginPath();
-    ctx.moveTo(southMid.x - perpX, southMid.y - perpY);
-    ctx.lineTo(cx - perpX * 0.7, cy - perpY * 0.7);
-    ctx.stroke();
-  }
-
-  // Draw center line for modern roads (straight roads only)
-  if (centerLineColor) {
-    ctx.strokeStyle = centerLineColor;
+  // Draw center line for modern roads (industrial+)
+  if (showCenterLine) {
+    ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([3, 3]);
 
+    // Draw center line along connected roads
     if (north && south && !east && !west) {
-      // Straight north-south
+      // N-S road
       ctx.beginPath();
-      ctx.moveTo(northMid.x, northMid.y);
-      ctx.lineTo(southMid.x, southMid.y);
+      ctx.moveTo(northEdgeX, northEdgeY);
+      ctx.lineTo(southEdgeX, southEdgeY);
       ctx.stroke();
     } else if (east && west && !north && !south) {
-      // Straight east-west
+      // E-W road
       ctx.beginPath();
-      ctx.moveTo(eastMid.x, eastMid.y);
-      ctx.lineTo(westMid.x, westMid.y);
+      ctx.moveTo(eastEdgeX, eastEdgeY);
+      ctx.lineTo(westEdgeX, westEdgeY);
       ctx.stroke();
     }
 
@@ -453,9 +511,14 @@ function drawRoNRoad(
 interface RoNCanvasProps {
   navigationTarget?: { x: number; y: number } | null;
   onNavigationComplete?: () => void;
+  onViewportChange?: (viewport: { 
+    offset: { x: number; y: number }; 
+    zoom: number; 
+    canvasSize: { width: number; height: number } 
+  }) => void;
 }
 
-export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasProps) {
+export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportChange }: RoNCanvasProps) {
   const { 
     state, 
     latestStateRef,
@@ -491,6 +554,10 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
   // Road drag state (like IsoCity)
   const isRoadDraggingRef = useRef(false);
   const roadDragStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Fire animation time
+  const fireAnimTimeRef = useRef(0);
+  const lastFrameTimeRef = useRef(performance.now());
   const [roadDrawDirection, setRoadDrawDirection] = useState<'h' | 'v' | null>(null);
   const placedRoadTilesRef = useRef<Set<string>>(new Set());
   const [roadDragEnd, setRoadDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -510,6 +577,18 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+  
+  // Report viewport changes to parent (for minimap)
+  useEffect(() => {
+    if (onViewportChange && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      onViewportChange({
+        offset,
+        zoom,
+        canvasSize: { width: rect.width, height: rect.height }
+      });
+    }
+  }, [offset, zoom, onViewportChange]);
   
   // Load sprite images with red background filtering
   useEffect(() => {
@@ -685,19 +764,17 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         const toolInfo = RON_TOOL_INFO[currentTool];
         if (toolInfo?.buildingType) {
           const gameState = latestStateRef.current;
-          // Check if placement is valid
-          if (isBuildingPlacementValid(toolInfo.buildingType, gridX, gridY, gameState.grid, gameState.gridSize)) {
+          // Check if placement is valid (pass current player ID for territory check)
+          if (isBuildingPlacementValid(toolInfo.buildingType, gridX, gridY, gameState.grid, gameState.gridSize, gameState.currentPlayerId)) {
             placeBuilding(gridX, gridY, toolInfo.buildingType);
           }
           // If invalid, do nothing (red highlight on hover shows it's not allowed)
         }
-      } else if (currentTool === 'select') {
-        // Start selection box
+      } else {
+        // Default mode (no building tool) - start selection box
         isSelectingRef.current = true;
         selectionStartScreenRef.current = { x: screenX, y: screenY };
         setSelectionBox({ startX: screenX, startY: screenY, endX: screenX, endY: screenY });
-      } else if (currentTool === 'move' && state.selectedUnitIds.length > 0) {
-        moveSelectedUnits(gridX, gridY);
       }
     }
   }, [state.selectedTool, state.selectedUnitIds, placeBuilding, moveSelectedUnits, attackTarget, latestStateRef]);
@@ -936,8 +1013,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
         }
         // Deselect units
         selectUnits([]);
-        // Reset to select tool
-        setTool('select');
+        // Reset to default tool (no building placement)
+        setTool('none');
       }
     };
 
@@ -971,6 +1048,12 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
       const currentOffset = offsetRef.current;
       const currentZoom = zoomRef.current;
       const dpr = window.devicePixelRatio || 1;
+      
+      // Calculate delta time for animations
+      const now = performance.now();
+      const delta = (now - lastFrameTimeRef.current) / 1000;
+      lastFrameTimeRef.current = now;
+      fireAnimTimeRef.current += delta;
       
       // Disable image smoothing for crisp pixel art
       ctx.imageSmoothingEnabled = false;
@@ -1289,13 +1372,14 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
             const currentTool = gameState.selectedTool;
             const toolInfo = RON_TOOL_INFO[currentTool];
             if (toolInfo?.buildingType) {
-              // Building placement mode - check if valid
+              // Building placement mode - check if valid (including territory)
               const isValidPlacement = isBuildingPlacementValid(
                 toolInfo.buildingType,
                 x,
                 y,
                 gameState.grid,
-                gameState.gridSize
+                gameState.gridSize,
+                gameState.currentPlayerId
               );
               drawTileHighlight(ctx, screenX, screenY, isValidPlacement ? 'hover' : 'invalid');
             } else {
@@ -1361,6 +1445,94 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
           }
         }
       }
+      
+      // Territory borders pass: Draw warring-states style borders where territories meet
+      // Build a territory ownership map and draw border lines between different owners
+      ctx.save();
+      
+      // Cache territory ownership for visible tiles to avoid recalculating
+      const territoryCache: Map<string, string | null> = new Map();
+      const getTileOwner = (gx: number, gy: number): string | null => {
+        const key = `${gx},${gy}`;
+        if (territoryCache.has(key)) {
+          return territoryCache.get(key) || null;
+        }
+        const owner = getTerritoryOwner(gameState.grid, gameState.gridSize, gx, gy);
+        territoryCache.set(key, owner);
+        return owner;
+      };
+      
+      // Draw subtle territory fill and border lines
+      for (let y = 0; y < gameState.gridSize; y++) {
+        for (let x = 0; x < gameState.gridSize; x++) {
+          const { screenX, screenY } = gridToScreen(x, y, 0, 0);
+          if (!isTileVisible(screenX, screenY, viewBounds)) continue;
+          
+          const owner = getTileOwner(x, y);
+          if (!owner) continue; // No territory here
+          
+          const playerIndex = gameState.players.findIndex(p => p.id === owner);
+          const baseColor = PLAYER_COLORS[playerIndex] || '#ffffff';
+          
+          // Subtle territory fill
+          ctx.fillStyle = `${baseColor}10`;
+          ctx.beginPath();
+          ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
+          ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+          ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+          ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Check neighbors for border edges
+          // North neighbor (x-1, y)
+          const northOwner = getTileOwner(x - 1, y);
+          // East neighbor (x, y-1)
+          const eastOwner = getTileOwner(x, y - 1);
+          // South neighbor (x+1, y)
+          const southOwner = getTileOwner(x + 1, y);
+          // West neighbor (x, y+1)
+          const westOwner = getTileOwner(x, y + 1);
+          
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = `${baseColor}80`;
+          
+          // Draw border line on edges where territory changes
+          // North edge (top-left edge of diamond)
+          if (northOwner !== owner) {
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY + TILE_HEIGHT / 2);
+            ctx.lineTo(screenX + TILE_WIDTH / 2, screenY);
+            ctx.stroke();
+          }
+          
+          // East edge (top-right edge of diamond)
+          if (eastOwner !== owner) {
+            ctx.beginPath();
+            ctx.moveTo(screenX + TILE_WIDTH / 2, screenY);
+            ctx.lineTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+            ctx.stroke();
+          }
+          
+          // South edge (bottom-right edge of diamond)
+          if (southOwner !== owner) {
+            ctx.beginPath();
+            ctx.moveTo(screenX + TILE_WIDTH, screenY + TILE_HEIGHT / 2);
+            ctx.lineTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+            ctx.stroke();
+          }
+          
+          // West edge (bottom-left edge of diamond)
+          if (westOwner !== owner) {
+            ctx.beginPath();
+            ctx.moveTo(screenX + TILE_WIDTH / 2, screenY + TILE_HEIGHT);
+            ctx.lineTo(screenX, screenY + TILE_HEIGHT / 2);
+            ctx.stroke();
+          }
+        }
+      }
+      
+      ctx.restore();
       
       // Second pass: Draw roads (need special handling for corners/turns)
       for (let y = 0; y < gameState.gridSize; y++) {
@@ -1466,7 +1638,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
             continue; // Skip regular sprite drawing for dock
           }
           
-          // Special handling for farm - use IsoCity farm sprite sheet with random crop
+          // Special handling for farm - use IsoCity farm sprite sheet with random crop (1x1 size)
           if (buildingType === 'farm') {
             const farmSprite = getCachedImage(ISOCITY_FARM_PATH, true);
             if (farmSprite) {
@@ -1478,29 +1650,16 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
               const sx = variantIndex * farmTileWidth;
               const sy = 0; // First row only
               
-              // Get building size from BUILDING_STATS
-              const buildingStats = BUILDING_STATS[buildingType];
-              const buildingSize = buildingStats?.size || { width: 2, height: 2 };
-              
-              // Calculate draw position for multi-tile building
-              const frontmostOffsetX = buildingSize.width - 1;
-              const frontmostOffsetY = buildingSize.height - 1;
-              const screenOffsetX = (frontmostOffsetX - frontmostOffsetY) * (TILE_WIDTH / 2);
-              const screenOffsetY = (frontmostOffsetX + frontmostOffsetY) * (TILE_HEIGHT / 2);
-              const drawPosX = screenX + screenOffsetX;
-              const drawPosY = screenY + screenOffsetY;
-              
-              // Scale and position like IsoCity farms
-              const scale = 1.1; // Slightly larger
-              const destWidth = TILE_WIDTH * scale * Math.max(buildingSize.width, buildingSize.height);
+              // 1x1 farm - scale to fit tile nicely
+              const scale = 0.9;
+              const destWidth = TILE_WIDTH * scale;
               const destHeight = destWidth * (farmTileHeight / farmTileWidth);
               
-              // Vertical offset
-              const verticalPush = (buildingSize.width + buildingSize.height - 2) * TILE_HEIGHT * 0.5;
-              const buildingOffset = -0.3 * TILE_HEIGHT; // Farms offset
+              // Vertical offset for 1x1 building
+              const buildingOffset = -0.2 * TILE_HEIGHT;
               
-              const drawX = drawPosX + TILE_WIDTH / 2 - destWidth / 2;
-              const drawY = drawPosY + TILE_HEIGHT - destHeight + verticalPush + buildingOffset;
+              const drawX = screenX + TILE_WIDTH / 2 - destWidth / 2;
+              const drawY = screenY + TILE_HEIGHT - destHeight + buildingOffset;
               
               // Use construction sprite for farm under construction
               const isUnderConstruction = tile.building.constructionProgress < 100;
@@ -1611,9 +1770,16 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete }: RoNCanvasP
                 );
               }
 
-              // Health bar for damaged buildings
+              // Fire effect and health bar for damaged buildings (under attack)
               if (tile.building.health < tile.building.maxHealth) {
+                // Calculate fire intensity based on damage (more damage = more intense fire)
                 const healthPercent = tile.building.health / tile.building.maxHealth;
+                const fireIntensity = Math.min(1, (1 - healthPercent) * 1.5); // Scale up intensity
+                
+                // Draw fire effect at the center-top of the building
+                drawFireEffect(ctx, screenX, screenY - destHeight / 2, fireAnimTimeRef.current, fireIntensity);
+                
+                // Draw health bar
                 const barWidth = destWidth * 0.5;
                 drawHealthBar(ctx, drawX + destWidth / 2 - barWidth / 2, drawY - 8, barWidth, healthPercent, 1);
               }

@@ -21,6 +21,98 @@ const UNIT_MOVE_SPEED = 0.1; // Movement per tick (in tiles)
 const ATTACK_COOLDOWN = 10; // Ticks between attacks
 const RESOURCE_GATHER_RATE = 0.5; // Base gathering per tick per worker
 
+// Border/Territory constants
+const CITY_CENTER_RADIUS = 24; // Base territory radius from city centers (3x larger for warring states style)
+const ATTRITION_DAMAGE = 0.1; // Damage per tick when in enemy territory
+const ATTRITION_TICK_INTERVAL = 20; // Apply attrition every N ticks
+
+// Auto-work constants for idle villagers
+const IDLE_AUTO_WORK_THRESHOLD = 20; // Ticks of idle before auto-assigning work
+const AUTO_WORK_SEARCH_RADIUS = 6; // Tiles radius to search for nearby work
+
+// City center building types that create territory
+const CITY_CENTER_TYPES: RoNBuildingType[] = ['city_center', 'small_city', 'large_city', 'major_city'];
+
+/**
+ * Get the territory owner for a specific tile position.
+ * Territory is determined by proximity to city centers.
+ * Returns the player ID who owns the territory, or null if unclaimed.
+ */
+export function getTerritoryOwner(
+  grid: RoNTile[][],
+  gridSize: number,
+  x: number,
+  y: number
+): string | null {
+  let closestOwner: string | null = null;
+  let closestDistance = Infinity;
+  
+  // Find all city centers and their distances
+  for (let cy = 0; cy < gridSize; cy++) {
+    for (let cx = 0; cx < gridSize; cx++) {
+      const tile = grid[cy]?.[cx];
+      if (!tile?.building) continue;
+      
+      if (CITY_CENTER_TYPES.includes(tile.building.type as RoNBuildingType)) {
+        const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+        
+        // Only count if within city center radius
+        if (dist <= CITY_CENTER_RADIUS && dist < closestDistance) {
+          closestDistance = dist;
+          closestOwner = tile.building.ownerId;
+        }
+      }
+    }
+  }
+  
+  return closestOwner;
+}
+
+/**
+ * Get all city centers for a player
+ */
+export function getPlayerCityCenters(
+  grid: RoNTile[][],
+  gridSize: number,
+  playerId: string
+): { x: number; y: number; type: RoNBuildingType }[] {
+  const centers: { x: number; y: number; type: RoNBuildingType }[] = [];
+  
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      const tile = grid[y]?.[x];
+      if (!tile?.building) continue;
+      
+      if (CITY_CENTER_TYPES.includes(tile.building.type as RoNBuildingType) && 
+          tile.building.ownerId === playerId) {
+        centers.push({ x, y, type: tile.building.type as RoNBuildingType });
+      }
+    }
+  }
+  
+  return centers;
+}
+
+/**
+ * Check if a position is within a player's territory
+ */
+export function isInPlayerTerritory(
+  grid: RoNTile[][],
+  gridSize: number,
+  x: number,
+  y: number,
+  playerId: string
+): boolean {
+  return getTerritoryOwner(grid, gridSize, x, y) === playerId;
+}
+
+/**
+ * Get the territory radius for display (constant for now, could vary by city type)
+ */
+export function getCityCenterRadius(): number {
+  return CITY_CENTER_RADIUS;
+}
+
 /**
  * Check if a tile is passable for unit movement
  */
@@ -369,8 +461,9 @@ function updateBuildings(state: RoNGameState): RoNGameState {
               isSelected: false,
               isMoving: false,
               task: 'idle',
-              attackCooldown: 0,
+              attackCooldown: ATTACK_COOLDOWN, // Initial cooldown before first attack
               lastAttackTime: 0,
+              isAttacking: false,
             };
             
             newUnits.push(newUnit);
@@ -396,6 +489,122 @@ function updateBuildings(state: RoNGameState): RoNGameState {
   return { ...state, grid: newGrid, units: newUnits, players: newPlayers };
 }
 
+// Detection range for auto-attack (in tiles)
+const AUTO_ATTACK_RANGE = 3;
+
+/**
+ * Check if a unit is military (not civilian)
+ */
+function isMilitaryUnit(unit: Unit): boolean {
+  const stats = UNIT_STATS[unit.type];
+  return stats?.category !== 'civilian';
+}
+
+/**
+ * Find nearby enemy units within range
+ */
+function findNearbyEnemies(
+  unit: Unit,
+  allUnits: Unit[],
+  range: number
+): Unit[] {
+  const enemies: Unit[] = [];
+  
+  for (const other of allUnits) {
+    // Skip same owner, dead units, and self
+    if (other.ownerId === unit.ownerId || other.health <= 0 || other.id === unit.id) continue;
+    
+    const dist = Math.sqrt((other.x - unit.x) ** 2 + (other.y - unit.y) ** 2);
+    if (dist <= range) {
+      enemies.push(other);
+    }
+  }
+  
+  // Sort by distance, prioritize military over civilians
+  return enemies.sort((a, b) => {
+    const aIsMilitary = isMilitaryUnit(a);
+    const bIsMilitary = isMilitaryUnit(b);
+    
+    // Prioritize military targets
+    if (aIsMilitary && !bIsMilitary) return -1;
+    if (!aIsMilitary && bIsMilitary) return 1;
+    
+    // Then by distance
+    const distA = Math.sqrt((a.x - unit.x) ** 2 + (a.y - unit.y) ** 2);
+    const distB = Math.sqrt((b.x - unit.x) ** 2 + (b.y - unit.y) ** 2);
+    return distA - distB;
+  });
+}
+
+/**
+ * Find nearby economic buildings that a citizen can work at
+ */
+function findNearbyEconomicBuilding(
+  unit: Unit,
+  grid: RoNTile[][],
+  gridSize: number,
+  radius: number
+): { x: number; y: number; type: RoNBuildingType; task: UnitTask } | null {
+  const unitX = Math.floor(unit.x);
+  const unitY = Math.floor(unit.y);
+  
+  let nearestBuilding: { x: number; y: number; type: RoNBuildingType; task: UnitTask; dist: number } | null = null;
+  
+  // Search in a square around the unit
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const gx = unitX + dx;
+      const gy = unitY + dy;
+      
+      if (gx < 0 || gx >= gridSize || gy < 0 || gy >= gridSize) continue;
+      
+      const tile = grid[gy]?.[gx];
+      if (!tile?.building) continue;
+      if (tile.building.constructionProgress < 100) continue;
+      if (tile.ownerId !== unit.ownerId) continue; // Only own buildings
+      
+      // Check if this is an economic building
+      if (!ECONOMIC_BUILDINGS.includes(tile.building.type)) continue;
+      
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > radius) continue; // Circular radius check
+      
+      // Determine the task for this building type
+      let task: UnitTask = 'idle';
+      switch (tile.building.type) {
+        case 'farm':
+        case 'granary':
+          task = 'gather_food';
+          break;
+        case 'woodcutters_camp':
+        case 'lumber_mill':
+          task = 'gather_wood';
+          break;
+        case 'mine':
+        case 'smelter':
+          task = 'gather_metal';
+          break;
+        case 'market':
+          task = 'gather_gold';
+          break;
+        case 'oil_well':
+        case 'oil_platform':
+        case 'refinery':
+          task = 'gather_oil';
+          break;
+        default:
+          continue; // Not a gatherable building
+      }
+      
+      if (!nearestBuilding || dist < nearestBuilding.dist) {
+        nearestBuilding = { x: gx, y: gy, type: tile.building.type, task, dist };
+      }
+    }
+  }
+  
+  return nearestBuilding ? { x: nearestBuilding.x, y: nearestBuilding.y, type: nearestBuilding.type, task: nearestBuilding.task } : null;
+}
+
 /**
  * Update units (movement, combat, gathering)
  */
@@ -405,6 +614,66 @@ function updateUnits(state: RoNGameState): RoNGameState {
   
   for (const unit of state.units) {
     let updatedUnit = { ...unit };
+    
+    // Reset isAttacking flag each tick - will be set true if attack occurs
+    updatedUnit.isAttacking = false;
+    
+    // Track idle time for citizens - auto-assign work if idle too long
+    if (updatedUnit.type === 'citizen') {
+      const isIdle = updatedUnit.task === 'idle' || updatedUnit.task === undefined;
+      
+      if (isIdle && !updatedUnit.isMoving) {
+        // Set or update idleSince
+        if (updatedUnit.idleSince === undefined) {
+          updatedUnit.idleSince = state.tick;
+        }
+        
+        // Check if idle long enough to auto-assign work
+        const idleDuration = state.tick - updatedUnit.idleSince;
+        if (idleDuration >= IDLE_AUTO_WORK_THRESHOLD) {
+          // Find nearby economic building to work at
+          const nearbyWork = findNearbyEconomicBuilding(
+            updatedUnit,
+            state.grid,
+            state.gridSize,
+            AUTO_WORK_SEARCH_RADIUS
+          );
+          
+          if (nearbyWork) {
+            // Assign to work at this building
+            updatedUnit.task = nearbyWork.task;
+            updatedUnit.taskTarget = { x: nearbyWork.x, y: nearbyWork.y };
+            updatedUnit.targetX = nearbyWork.x;
+            updatedUnit.targetY = nearbyWork.y;
+            updatedUnit.isMoving = true;
+            updatedUnit.idleSince = undefined; // Clear idle tracker
+          }
+        }
+      } else {
+        // Not idle - clear the tracker
+        updatedUnit.idleSince = undefined;
+      }
+    }
+    
+    // Auto-attack for military units: if idle or moving (not already attacking/gathering),
+    // check for nearby enemies and engage them
+    if (isMilitaryUnit(updatedUnit)) {
+      const isIdleOrMoving = updatedUnit.task === 'idle' || 
+                             (updatedUnit.task === undefined && !updatedUnit.taskTarget);
+      
+      if (isIdleOrMoving || (updatedUnit.isMoving && updatedUnit.task !== 'attack')) {
+        const nearbyEnemies = findNearbyEnemies(updatedUnit, state.units, AUTO_ATTACK_RANGE);
+        
+        if (nearbyEnemies.length > 0) {
+          const target = nearbyEnemies[0];
+          updatedUnit.task = 'attack';
+          updatedUnit.taskTarget = target.id;
+          updatedUnit.targetX = target.x;
+          updatedUnit.targetY = target.y;
+          updatedUnit.isMoving = true;
+        }
+      }
+    }
     
     // Movement with pathfinding
     if (updatedUnit.isMoving && updatedUnit.targetX !== undefined && updatedUnit.targetY !== undefined) {
@@ -419,15 +688,38 @@ function updateUnits(state: RoNGameState): RoNGameState {
       const arrivalDist = updatedUnit.task?.startsWith('gather_') ? 1.5 : speed;
 
       if (dist < arrivalDist) {
-        // Arrived - spread out around the target for gather tasks
-        if (updatedUnit.task?.startsWith('gather_') && updatedUnit.taskTarget && typeof updatedUnit.taskTarget === 'object') {
-          // Find a spot around the building that isn't too crowded
-          const targetPos = updatedUnit.taskTarget as { x: number; y: number };
+        // Arrived - position depends on task type
+        const targetPos = updatedUnit.taskTarget && typeof updatedUnit.taskTarget === 'object' && 'x' in updatedUnit.taskTarget
+          ? updatedUnit.taskTarget as { x: number; y: number }
+          : null;
+        
+        if (targetPos) {
           const unitIndex = state.units.findIndex(u => u.id === unit.id);
-          const angle = (unitIndex * 1.2) + Math.random() * 0.5; // Spread in a circle
-          const spreadDist = 0.8 + Math.random() * 0.4;
-          updatedUnit.x = targetPos.x + Math.cos(angle) * spreadDist;
-          updatedUnit.y = targetPos.y + Math.sin(angle) * spreadDist;
+          
+          if (updatedUnit.task === 'gather_food') {
+            // Farm workers should be ON the farm tile
+            // Spread within the farm bounds (add small random offset within tile)
+            const farmOffsetX = (Math.random() - 0.5) * 0.6;
+            const farmOffsetY = (Math.random() - 0.5) * 0.6;
+            updatedUnit.x = targetPos.x + 0.5 + farmOffsetX;
+            updatedUnit.y = targetPos.y + 0.5 + farmOffsetY;
+          } else if (updatedUnit.task === 'gather_wood' || updatedUnit.task === 'gather_metal') {
+            // Lumber/mine workers can be nearby (spread around the building)
+            const angle = (unitIndex * 1.2) + Math.random() * 0.5;
+            const spreadDist = 0.8 + Math.random() * 0.4;
+            updatedUnit.x = targetPos.x + Math.cos(angle) * spreadDist;
+            updatedUnit.y = targetPos.y + Math.sin(angle) * spreadDist;
+          } else if (updatedUnit.task === 'attack') {
+            // Attack - spread around the target
+            const angle = (unitIndex * 1.2) + Math.random() * 0.5;
+            const spreadDist = 0.8 + Math.random() * 0.4;
+            updatedUnit.x = targetPos.x + Math.cos(angle) * spreadDist;
+            updatedUnit.y = targetPos.y + Math.sin(angle) * spreadDist;
+          } else {
+            // Other gather tasks (gold, oil, knowledge) - position on building
+            updatedUnit.x = targetPos.x + 0.5 + (Math.random() - 0.5) * 0.4;
+            updatedUnit.y = targetPos.y + 0.5 + (Math.random() - 0.5) * 0.4;
+          }
         } else {
           updatedUnit.x = updatedUnit.targetX;
           updatedUnit.y = updatedUnit.targetY;
@@ -495,8 +787,10 @@ function updateUnits(state: RoNGameState): RoNGameState {
               }
               updatedUnit.attackCooldown = ATTACK_COOLDOWN;
               updatedUnit.lastAttackTime = state.tick;
+              updatedUnit.isAttacking = true; // Show attack animation
+              updatedUnit.isMoving = false; // Stop moving while attacking
             } else {
-              // Move toward target
+              // Move toward target - must get in range first
               updatedUnit.targetX = targetUnit.x;
               updatedUnit.targetY = targetUnit.y;
               updatedUnit.isMoving = true;
@@ -536,14 +830,26 @@ function updateUnits(state: RoNGameState): RoNGameState {
               
               updatedUnit.attackCooldown = ATTACK_COOLDOWN;
               updatedUnit.lastAttackTime = state.tick;
+              updatedUnit.isAttacking = true; // Show attack animation
+              updatedUnit.isMoving = false; // Stop moving while attacking
             } else {
-              // Move toward target
+              // Move toward target - must get in range first
               updatedUnit.targetX = targetPos.x;
               updatedUnit.targetY = targetPos.y;
               updatedUnit.isMoving = true;
             }
           }
         }
+      }
+    }
+    
+    // Attrition damage for units in enemy territory
+    if (state.tick % ATTRITION_TICK_INTERVAL === 0) {
+      const territoryOwner = getTerritoryOwner(state.grid, state.gridSize, Math.floor(updatedUnit.x), Math.floor(updatedUnit.y));
+      
+      // If in enemy territory (not own territory and not unclaimed)
+      if (territoryOwner !== null && territoryOwner !== updatedUnit.ownerId) {
+        updatedUnit.health -= ATTRITION_DAMAGE;
       }
     }
     
@@ -943,17 +1249,46 @@ function aiAttackIfStrong(state: RoNGameState, player: RoNPlayer, difficulty: st
   // Capture the value for use in callback
   const target = attackTarget;
   
-  // Send military units to attack
+  // Count military units that will attack for formation spreading
+  const attackingUnits = state.units.filter(u => 
+    u.ownerId === player.id && 
+    u.type !== 'citizen' && 
+    u.task === 'idle'
+  );
+  const numAttacking = attackingUnits.length;
+  
+  // Send military units to attack with formation spreading
+  let unitIndex = 0;
   const newUnits = state.units.map(u => {
     if (u.ownerId === player.id && 
         u.type !== 'citizen' && 
         u.task === 'idle') {
+      
+      // Calculate offset for attack formation
+      let offsetX = 0;
+      let offsetY = 0;
+      
+      if (numAttacking > 1) {
+        const spreadRadius = 0.8;
+        if (unitIndex === 0) {
+          offsetX = 0;
+          offsetY = 0;
+        } else {
+          const angle = (unitIndex - 1) * (Math.PI * 2 / Math.max(1, numAttacking - 1));
+          const ring = Math.floor((unitIndex - 1) / 6) + 1;
+          offsetX = Math.cos(angle) * spreadRadius * ring;
+          offsetY = Math.sin(angle) * spreadRadius * ring;
+        }
+      }
+      
+      unitIndex++;
+      
       return {
         ...u,
         task: 'attack' as UnitTask,
         taskTarget: target,
-        targetX: target.x,
-        targetY: target.y,
+        targetX: target.x + offsetX,
+        targetY: target.y + offsetY,
         isMoving: true,
       };
     }

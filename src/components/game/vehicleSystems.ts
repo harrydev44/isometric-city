@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from 'react';
 import { Car, CarDirection, EmergencyVehicle, EmergencyVehicleType, Pedestrian, PedestrianDestType, WorldRenderState, TILE_WIDTH, TILE_HEIGHT } from './types';
 import { CAR_COLORS, CAR_MIN_ZOOM, CAR_MIN_ZOOM_MOBILE, PEDESTRIAN_MIN_ZOOM, PEDESTRIAN_MIN_ZOOM_MOBILE, DIRECTION_META, PEDESTRIAN_MAX_COUNT, PEDESTRIAN_MAX_COUNT_MOBILE, PEDESTRIAN_ROAD_TILE_DENSITY, PEDESTRIAN_ROAD_TILE_DENSITY_MOBILE, PEDESTRIAN_SPAWN_BATCH_SIZE, PEDESTRIAN_SPAWN_BATCH_SIZE_MOBILE, PEDESTRIAN_SPAWN_INTERVAL, PEDESTRIAN_SPAWN_INTERVAL_MOBILE, VEHICLE_FAR_ZOOM_THRESHOLD } from './constants';
 import { isRoadTile, getDirectionOptions, pickNextDirection, findPathOnRoads, getDirectionToTile, gridToScreen } from './utils';
+import { drawFireEffect } from './shared';
 import { findResidentialBuildings, findPedestrianDestinations, findStations, findFires, findRecreationAreas, findEnterableBuildings, SPORTS_TYPES, ACTIVE_RECREATION_TYPES } from './gridFinders';
 import { drawPedestrians as drawPedestriansUtil } from './drawPedestrians';
 import { BuildingType, Tile } from '@/types/game';
@@ -1420,6 +1421,7 @@ export function useVehicleSystems(
       ctx.restore();
     }
     
+    // Draw fire effects on buildings that are on fire
     for (let y = 0; y < currentGridSize; y++) {
       for (let x = 0; x < currentGridSize; x++) {
         const tile = currentGrid[y][x];
@@ -1433,40 +1435,8 @@ export function useVehicleSystems(
           continue;
         }
         
-        const pulse = Math.sin(animTime * 6) * 0.3 + 0.7;
-        const outerPulse = Math.sin(animTime * 4) * 0.5 + 0.5;
-        
-        ctx.beginPath();
-        ctx.arc(centerX, centerY - 12, 22 + outerPulse * 8, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(239, 68, 68, ${0.3 * (1 - outerPulse)})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
-        ctx.save();
-        ctx.translate(centerX, centerY - 15);
-        
-        ctx.fillStyle = `rgba(220, 38, 38, ${0.9 * pulse})`;
-        ctx.beginPath();
-        ctx.moveTo(0, -8);
-        ctx.lineTo(8, 5);
-        ctx.lineTo(-8, 5);
-        ctx.closePath();
-        ctx.fill();
-        
-        ctx.strokeStyle = `rgba(252, 165, 165, ${pulse})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        
-        ctx.fillStyle = '#fbbf24';
-        ctx.beginPath();
-        ctx.moveTo(0, -3);
-        ctx.quadraticCurveTo(2.5, 0, 2, 2.5);
-        ctx.quadraticCurveTo(0.5, 1.5, 0, 2.5);
-        ctx.quadraticCurveTo(-0.5, 1.5, -2, 2.5);
-        ctx.quadraticCurveTo(-2.5, 0, 0, -3);
-        ctx.fill();
-        
-        ctx.restore();
+        // Use shared fire effect function
+        drawFireEffect(ctx, screenX, screenY, animTime, 1);
       }
     }
     

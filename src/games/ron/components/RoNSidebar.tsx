@@ -190,27 +190,6 @@ export function RoNSidebar() {
         )}
       </div>
       
-      {/* Tools */}
-      <div className="px-4 py-2 border-b border-slate-700">
-        <div className="text-xs text-slate-400 uppercase font-bold mb-2">Tools</div>
-        <div className="flex gap-1 flex-wrap">
-          <Button
-            size="sm"
-            variant={state.selectedTool === 'select' ? 'default' : 'ghost'}
-            onClick={() => setTool('select')}
-          >
-            Select
-          </Button>
-          <Button
-            size="sm"
-            variant={state.selectedTool === 'move' ? 'default' : 'ghost'}
-            onClick={() => setTool('move')}
-          >
-            Move
-          </Button>
-        </div>
-      </div>
-      
       <ScrollArea className="flex-1">
         {/* Selected Building - Unit Production */}
         {selectedBuilding && availableUnits.length > 0 && (

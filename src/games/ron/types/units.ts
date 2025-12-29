@@ -927,10 +927,12 @@ export interface Unit {
   // Tasks
   task?: UnitTask;
   taskTarget?: { x: number; y: number } | string; // Position or building/unit ID
+  idleSince?: number; // Tick when unit became idle (for auto-work assignment)
   
   // Combat
   attackCooldown: number;
   lastAttackTime: number;
+  isAttacking: boolean; // True when unit is actively attacking (for animation)
   
   // Cargo (for transport units)
   carriedUnits?: string[];

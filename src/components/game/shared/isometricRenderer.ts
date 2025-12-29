@@ -399,6 +399,66 @@ export function drawSkyBackground(
 }
 
 /**
+ * Draw fire effect on a building
+ * Used when buildings are on fire (IsoCity) or under attack (RoN)
+ * 
+ * @param ctx - Canvas 2D rendering context (already transformed for zoom/offset)
+ * @param screenX - Screen X position of the tile (from gridToScreen)
+ * @param screenY - Screen Y position of the tile (from gridToScreen)
+ * @param animTime - Animation time in seconds for fire flickering
+ * @param intensity - Fire intensity from 0 to 1 (default 1)
+ */
+export function drawFireEffect(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  animTime: number,
+  intensity: number = 1
+): void {
+  const centerX = screenX + TILE_WIDTH / 2;
+  const centerY = screenY + TILE_HEIGHT / 2;
+  
+  const pulse = Math.sin(animTime * 6) * 0.3 + 0.7;
+  const outerPulse = Math.sin(animTime * 4) * 0.5 + 0.5;
+  
+  // Outer pulsing ring
+  ctx.beginPath();
+  ctx.arc(centerX, centerY - 12, 22 + outerPulse * 8, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(239, 68, 68, ${0.3 * (1 - outerPulse) * intensity})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  ctx.save();
+  ctx.translate(centerX, centerY - 15);
+  
+  // Red triangle/flame base
+  ctx.fillStyle = `rgba(220, 38, 38, ${0.9 * pulse * intensity})`;
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(8, 5);
+  ctx.lineTo(-8, 5);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Border highlight
+  ctx.strokeStyle = `rgba(252, 165, 165, ${pulse * intensity})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Yellow/orange flame inner
+  ctx.fillStyle = `rgba(251, 191, 36, ${intensity})`;
+  ctx.beginPath();
+  ctx.moveTo(0, -3);
+  ctx.quadraticCurveTo(2.5, 0, 2, 2.5);
+  ctx.quadraticCurveTo(0.5, 1.5, 0, 2.5);
+  ctx.quadraticCurveTo(-0.5, 1.5, -2, 2.5);
+  ctx.quadraticCurveTo(-2.5, 0, 0, -3);
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+/**
  * Set up canvas for high-DPI rendering
  */
 export function setupCanvas(

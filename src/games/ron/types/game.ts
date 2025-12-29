@@ -87,8 +87,7 @@ export interface RoNGameState {
 }
 
 export type RoNTool =
-  | 'select'
-  | 'move'
+  | 'none'
   | 'build_city_center'
   | 'build_farm'
   | 'build_woodcutters_camp'
@@ -125,8 +124,7 @@ export interface RoNToolInfo {
 }
 
 export const RON_TOOL_INFO: Record<RoNTool, RoNToolInfo> = {
-  select: { name: 'Select', description: 'Select units and buildings' },
-  move: { name: 'Move', description: 'Move selected units', hotkey: 'M' },
+  none: { name: 'None', description: 'Default mode - drag to select, right-click to command' },
   build_city_center: { name: 'City Center', buildingType: 'city_center', description: 'Place city center - spawns citizens' },
   build_farm: { name: 'Farm', buildingType: 'farm', description: 'Build farm for food production' },
   build_woodcutters_camp: { name: 'Woodcutter', buildingType: 'woodcutters_camp', description: 'Build camp for wood gathering' },
@@ -191,7 +189,7 @@ export function createInitialRoNGameState(
       age: 'classical' as Age,
       resources: { food: 200, wood: 500, metal: 0, gold: 150, knowledge: 0, oil: 0 },
       resourceRates: { food: 0, wood: 0, metal: 0, gold: 0, knowledge: 0, oil: 0 },
-      storageLimits: { food: 500, wood: 500, metal: 300, gold: 1000, knowledge: 500, oil: 200 },
+      storageLimits: { food: 2000, wood: 1500, metal: 1500, gold: 2500, knowledge: 1500, oil: 1000 },
       population: 0,
       populationCap: 10,
       isDefeated: false,
@@ -221,11 +219,11 @@ export function createInitialRoNGameState(
     grid.push(row);
   }
   
-  // Generate 2-4 lakes using flood-fill growth
-  const numLakes = 2 + Math.floor(Math.random() * 3);
+  // Generate 4-7 lakes using flood-fill growth (more water on map)
+  const numLakes = 4 + Math.floor(Math.random() * 4);
   const lakeCenters: { x: number; y: number }[] = [];
-  const minDistFromEdge = Math.floor(gridSize * 0.15);
-  const minDistBetweenLakes = Math.floor(gridSize * 0.25);
+  const minDistFromEdge = Math.floor(gridSize * 0.12);
+  const minDistBetweenLakes = Math.floor(gridSize * 0.18);
   
   // Find lake centers
   for (let i = 0; i < numLakes; i++) {
@@ -256,7 +254,7 @@ export function createInitialRoNGameState(
   const directions = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]];
   
   for (const center of lakeCenters) {
-    const targetSize = 15 + Math.floor(Math.random() * 30); // 15-45 tiles per lake
+    const targetSize = 20 + Math.floor(Math.random() * 40); // 20-60 tiles per lake (larger lakes)
     const lakeTiles: { x: number; y: number }[] = [{ x: center.x, y: center.y }];
     const candidates: { x: number; y: number; dist: number }[] = [];
     
@@ -308,12 +306,12 @@ export function createInitialRoNGameState(
     }
   }
   
-  // Add forests in clumps (not scattered random tiles)
-  const numForests = 5 + Math.floor(Math.random() * 5);
+  // Add forests in clumps (not scattered random tiles) - more forests for RoN
+  const numForests = 8 + Math.floor(Math.random() * 6); // 8-14 forest clumps
   for (let i = 0; i < numForests; i++) {
-    const fx = Math.floor(gridSize * 0.1) + Math.floor(Math.random() * (gridSize * 0.8));
-    const fy = Math.floor(gridSize * 0.1) + Math.floor(Math.random() * (gridSize * 0.8));
-    const forestSize = 8 + Math.floor(Math.random() * 12); // 8-20 tiles per forest
+    const fx = Math.floor(gridSize * 0.08) + Math.floor(Math.random() * (gridSize * 0.84));
+    const fy = Math.floor(gridSize * 0.08) + Math.floor(Math.random() * (gridSize * 0.84));
+    const forestSize = 10 + Math.floor(Math.random() * 15); // 10-25 tiles per forest
     
     // Grow forest clump
     const forestTiles: { x: number; y: number }[] = [{ x: fx, y: fy }];
@@ -333,8 +331,8 @@ export function createInitialRoNGameState(
     }
   }
   
-  // Generate 3-5 metal deposit clusters (mountain ranges) - larger like forests
-  const numMetalClusters = 3 + Math.floor(Math.random() * 3);
+  // Generate 5-8 metal deposit clusters (mountain ranges) - larger like forests
+  const numMetalClusters = 5 + Math.floor(Math.random() * 4);
   for (let c = 0; c < numMetalClusters; c++) {
     // Find a valid starting point for metal cluster
     let attempts = 0;
@@ -466,8 +464,9 @@ export function createInitialRoNGameState(
           isSelected: false,
           isMoving: false,
           task: 'idle',
-          attackCooldown: 0,
+          attackCooldown: 10, // Initial cooldown before first attack
           lastAttackTime: 0,
+          isAttacking: false,
         });
       }
       player.population = 3;
@@ -489,7 +488,7 @@ export function createInitialRoNGameState(
     isSelectingArea: false,
     selectionStart: null,
     selectionEnd: null,
-    selectedTool: 'select',
+    selectedTool: 'none',
     activePanel: 'none',
     cameraOffset: { x: 0, y: 0 },
     zoom: 1,

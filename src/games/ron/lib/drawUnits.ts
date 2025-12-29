@@ -960,6 +960,78 @@ export function drawRoNUnit(
     drawMilitaryUnit(ctx, centerX, centerY, unit, playerColor, zoom, tick);
   }
   
+  // Attack animation effect
+  if (unit.isAttacking) {
+    const attackAnimPhase = (tick * 0.3) % (Math.PI * 2);
+    
+    if (stats.category === 'ranged' || stats.category === 'siege') {
+      // Ranged/siege units: draw projectile/muzzle flash
+      ctx.save();
+      
+      // Muzzle flash
+      const flashSize = 4 + Math.sin(attackAnimPhase) * 2;
+      const flashGradient = ctx.createRadialGradient(
+        centerX + 3, centerY - 3, 0,
+        centerX + 3, centerY - 3, flashSize
+      );
+      flashGradient.addColorStop(0, 'rgba(255, 255, 200, 0.9)');
+      flashGradient.addColorStop(0.3, 'rgba(255, 200, 50, 0.7)');
+      flashGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+      ctx.fillStyle = flashGradient;
+      ctx.beginPath();
+      ctx.arc(centerX + 3, centerY - 3, flashSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Projectile trail (for siege)
+      if (stats.category === 'siege' && unit.taskTarget && typeof unit.taskTarget === 'object') {
+        const target = unit.taskTarget as { x: number; y: number };
+        const dx = target.x - unit.x;
+        const dy = target.y - unit.y;
+        const angle = Math.atan2(dy, dx);
+        const trailLength = 8;
+        
+        ctx.strokeStyle = 'rgba(255, 150, 50, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - 4);
+        ctx.lineTo(
+          centerX + Math.cos(angle) * trailLength,
+          centerY - 4 + Math.sin(angle) * trailLength * 0.5
+        );
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+    } else {
+      // Melee units: draw attack spark/slash
+      ctx.save();
+      
+      const sparkAngle = attackAnimPhase * 2;
+      const sparkRadius = 5;
+      
+      // Slash effect
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(centerX + 2, centerY - 2, sparkRadius, sparkAngle - 0.5, sparkAngle + 0.5);
+      ctx.stroke();
+      
+      // Impact sparks
+      ctx.fillStyle = 'rgba(255, 220, 100, 0.7)';
+      for (let i = 0; i < 3; i++) {
+        const particleAngle = sparkAngle + i * 0.4;
+        const px = centerX + 2 + Math.cos(particleAngle) * (sparkRadius + 2);
+        const py = centerY - 2 + Math.sin(particleAngle) * (sparkRadius + 2) * 0.5;
+        ctx.beginPath();
+        ctx.arc(px, py, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+  }
+  
   // Selection ring
   if (unit.isSelected) {
     const ringRadius = 5;

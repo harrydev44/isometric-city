@@ -161,6 +161,11 @@ interface RoNContextValue {
   getCurrentPlayer: () => RoNPlayer | undefined;
   getPlayerById: (id: string) => RoNPlayer | undefined;
   
+  // Import/Export
+  exportState: () => string;
+  loadState: (stateString: string) => boolean;
+  resetGame: () => void;
+  
   // Debug
   debugAddResources: () => void;
 }
@@ -178,9 +183,9 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize with a default 2-player game (1 human vs 1 AI)
   const [state, setState] = useState<RoNGameState>(() =>
-    createInitialRoNGameState(50, [
+    createInitialRoNGameState(100, [
       { name: 'Player', type: 'human', color: '#3b82f6' },
-      { name: 'AI Opponent', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+      { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
     ])
   );
 
@@ -443,19 +448,44 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
   
-  // Attack target
+  // Attack target - spread units around target building so they don't stack
   const attackTarget = useCallback((targetId: string | { x: number; y: number }) => {
     setState(prev => {
+      // Get all selected units for formation spreading
+      const selectedUnits = prev.units.filter(u => u.isSelected);
+      const numSelected = selectedUnits.length;
+      
+      let unitIndex = 0;
       const updatedUnits = prev.units.map(u => {
         if (!u.isSelected) return u;
+        
+        // Calculate offset for attack formation (spread around target)
+        let offsetX = 0;
+        let offsetY = 0;
+        
+        if (typeof targetId === 'object' && numSelected > 1) {
+          // Spread units in a circle around the target building
+          const spreadRadius = 0.8; // Slightly larger spread for attack positions
+          if (unitIndex === 0) {
+            offsetX = 0;
+            offsetY = 0;
+          } else {
+            const angle = (unitIndex - 1) * (Math.PI * 2 / Math.max(1, numSelected - 1));
+            const ring = Math.floor((unitIndex - 1) / 6) + 1;
+            offsetX = Math.cos(angle) * spreadRadius * ring;
+            offsetY = Math.sin(angle) * spreadRadius * ring;
+          }
+        }
+        
+        unitIndex++;
         
         return {
           ...u,
           task: 'attack' as UnitTask,
           taskTarget: targetId,
           isMoving: typeof targetId === 'object',
-          targetX: typeof targetId === 'object' ? targetId.x : undefined,
-          targetY: typeof targetId === 'object' ? targetId.y : undefined,
+          targetX: typeof targetId === 'object' ? targetId.x + offsetX : undefined,
+          targetY: typeof targetId === 'object' ? targetId.y + offsetY : undefined,
         };
       });
       
@@ -504,14 +534,30 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
       
       // Check if tile is available
       const tile = prev.grid[y]?.[x];
-      if (!tile || tile.building || tile.terrain === 'water') return prev;
+      if (!tile) return prev;
+      if (tile.terrain === 'water') return prev;
       
-      // Check building size
+      // Roads have special placement rules - can only go on empty terrain
+      if (buildingType === 'road') {
+        if (tile.building && 
+            tile.building.type !== 'grass' && 
+            tile.building.type !== 'empty' &&
+            tile.building.type !== 'road') {
+          return prev; // Can't place road on existing building
+        }
+      } else {
+        // Non-road buildings can't be placed on existing buildings
+        if (tile.building) return prev;
+      }
+      
+      // Check building size (for non-road buildings)
       const size = stats.size;
       for (let dy = 0; dy < size.height; dy++) {
         for (let dx = 0; dx < size.width; dx++) {
           const checkTile = prev.grid[y + dy]?.[x + dx];
-          if (!checkTile || checkTile.building || checkTile.terrain === 'water') {
+          if (!checkTile || checkTile.terrain === 'water') return prev;
+          // For roads, allow placement; for others, check for existing buildings
+          if (buildingType !== 'road' && checkTile.building) {
             return prev;
           }
         }
@@ -734,7 +780,7 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const debugAddResources = useCallback(() => {
     setState(prev => ({
       ...prev,
-      players: prev.players.map(p => 
+      players: prev.players.map(p =>
         p.id === prev.currentPlayerId
           ? {
               ...p,
@@ -750,6 +796,40 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
           : p
       ),
     }));
+  }, []);
+
+  // Export game state as JSON string
+  const exportState = useCallback((): string => {
+    return JSON.stringify(state);
+  }, [state]);
+
+  // Load game state from JSON string
+  const loadState = useCallback((stateString: string): boolean => {
+    try {
+      const parsed = JSON.parse(stateString);
+      // Validate basic structure
+      if (parsed && parsed.grid && parsed.gridSize && parsed.players) {
+        setState(parsed as RoNGameState);
+        latestStateRef.current = parsed as RoNGameState;
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to parse game state:', e);
+      return false;
+    }
+  }, []);
+
+  // Reset game to initial state
+  const resetGame = useCallback(() => {
+    const newState = createInitialRoNGameState(100, [
+      { name: 'Player', type: 'human', color: '#3b82f6' },
+      { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+    ]);
+    setState(newState);
+    latestStateRef.current = newState;
+    setSelectedBuildingPos(null);
+    clearRoNGameState();
   }, []);
 
   const value: RoNContextValue = {
@@ -772,6 +852,9 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     newGame,
     getCurrentPlayer,
     getPlayerById,
+    exportState,
+    loadState,
+    resetGame,
     debugAddResources,
   };
   

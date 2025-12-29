@@ -167,12 +167,16 @@ export const BUILDING_SPRITE_MAP: Partial<Record<RoNBuildingType, { row: number;
 
 // Vertical offset adjustments per building type (multiplied by tile height)
 // 3x3 buildings need larger offsets (like IsoCity mall at -1.5)
+// 1x1 economic buildings have smaller offsets
 export const BUILDING_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>> = {
   city_center: -1.2,
   small_city: -1.2,
   large_city: -1.3,
   major_city: -1.4,
-  farm: -0.4,
+  farm: -0.2,           // 1x1 - small offset
+  woodcutters_camp: -0.2, // 1x1
+  lumber_mill: -0.25,   // 1x1
+  mine: -0.25,          // 1x1
   barracks: -0.4,
   library: -0.35,
   university: -0.55,
@@ -181,18 +185,22 @@ export const BUILDING_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>>
   fort: -1.2,
   fortress: -1.2,
   castle: -1.2,
-  mine: -0.3,
   factory: -0.3,
   airbase: -1.5,
   dock: -1.5,
 };
 
 // Scale adjustments per building type
+// 1x1 economic buildings scaled to fit nicely in one tile
 export const BUILDING_SCALES: Partial<Record<RoNBuildingType, number>> = {
   city_center: 1.0,
   small_city: 1.1,
   large_city: 1.2,
   major_city: 1.3,
+  farm: 0.85,           // 1x1 - fit in single tile
+  woodcutters_camp: 0.85, // 1x1
+  lumber_mill: 0.9,     // 1x1
+  mine: 0.9,            // 1x1
   castle: 0.7,
   fortress: 0.7,
   fort: 0.8,

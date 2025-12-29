@@ -1,21 +1,29 @@
 /**
  * Rise of Nations - MiniMap Component
  * 
- * Shows a small overview map with player territories and units.
+ * Shows a small overview map with player territories, units, and viewport indicator.
+ * Shares viewport rendering logic with IsoCity's MiniMap.
  */
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useRoN } from '../context/RoNContext';
 import { PLAYER_COLORS } from '../lib/renderConfig';
+import { TILE_WIDTH, TILE_HEIGHT } from '@/components/game/shared';
 
 interface RoNMiniMapProps {
   onNavigate?: (x: number, y: number) => void;
+  viewport?: { 
+    offset: { x: number; y: number }; 
+    zoom: number; 
+    canvasSize: { width: number; height: number } 
+  } | null;
 }
 
-export function RoNMiniMap({ onNavigate }: RoNMiniMapProps) {
+export function RoNMiniMap({ onNavigate, viewport }: RoNMiniMapProps) {
   const { state } = useRoN();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const size = 150;
   const scale = size / state.gridSize;
@@ -42,12 +50,16 @@ export function RoNMiniMap({ onNavigate }: RoNMiniMapProps) {
           ctx.fillStyle = '#1e40af';
         } else if (tile.forestDensity > 0) {
           ctx.fillStyle = '#166534';
+        } else if (tile.hasMetalDeposit) {
+          ctx.fillStyle = '#6b7280'; // Grey for metal/mountains
+        } else if (tile.hasOilDeposit) {
+          ctx.fillStyle = '#1f2937'; // Dark for oil
         } else {
           ctx.fillStyle = '#4ade80';
         }
         ctx.fillRect(px, py, scale + 0.5, scale + 0.5);
         
-        // Ownership
+        // Ownership overlay
         if (tile.ownerId) {
           const playerIndex = state.players.findIndex(p => p.id === tile.ownerId);
           if (playerIndex >= 0) {
@@ -56,10 +68,11 @@ export function RoNMiniMap({ onNavigate }: RoNMiniMapProps) {
           }
         }
         
-        // Buildings
+        // Buildings (damaged buildings show red)
         if (tile.building) {
           const playerIndex = state.players.findIndex(p => p.id === tile.building?.ownerId);
-          ctx.fillStyle = PLAYER_COLORS[playerIndex] || '#ffffff';
+          const isDamaged = tile.building.health < tile.building.maxHealth;
+          ctx.fillStyle = isDamaged ? '#ef4444' : (PLAYER_COLORS[playerIndex] || '#ffffff');
           ctx.fillRect(px, py, scale + 0.5, scale + 0.5);
         }
       });
@@ -74,19 +87,72 @@ export function RoNMiniMap({ onNavigate }: RoNMiniMapProps) {
       ctx.fill();
     });
     
-  }, [state.grid, state.units, state.players, state.gridSize, scale]);
+    // Draw viewport rectangle (shared with IsoCity logic)
+    if (viewport) {
+      const { offset, zoom, canvasSize } = viewport;
+      
+      // Convert screen coordinates to grid coordinates for minimap
+      const screenToGridForMinimap = (screenX: number, screenY: number) => {
+        const adjustedX = (screenX - offset.x) / zoom;
+        const adjustedY = (screenY - offset.y) / zoom;
+        const gridX = (adjustedX / (TILE_WIDTH / 2) + adjustedY / (TILE_HEIGHT / 2)) / 2;
+        const gridY = (adjustedY / (TILE_HEIGHT / 2) - adjustedX / (TILE_WIDTH / 2)) / 2;
+        return { gridX, gridY };
+      };
+      
+      const topLeft = screenToGridForMinimap(0, 0);
+      const topRight = screenToGridForMinimap(canvasSize.width, 0);
+      const bottomLeft = screenToGridForMinimap(0, canvasSize.height);
+      const bottomRight = screenToGridForMinimap(canvasSize.width, canvasSize.height);
+      
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(topLeft.gridX * scale, topLeft.gridY * scale);
+      ctx.lineTo(topRight.gridX * scale, topRight.gridY * scale);
+      ctx.lineTo(bottomRight.gridX * scale, bottomRight.gridY * scale);
+      ctx.lineTo(bottomLeft.gridX * scale, bottomLeft.gridY * scale);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    
+  }, [state.grid, state.units, state.players, state.gridSize, scale, viewport]);
   
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Navigation handler (click or drag)
+  const navigateToPosition = useCallback((e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
     if (!onNavigate) return;
     
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     
-    const x = Math.floor((e.clientX - rect.left) / scale);
-    const y = Math.floor((e.clientY - rect.top) / scale);
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
     
-    onNavigate(x, y);
-  };
+    const gridX = Math.floor(clickX / scale);
+    const gridY = Math.floor(clickY / scale);
+    
+    onNavigate(gridX, gridY);
+  }, [onNavigate, scale]);
+  
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    setIsDragging(true);
+    navigateToPosition(e);
+  }, [navigateToPosition]);
+  
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDragging) {
+      navigateToPosition(e);
+    }
+  }, [isDragging, navigateToPosition]);
+  
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+  
+  const handleMouseLeave = useCallback(() => {
+    setIsDragging(false);
+  }, []);
   
   return (
     <div className="absolute bottom-4 right-4 z-30">
@@ -96,7 +162,10 @@ export function RoNMiniMap({ onNavigate }: RoNMiniMapProps) {
           width={size}
           height={size}
           className="rounded cursor-pointer"
-          onClick={handleClick}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
         />
       </div>
     </div>

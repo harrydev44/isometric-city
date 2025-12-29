@@ -50,14 +50,15 @@ export const BASE_GATHER_RATES: Record<ResourceType, number> = {
   oil: 0.25,
 };
 
-// Storage limits (can be increased with buildings)
+// Storage limits - set high enough to allow all age advancements
+// Modern age requires: food 1500, wood 1000, metal 1200, gold 2000, knowledge 1000, oil 500
 export const BASE_STORAGE_LIMITS: Resources = {
-  food: 500,
-  wood: 500,
-  metal: 300,
-  gold: 1000,
-  knowledge: 500,
-  oil: 200,
+  food: 2000,
+  wood: 1500,
+  metal: 1500,
+  gold: 2500,
+  knowledge: 1500,
+  oil: 1000,
 };
 
 // Resource display information (using text symbols instead of emojis)
