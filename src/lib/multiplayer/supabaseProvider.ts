@@ -19,10 +19,17 @@ import {
 import { GameState } from '@/types/game';
 import { msg } from 'gt-next';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase: ReturnType<typeof createClient> | null = null;
+
+function requireSupabase() {
+  if (supabase) return supabase;
+  if (!supabaseUrl || !supabaseKey) return null;
+  supabase = createClient(supabaseUrl, supabaseKey);
+  return supabase;
+}
 
 // Throttle state saves to avoid excessive database writes
 const STATE_SAVE_INTERVAL = 3000; // Save state every 3 seconds max
@@ -44,6 +51,7 @@ export class MultiplayerProvider {
   public readonly peerId: string;
   public readonly isCreator: boolean; // Whether this player created the room
 
+  private supabase: ReturnType<typeof createClient>;
   private channel: RealtimeChannel;
   private player: Player;
   private options: MultiplayerProviderOptions;
@@ -64,6 +72,16 @@ export class MultiplayerProvider {
     this.gameState = options.initialGameState || null;
     this.isCreator = !!options.initialGameState;
 
+    const client = requireSupabase();
+    if (!client) {
+      throw new Error(
+        msg(
+          'Multiplayer is not configured (missing NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)'
+        )
+      );
+    }
+    this.supabase = client;
+
     // Create player info
     this.player = {
       id: this.peerId,
@@ -77,7 +95,7 @@ export class MultiplayerProvider {
     this.players.set(this.peerId, this.player);
 
     // Create Supabase Realtime channel
-    this.channel = supabase.channel(`room-${options.roomCode}`, {
+    this.channel = this.supabase.channel(`room-${options.roomCode}`, {
       config: {
         presence: { key: this.peerId },
         broadcast: { self: false }, // Don't receive our own broadcasts
@@ -310,7 +328,7 @@ export class MultiplayerProvider {
     }
     
     this.channel.unsubscribe();
-    supabase.removeChannel(this.channel);
+    this.supabase.removeChannel(this.channel);
   }
 }
 

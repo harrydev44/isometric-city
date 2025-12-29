@@ -32,15 +32,27 @@
 //   FOR EACH ROW
 //   EXECUTE FUNCTION update_updated_at();
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
 import { GameState } from '@/types/game';
 import { serializeAndCompressForDBAsync } from '@/lib/saveWorkerManager';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient | null {
+  if (supabase) return supabase;
+  if (!supabaseUrl || !supabaseKey) return null;
+  supabase = createClient(supabaseUrl, supabaseKey);
+  return supabase;
+}
+
+function warnSupabaseNotConfigured(): void {
+  // Keep this as a warning (not error) so local dev isn't noisy unless multiplayer is used.
+  console.warn('[Database] Supabase not configured; multiplayer persistence disabled.');
+}
 
 // Maximum city size limit for Supabase storage (20MB)
 const MAX_CITY_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
@@ -90,6 +102,11 @@ export async function createGameRoom(
   cityName: string,
   gameState: GameState
 ): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) {
+    warnSupabaseNotConfigured();
+    return false;
+  }
   try {
     // PERF: Both JSON.stringify and lz-string compression happen in the worker
     const compressed = await serializeAndCompressForDBAsync(gameState);
@@ -97,7 +114,7 @@ export async function createGameRoom(
     // Check if city size exceeds limit before saving
     checkCitySize(compressed);
     
-    const { error } = await supabase
+    const { error } = await client
       .from('game_rooms')
       .insert({
         room_code: roomCode.toUpperCase(),
@@ -128,8 +145,13 @@ export async function createGameRoom(
 export async function loadGameRoom(
   roomCode: string
 ): Promise<{ gameState: GameState; cityName: string } | null> {
+  const client = getSupabaseClient();
+  if (!client) {
+    warnSupabaseNotConfigured();
+    return null;
+  }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('game_rooms')
       .select('game_state, city_name')
       .eq('room_code', roomCode.toUpperCase())
@@ -163,6 +185,11 @@ export async function updateGameRoom(
   roomCode: string,
   gameState: GameState
 ): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) {
+    warnSupabaseNotConfigured();
+    return false;
+  }
   try {
     // PERF: Both JSON.stringify and lz-string compression happen in the worker
     const compressed = await serializeAndCompressForDBAsync(gameState);
@@ -170,7 +197,7 @@ export async function updateGameRoom(
     // Check if city size exceeds limit before saving
     checkCitySize(compressed);
     
-    const { error } = await supabase
+    const { error } = await client
       .from('game_rooms')
       .update({ game_state: compressed })
       .eq('room_code', roomCode.toUpperCase());
@@ -195,8 +222,10 @@ export async function updateGameRoom(
  * Check if a room exists
  */
 export async function roomExists(roomCode: string): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('game_rooms')
       .select('room_code')
       .eq('room_code', roomCode.toUpperCase())
@@ -215,8 +244,10 @@ export async function updatePlayerCount(
   roomCode: string,
   count: number
 ): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
   try {
-    await supabase
+    await client
       .from('game_rooms')
       .update({ player_count: count })
       .eq('room_code', roomCode.toUpperCase());
