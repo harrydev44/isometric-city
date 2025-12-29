@@ -80,7 +80,8 @@ function GameContent({ onExit }: { onExit?: () => void }) {
                 gridSize: 100,
                 playerConfigs: [
                   { name: 'Player', type: 'human', color: '#3b82f6' },
-                  { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI Red', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI Green', type: 'ai', difficulty: 'medium', color: '#22c55e' },
                 ]
               })}
               className="bg-blue-600 hover:bg-blue-700"
@@ -207,7 +208,8 @@ function GameContent({ onExit }: { onExit?: () => void }) {
                 gridSize: 100,
                 playerConfigs: [
                   { name: 'Player', type: 'human', color: '#3b82f6' },
-                  { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI Red', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI Green', type: 'ai', difficulty: 'medium', color: '#22c55e' },
                 ],
               })}
               title="Reset game (debug)"

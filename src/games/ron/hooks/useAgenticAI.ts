@@ -1,7 +1,7 @@
 /**
- * Rise of Nations - Agentic AI Hook (Simplified)
+ * Rise of Nations - Agentic AI Hook (Multi-Agent Support)
  * 
- * Just calls the AI every few seconds - no complex state management.
+ * Supports multiple AI players, each with their own conversation context.
  */
 
 'use client';
@@ -12,12 +12,14 @@ import { Unit } from '../types/units';
 
 export interface AgenticAIConfig {
   enabled: boolean;
-  aiPlayerId: string;
+  aiPlayerIds: string[];  // Support multiple AI players
   actionInterval: number;
 }
 
 export interface AgenticAIMessage {
   id: string;
+  playerId: string;  // Which AI sent this message
+  playerName: string;
   message: string;
   timestamp: number;
   isRead: boolean;
@@ -26,13 +28,23 @@ export interface AgenticAIMessage {
 export interface UseAgenticAIResult {
   messages: AgenticAIMessage[];
   isThinking: boolean;
+  thinkingPlayerIds: string[];  // Which AIs are currently thinking
   lastError: string | null;
   thoughts: string | null;
   markMessageRead: (messageId: string) => void;
   clearMessages: () => void;
+  reset: () => void;
 }
 
-const POLL_INTERVAL_MS = 10000; // 10 seconds between AI calls (agent needs time to think)
+const POLL_INTERVAL_MS = 5000; // 5 seconds between AI calls (faster for more responsive AI)
+const STAGGER_DELAY_MS = 1500;  // Stagger AI calls by 1.5 seconds
+
+// Per-AI state stored in refs
+interface AIPlayerState {
+  responseId?: string;
+  isProcessing: boolean;
+  lastCallTime: number;
+}
 
 export function useAgenticAI(
   gameState: RoNGameState,
@@ -40,74 +52,110 @@ export function useAgenticAI(
   config: AgenticAIConfig
 ): UseAgenticAIResult {
   const [messages, setMessages] = useState<AgenticAIMessage[]>([]);
-  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingPlayerIds, setThinkingPlayerIds] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   
-  const isProcessingRef = useRef(false);
+  // Per-AI state refs (keyed by player ID)
+  const aiStatesRef = useRef<Map<string, AIPlayerState>>(new Map());
   const latestStateRef = useRef(gameState);
-  const responseIdRef = useRef<string | undefined>(undefined);
   
   useEffect(() => {
     latestStateRef.current = gameState;
   }, [gameState]);
 
-  // Log AI resources every ~10 ticks
+  // Initialize/update AI states when player IDs change
+  useEffect(() => {
+    const currentIds = new Set(config.aiPlayerIds);
+    const stateMap = aiStatesRef.current;
+    
+    // Log AI player configuration
+    // if (config.aiPlayerIds.length > 0) {
+    //   console.log(`[MULTI-AI] Configured ${config.aiPlayerIds.length} AI players:`, config.aiPlayerIds);
+    // }
+    
+    // Add new AI players
+    for (const id of config.aiPlayerIds) {
+      if (!stateMap.has(id)) {
+        stateMap.set(id, {
+          isProcessing: false,
+          lastCallTime: 0,
+        });
+        console.log(`[MULTI-AI] Added AI player: ${id}`);
+      }
+    }
+    
+    // Remove old AI players
+    for (const id of stateMap.keys()) {
+      if (!currentIds.has(id)) {
+        stateMap.delete(id);
+        console.log(`[MULTI-AI] Removed AI player: ${id}`);
+      }
+    }
+  }, [config.aiPlayerIds]);
+
+  // Log AI resources every ~10 ticks for all AI players
   const lastLogTickRef = useRef(0);
   useEffect(() => {
-    if (!config.enabled) return;
+    if (!config.enabled || config.aiPlayerIds.length === 0) return;
     const tick = gameState.tick;
     if (tick - lastLogTickRef.current >= 10) {
       const isDetailedLog = tick - lastLogTickRef.current >= 50 || lastLogTickRef.current === 0;
       lastLogTickRef.current = tick;
-      const aiPlayer = gameState.players.find(p => p.id === config.aiPlayerId);
-      if (aiPlayer) {
-        const aiUnits = gameState.units.filter(u => u.ownerId === config.aiPlayerId);
-        const citizens = aiUnits.filter(u => u.type === 'citizen').length;
-        const military = aiUnits.filter(u => u.type !== 'citizen').length;
-        
-        // Count buildings
-        const buildingCounts: Record<string, number> = {};
-        for (let y = 0; y < gameState.gridSize; y++) {
-          for (let x = 0; x < gameState.gridSize; x++) {
-            const tile = gameState.grid[y]?.[x];
-            if (tile?.building && tile.ownerId === config.aiPlayerId) {
-              const type = tile.building.type;
-              buildingCounts[type] = (buildingCounts[type] || 0) + 1;
+      
+      for (const aiPlayerId of config.aiPlayerIds) {
+        const aiPlayer = gameState.players.find(p => p.id === aiPlayerId);
+        if (aiPlayer) {
+          const aiUnits = gameState.units.filter(u => u.ownerId === aiPlayerId);
+          const citizens = aiUnits.filter(u => u.type === 'citizen').length;
+          const military = aiUnits.filter(u => u.type !== 'citizen').length;
+          
+          // Count buildings
+          const buildingCounts: Record<string, number> = {};
+          for (let y = 0; y < gameState.gridSize; y++) {
+            for (let x = 0; x < gameState.gridSize; x++) {
+              const tile = gameState.grid[y]?.[x];
+              if (tile?.building && tile.ownerId === aiPlayerId) {
+                const type = tile.building.type;
+                buildingCounts[type] = (buildingCounts[type] || 0) + 1;
+              }
             }
           }
-        }
-        
-        console.log(
-          `%c[AI] Tick ${tick}%c | Pop: ${aiPlayer.population}/${aiPlayer.populationCap} | ` +
-          `👷${citizens} ⚔️${military} | ` +
-          `🍖${Math.round(aiPlayer.resources.food)}(${aiPlayer.resourceRates.food}/s) ` +
-          `🪵${Math.round(aiPlayer.resources.wood)}(${aiPlayer.resourceRates.wood}/s) ` +
-          `⛏️${Math.round(aiPlayer.resources.metal)}(${aiPlayer.resourceRates.metal}/s)`,
-          'color: #4CAF50; font-weight: bold',
-          'color: inherit'
-        );
-        
-        if (isDetailedLog) {
-          const buildingSummary = Object.entries(buildingCounts)
-            .map(([type, count]) => `${type}:${count}`)
-            .join(', ');
-          console.log(`  [AI Buildings] ${buildingSummary || 'none'}`);
+          
+          const color = aiPlayer.color || '#4CAF50';
+          console.log(
+            `%c[${aiPlayer.name}] Tick ${tick}%c | Pop: ${aiPlayer.population}/${aiPlayer.populationCap} | ` +
+            `👷${citizens} ⚔️${military} | ` +
+            `🍖${Math.round(aiPlayer.resources.food)}(${aiPlayer.resourceRates.food}/s) ` +
+            `🪵${Math.round(aiPlayer.resources.wood)}(${aiPlayer.resourceRates.wood}/s) ` +
+            `⛏️${Math.round(aiPlayer.resources.metal)}(${aiPlayer.resourceRates.metal}/s)`,
+            `color: ${color}; font-weight: bold`,
+            'color: inherit'
+          );
+          
+          if (isDetailedLog) {
+            const buildingSummary = Object.entries(buildingCounts)
+              .map(([type, count]) => `${type}:${count}`)
+              .join(', ');
+            console.log(`  [${aiPlayer.name} Buildings] ${buildingSummary || 'none'}`);
+          }
         }
       }
     }
-  }, [gameState.tick, config.enabled, config.aiPlayerId, gameState.players, gameState.units, gameState.grid, gameState.gridSize]);
+  }, [gameState.tick, config.enabled, config.aiPlayerIds, gameState.players, gameState.units, gameState.grid, gameState.gridSize]);
 
-  const processAITurn = useCallback(async () => {
-    if (isProcessingRef.current || !config.enabled) return;
+  const processAITurn = useCallback(async (aiPlayerId: string) => {
+    const aiState = aiStatesRef.current.get(aiPlayerId);
+    if (!aiState || aiState.isProcessing || !config.enabled) return;
     
     const state = latestStateRef.current;
     if (state.gameSpeed === 0 || state.gameOver) return;
     
-    const aiPlayer = state.players.find(p => p.id === config.aiPlayerId);
+    const aiPlayer = state.players.find(p => p.id === aiPlayerId);
     if (!aiPlayer || aiPlayer.isDefeated) return;
 
-    isProcessingRef.current = true;
-    setIsThinking(true);
+    aiState.isProcessing = true;
+    aiState.lastCallTime = Date.now();
+    setThinkingPlayerIds(prev => [...prev.filter(id => id !== aiPlayerId), aiPlayerId]);
 
     try {
       const response = await fetch('/api/ron-ai', {
@@ -115,33 +163,35 @@ export function useAgenticAI(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gameState: state,
-          aiPlayerId: config.aiPlayerId,
-          previousResponseId: responseIdRef.current,
+          aiPlayerId: aiPlayerId,
+          previousResponseId: aiState.responseId,
         }),
       });
 
       const result = await response.json();
 
       if (result.error) {
-        setLastError(result.error);
+        setLastError(`[${aiPlayer.name}] ${result.error}`);
         // Reset response ID on errors to start fresh
         if (result.error.includes('400') || result.error.includes('invalid')) {
-          responseIdRef.current = undefined;
+          aiState.responseId = undefined;
         }
       } else {
         setLastError(null);
         
         // Save response ID for conversation continuity
         if (result.responseId) {
-          responseIdRef.current = result.responseId;
+          aiState.responseId = result.responseId;
         }
         
-        // Add messages
+        // Add messages with player attribution
         if (result.messages?.length > 0) {
           setMessages(prev => [
             ...prev,
             ...result.messages.map((msg: string) => ({
               id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              playerId: aiPlayerId,
+              playerName: aiPlayer.name,
               message: msg,
               timestamp: Date.now(),
               isRead: false,
@@ -150,7 +200,7 @@ export function useAgenticAI(
         }
 
         // Apply AI actions directly to current state
-        console.log('[AI SYNC] Result received:', { 
+        console.log(`[${aiPlayer.name} SYNC] Result received:`, { 
           hasActions: !!result.actions, 
           actionCount: result.actions?.length,
           hasTick: !!result.newState?.tick 
@@ -162,7 +212,7 @@ export function useAgenticAI(
         }> | undefined;
         
         if (actions && actions.length > 0) {
-          console.log(`[AI SYNC] Applying ${actions.length} actions:`, actions.map(a => a.type).join(', '));
+          console.log(`[${aiPlayer.name} SYNC] Applying ${actions.length} actions:`, actions.map(a => a.type).join(', '));
           
           setGameState((currentState) => {
             let newGrid = currentState.grid.map(row => [...row]);
@@ -174,7 +224,7 @@ export function useAgenticAI(
                 const { building, x, y, ownerId } = action.data as { 
                   building: unknown; x: number; y: number; ownerId: string 
                 };
-                console.log(`[AI SYNC] Building ${(building as {type: string}).type} at (${x},${y})`);
+                console.log(`[${aiPlayer.name} SYNC] Building ${(building as {type: string}).type} at (${x},${y})`);
                 
                 // Apply building to grid
                 if (newGrid[y] && newGrid[y][x]) {
@@ -192,7 +242,7 @@ export function useAgenticAI(
                 
                 const unitIdx = newUnits.findIndex(u => u.id === unitId);
                 if (unitIdx >= 0) {
-                  console.log(`[AI SYNC] Unit ${unitId.slice(0,15)}: task=${task}, target=(${targetX?.toFixed(1)},${targetY?.toFixed(1)})`);
+                  console.log(`[${aiPlayer.name} SYNC] Unit ${unitId.slice(0,15)}: task=${task}, target=(${targetX?.toFixed(1)},${targetY?.toFixed(1)})`);
                   newUnits[unitIdx] = {
                     ...newUnits[unitIdx],
                     task: task as Unit['task'],
@@ -206,7 +256,7 @@ export function useAgenticAI(
                 const { unitType, buildingX, buildingY } = action.data as {
                   unitType: string; buildingX: number; buildingY: number;
                 };
-                console.log(`[AI SYNC] Queued ${unitType} at (${buildingX},${buildingY})`);
+                console.log(`[${aiPlayer.name} SYNC] Queued ${unitType} at (${buildingX},${buildingY})`);
                 
                 // Add to building queue
                 if (newGrid[buildingY] && newGrid[buildingY][buildingX]?.building) {
@@ -223,7 +273,7 @@ export function useAgenticAI(
                 const { playerId, resources } = action.data as {
                   playerId: string; resources: RoNPlayer['resources'];
                 };
-                console.log(`[AI SYNC] Resource boost for ${playerId}: food=${resources.food}, wood=${resources.wood}, metal=${resources.metal}`);
+                console.log(`[${aiPlayer.name} SYNC] Resource boost for ${playerId}: food=${resources.food}, wood=${resources.wood}, metal=${resources.metal}`);
                 newPlayers = newPlayers.map(p => 
                   p.id === playerId ? { ...p, resources } : p
                 );
@@ -232,15 +282,15 @@ export function useAgenticAI(
             
             // Also sync AI player resources from newState
             if (result.newState?.players) {
-              const aiPlayer = result.newState.players.find((p: RoNPlayer) => p.id === config.aiPlayerId);
-              if (aiPlayer) {
+              const returnedPlayer = result.newState.players.find((p: RoNPlayer) => p.id === aiPlayerId);
+              if (returnedPlayer) {
                 newPlayers = newPlayers.map(p => 
-                  p.id === config.aiPlayerId ? { ...p, resources: aiPlayer.resources, age: aiPlayer.age } : p
+                  p.id === aiPlayerId ? { ...p, resources: returnedPlayer.resources, age: returnedPlayer.age } : p
                 );
               }
             }
             
-            console.log(`[AI SYNC] Applied ${actions.length} actions successfully`);
+            console.log(`[${aiPlayer.name} SYNC] Applied ${actions.length} actions successfully`);
             
             const merged = {
               ...currentState,
@@ -255,10 +305,10 @@ export function useAgenticAI(
           // Fallback: sync resources at minimum
           setGameState((currentState) => {
             if (result.newState?.players) {
-              const aiPlayer = result.newState.players.find((p: RoNPlayer) => p.id === config.aiPlayerId);
-              if (aiPlayer) {
+              const returnedPlayer = result.newState.players.find((p: RoNPlayer) => p.id === aiPlayerId);
+              if (returnedPlayer) {
                 const newPlayers = currentState.players.map(p => 
-                  p.id === config.aiPlayerId ? { ...p, resources: aiPlayer.resources, age: aiPlayer.age } : p
+                  p.id === aiPlayerId ? { ...p, resources: returnedPlayer.resources, age: returnedPlayer.age } : p
                 );
                 return { ...currentState, players: newPlayers };
               }
@@ -268,24 +318,32 @@ export function useAgenticAI(
         }
       }
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Error');
+      setLastError(`[${aiPlayer?.name || aiPlayerId}] ${error instanceof Error ? error.message : 'Error'}`);
     } finally {
-      isProcessingRef.current = false;
-      setIsThinking(false);
+      aiState.isProcessing = false;
+      setThinkingPlayerIds(prev => prev.filter(id => id !== aiPlayerId));
     }
-  }, [config.enabled, config.aiPlayerId, setGameState]);
+  }, [config.enabled, setGameState]);
 
+  // Schedule AI turns with staggered timing
   useEffect(() => {
-    if (!config.enabled) return;
+    if (!config.enabled || config.aiPlayerIds.length === 0) return;
 
-    const interval = setInterval(processAITurn, POLL_INTERVAL_MS);
-    const initial = setTimeout(processAITurn, 2000);
+    // Initial calls with stagger
+    const initialTimeouts = config.aiPlayerIds.map((id, index) => 
+      setTimeout(() => processAITurn(id), 2000 + index * STAGGER_DELAY_MS)
+    );
+
+    // Interval calls with stagger
+    const intervals = config.aiPlayerIds.map((id, index) => 
+      setInterval(() => processAITurn(id), POLL_INTERVAL_MS + index * STAGGER_DELAY_MS)
+    );
 
     return () => {
-      clearInterval(interval);
-      clearTimeout(initial);
+      initialTimeouts.forEach(t => clearTimeout(t));
+      intervals.forEach(i => clearInterval(i));
     };
-  }, [config.enabled, processAITurn]);
+  }, [config.enabled, config.aiPlayerIds, processAITurn]);
 
   const markMessageRead = useCallback((messageId: string) => {
     setMessages(prev => prev.map(msg => 
@@ -295,12 +353,31 @@ export function useAgenticAI(
 
   const clearMessages = useCallback(() => setMessages([]), []);
 
+  // Reset all AI state - call this when restarting the game
+  const reset = useCallback(() => {
+    // Clear messages and errors
+    setMessages([]);
+    setLastError(null);
+    setThinkingPlayerIds([]);
+    
+    // Clear all AI conversation histories
+    aiStatesRef.current.forEach((state) => {
+      state.responseId = undefined;
+      state.isProcessing = false;
+      state.lastCallTime = 0;
+    });
+    
+    console.log('[AI] Reset complete - All AI agents will start fresh');
+  }, []);
+
   return {
     messages,
-    isThinking,
+    isThinking: thinkingPlayerIds.length > 0,
+    thinkingPlayerIds,
     lastError,
     thoughts: null,
     markMessageRead,
     clearMessages,
+    reset,
   };
 }

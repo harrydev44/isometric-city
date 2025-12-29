@@ -947,6 +947,18 @@ function updateUnits(state: RoNGameState): RoNGameState {
     
     // Track idle time for citizens - auto-assign work if idle too long
     if (updatedUnit.type === 'citizen') {
+      // Check if worker is stuck: has gather task but no valid target
+      const hasGatherTask = updatedUnit.task?.startsWith('gather_');
+      const hasValidTarget = updatedUnit.taskTarget && 
+        typeof updatedUnit.taskTarget === 'object' && 
+        'x' in updatedUnit.taskTarget;
+      
+      // Reset stuck workers to idle so they can be re-assigned
+      if (hasGatherTask && !hasValidTarget && !updatedUnit.isMoving) {
+        updatedUnit.task = 'idle';
+        updatedUnit.taskTarget = undefined;
+      }
+      
       const isIdle = updatedUnit.task === 'idle' || updatedUnit.task === undefined;
       
       if (isIdle && !updatedUnit.isMoving) {

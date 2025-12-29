@@ -356,7 +356,7 @@ export function createInitialRoNGameState(
     
     // River length (20-50 tiles)
     const riverLength = 20 + Math.floor(Math.random() * 31);
-    const riverWidth = 1 + Math.floor(Math.random() * 2); // 1-2 tiles wide
+    const riverWidth = 2 + Math.floor(Math.random() * 2); // 2-3 tiles wide
     
     // Direction vectors (8 directions)
     const dirVectors = [
@@ -372,6 +372,9 @@ export function createInitialRoNGameState(
     
     let x = startX;
     let y = startY;
+    
+    let prevX = startX;
+    let prevY = startY;
     
     for (let step = 0; step < riverLength; step++) {
       // Mark current tile and width as water
@@ -389,6 +392,22 @@ export function createInitialRoNGameState(
           grid[wy][wx].hasOilDeposit = false;
         }
       }
+      
+      // Fill in diagonal gaps to ensure river connectivity
+      if (step > 0 && prevX !== x && prevY !== y) {
+        // Diagonal move - fill the two adjacent tiles to prevent gaps
+        if (x >= 0 && x < gridSize && prevY >= 0 && prevY < gridSize) {
+          grid[prevY][x].terrain = 'water';
+          grid[prevY][x].forestDensity = 0;
+        }
+        if (prevX >= 0 && prevX < gridSize && y >= 0 && y < gridSize) {
+          grid[y][prevX].terrain = 'water';
+          grid[y][prevX].forestDensity = 0;
+        }
+      }
+      
+      prevX = x;
+      prevY = y;
       
       // Move in current direction
       const vec = dirVectors[direction];
@@ -659,7 +678,7 @@ export function createInitialRoNGameState(
     id: generateUUID(),
     gameName,
     tick: 0,
-    gameSpeed: 1,
+    gameSpeed: 3,
     grid,
     gridSize,
     players,

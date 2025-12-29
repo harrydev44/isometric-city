@@ -268,6 +268,23 @@ export interface CondensedGameState {
     metalDeposits: Array<{ x: number; y: number }>;
     oilDeposits: Array<{ x: number; y: number }>;
   };
+  // Strategic assessment
+  strategicAssessment: {
+    myMilitaryStrength: number;  // Total military value
+    enemyMilitaryStrength: number;
+    strengthAdvantage: 'STRONGER' | 'EQUAL' | 'WEAKER';
+    myWorkerCount: number;
+    myMilitaryCount: number;
+    enemyMilitaryCount: number;
+    threatLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    nearestEnemyDistance: number;
+    isPopCapped: boolean;
+    canAffordSmallCity: boolean;
+    farmCount: number;
+    woodcutterCount: number;
+    mineCount: number;
+    barracksCount: number;
+  };
 }
 
 /**
@@ -408,16 +425,23 @@ export function generateCondensedGameState(
       population: aiPlayer.population,
       populationCap: aiPlayer.populationCap,
     },
-    myUnits: myUnits.slice(0, 20), // Limit to save tokens
-    myBuildings: myBuildings.slice(0, 15),
-    enemyUnits: enemyUnits.slice(0, 10),
-    enemyBuildings: enemyBuildings.slice(0, 10),
+    myUnits: myUnits.slice(0, 30), // Increased limit
+    // Ensure important buildings are included first (cities, barracks)
+    myBuildings: (() => {
+      const importantTypes = ['city_center', 'small_city', 'large_city', 'major_city', 'barracks', 'stable', 'dock', 'library', 'market'];
+      const important = myBuildings.filter(b => importantTypes.includes(b.type));
+      const others = myBuildings.filter(b => !importantTypes.includes(b.type));
+      return [...important, ...others].slice(0, 25);
+    })(),
+    enemyUnits: enemyUnits.slice(0, 15),
+    enemyBuildings: enemyBuildings.slice(0, 15),
     mapSize: state.gridSize,
     availableBuildingTypes,
     availableUnitTypes,
     territoryTiles: territoryTiles.slice(0, 10), // Reduced to save tokens
-    emptyTerritoryTiles: territoryTiles
-      .filter(t => {
+    // Filter empty tiles and space them out for larger building footprints
+    emptyTerritoryTiles: (() => {
+      const empty = territoryTiles.filter(t => {
         const tile = state.grid[t.y]?.[t.x];
         if (!tile) return false;
         if (tile.building) return false;
@@ -425,9 +449,23 @@ export function generateCondensedGameState(
         if (tile.terrain === 'water') return false;
         if (tile.terrain === 'forest') return false;
         if (tile.terrain === 'mountain') return false;
-        return true;
-      })
-      .slice(0, 8), // Empty tiles for building
+        // Check if nearby tiles are also free (for 2x2 or 3x3 buildings)
+        // At least check if the adjacent tile is free
+        const right = state.grid[t.y]?.[t.x + 1];
+        const down = state.grid[t.y + 1]?.[t.x];
+        const hasSpace = (right && !right.building && right.terrain !== 'water') ||
+                        (down && !down.building && down.terrain !== 'water');
+        return hasSpace;
+      });
+      // Space out tiles to avoid suggesting clustered locations
+      const spaced: typeof empty = [];
+      for (const t of empty) {
+        const tooClose = spaced.some(s => Math.abs(s.x - t.x) < 3 && Math.abs(s.y - t.y) < 3);
+        if (!tooClose) spaced.push(t);
+        if (spaced.length >= 10) break;
+      }
+      return spaced;
+    })(),
     // Find tiles ADJACENT to forests (good for woodcutters_camp)
     tilesNearForest: territoryTiles
       .filter(t => {
@@ -476,6 +514,75 @@ export function generateCondensedGameState(
       metalDeposits: metalDeposits.slice(0, 5),
       oilDeposits: oilDeposits.slice(0, 5),
     },
+    // Calculate strategic assessment
+    strategicAssessment: (() => {
+      // Calculate military strength (unit value based on cost/stats)
+      const unitValue = (type: string): number => {
+        const stats = UNIT_STATS[type as UnitType];
+        if (!stats) return 0;
+        if (type === 'citizen') return 0; // Workers don't count as military
+        // Value based on attack + health
+        return (stats.attack || 0) * 2 + (stats.health || 0) / 10;
+      };
+      
+      const myMilitary = myUnits.filter(u => u.type !== 'citizen');
+      const enemyMilitary = enemyUnits.filter(u => u.type !== 'citizen');
+      
+      const myMilitaryStrength = myMilitary.reduce((sum, u) => sum + unitValue(u.type), 0);
+      const enemyMilitaryStrength = enemyMilitary.reduce((sum, u) => sum + unitValue(u.type), 0);
+      
+      let strengthAdvantage: 'STRONGER' | 'EQUAL' | 'WEAKER' = 'EQUAL';
+      if (myMilitaryStrength > enemyMilitaryStrength * 1.3) strengthAdvantage = 'STRONGER';
+      else if (enemyMilitaryStrength > myMilitaryStrength * 1.3) strengthAdvantage = 'WEAKER';
+      
+      // Find nearest enemy
+      const myCityCenter = myBuildings.find(b => b.type === 'city_center');
+      let nearestEnemyDistance = 999;
+      if (myCityCenter) {
+        for (const enemy of [...enemyUnits, ...enemyBuildings]) {
+          const dist = Math.sqrt(Math.pow(enemy.x - myCityCenter.x, 2) + Math.pow(enemy.y - myCityCenter.y, 2));
+          if (dist < nearestEnemyDistance) nearestEnemyDistance = dist;
+        }
+      }
+      
+      // Determine threat level
+      let threatLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'NONE';
+      if (nearestEnemyDistance < 10 && enemyMilitary.length > 0) threatLevel = 'CRITICAL';
+      else if (nearestEnemyDistance < 20 && enemyMilitary.length >= 3) threatLevel = 'HIGH';
+      else if (nearestEnemyDistance < 30 && enemyMilitary.length >= 2) threatLevel = 'MEDIUM';
+      else if (enemyMilitary.length > 0) threatLevel = 'LOW';
+      
+      // Count buildings
+      let farmCount = 0, woodcutterCount = 0, mineCount = 0, barracksCount = 0;
+      for (const b of myBuildings) {
+        if (b.type === 'farm') farmCount++;
+        else if (b.type === 'woodcutters_camp') woodcutterCount++;
+        else if (b.type === 'mine') mineCount++;
+        else if (b.type === 'barracks') barracksCount++;
+      }
+      
+      const isPopCapped = aiPlayer.population >= aiPlayer.populationCap;
+      const canAffordSmallCity = aiPlayer.resources.wood >= 400 && 
+                                  aiPlayer.resources.gold >= 200 && 
+                                  aiPlayer.resources.metal >= 100;
+      
+      return {
+        myMilitaryStrength: Math.round(myMilitaryStrength),
+        enemyMilitaryStrength: Math.round(enemyMilitaryStrength),
+        strengthAdvantage,
+        myWorkerCount: myUnits.filter(u => u.type === 'citizen').length,
+        myMilitaryCount: myMilitary.length,
+        enemyMilitaryCount: enemyMilitary.length,
+        threatLevel,
+        nearestEnemyDistance: Math.round(nearestEnemyDistance),
+        isPopCapped,
+        canAffordSmallCity,
+        farmCount,
+        woodcutterCount,
+        mineCount,
+        barracksCount,
+      };
+    })(),
   };
 }
 
@@ -910,11 +1017,24 @@ export function executeAssignIdleWorkers(
     return { newState: state, result: { success: false, message: 'AI player not found' } };
   }
 
-  // Find idle or moving citizens
+  // First, detect and fix stuck workers (gather task but no valid target)
+  // These workers are useless - they have a task but aren't actually working
+  const stuckWorkers = state.units.filter(u => {
+    if (u.ownerId !== aiPlayerId || u.type !== 'citizen') return false;
+    const hasGatherTask = u.task?.startsWith('gather_');
+    const hasValidTarget = u.taskTarget && typeof u.taskTarget === 'object' && 'x' in u.taskTarget;
+    return hasGatherTask && !hasValidTarget && !u.isMoving;
+  });
+  
+  if (stuckWorkers.length > 0) {
+    console.log(`[assign_workers] Found ${stuckWorkers.length} STUCK workers with gather task but no target - treating as idle`);
+  }
+
+  // Find idle or moving citizens, INCLUDING stuck workers
   let idleCitizens = state.units.filter(u =>
     u.ownerId === aiPlayerId &&
     u.type === 'citizen' &&
-    (u.task === 'idle' || u.task === 'move')
+    (u.task === 'idle' || u.task === 'move' || stuckWorkers.some(sw => sw.id === u.id))
   );
 
   // SMART REBALANCING: If food rate is high but wood/metal rate is 0, reassign some farmers
@@ -1093,12 +1213,15 @@ export function executeAssignIdleWorkers(
     .map(b => `${b.task.replace('gather_', '')}@${b.x},${b.y}`)
     .join(', ');
 
-  // Log unit task changes for debugging
+  // Log unit task changes for debugging - only show THIS player's units
   if (assigned > 0) {
-    console.log(`[assign_workers] Updated ${assigned} units with new tasks:`);
-    newUnits.filter(u => u.task?.startsWith('gather_')).slice(0, 5).forEach(u => {
-      console.log(`  - Unit ${u.id.slice(0,8)}: task=${u.task}, isMoving=${u.isMoving}, target=(${u.targetX?.toFixed(1)},${u.targetY?.toFixed(1)})`);
-    });
+    console.log(`[assign_workers] Updated ${assigned} units for player ${aiPlayerId}:`);
+    newUnits
+      .filter(u => u.ownerId === aiPlayerId && u.task?.startsWith('gather_'))
+      .slice(0, 5)
+      .forEach(u => {
+        console.log(`  - Unit ${u.id.slice(0,8)}: task=${u.task}, isMoving=${u.isMoving}, target=(${u.targetX?.toFixed(1)},${u.targetY?.toFixed(1)})`);
+      });
   }
 
   return {

@@ -4118,18 +4118,40 @@ export function expandGrid(
       // Draw river using random walk biased toward end point
       let curX = startX;
       let curY = startY;
+      let prevX = startX;
+      let prevY = startY;
       const riverLength = 15 + Math.floor(Math.random() * 25); // 15-40 tiles
-      const riverWidth = 1 + Math.floor(Math.random() * 2); // 1-2 tiles wide
+      const riverWidth = 2 + Math.floor(Math.random() * 2); // 2-3 tiles wide
       
       for (let step = 0; step < riverLength; step++) {
-        // Place water at current position (and width)
-        for (let w = 0; w < riverWidth; w++) {
-          const wx = curX + (w % 2);
-          const wy = curY + Math.floor(w / 2);
+        // Place water at current position (and width) - expand in both directions
+        for (let w = -Math.floor(riverWidth / 2); w <= Math.floor(riverWidth / 2); w++) {
+          const wx = curX + w;
+          const wy = curY;
           if (wx >= 0 && wy >= 0 && wx < newSize && wy < newSize && isExpansionTile(wx, wy)) {
             grid[wy][wx].building = createBuilding('water');
           }
+          // Also expand vertically for rounder rivers
+          const wx2 = curX;
+          const wy2 = curY + w;
+          if (wx2 >= 0 && wy2 >= 0 && wx2 < newSize && wy2 < newSize && isExpansionTile(wx2, wy2)) {
+            grid[wy2][wx2].building = createBuilding('water');
+          }
         }
+        
+        // Fill in diagonal gaps to ensure river connectivity
+        if (step > 0 && prevX !== curX && prevY !== curY) {
+          // Diagonal move - fill the two adjacent tiles to prevent gaps
+          if (curX >= 0 && curX < newSize && prevY >= 0 && prevY < newSize && isExpansionTile(curX, prevY)) {
+            grid[prevY][curX].building = createBuilding('water');
+          }
+          if (prevX >= 0 && prevX < newSize && curY >= 0 && curY < newSize && isExpansionTile(prevX, curY)) {
+            grid[curY][prevX].building = createBuilding('water');
+          }
+        }
+        
+        prevX = curX;
+        prevY = curY;
         
         // Move toward end with some randomness (Perlin noise for organic curves)
         const riverNoise = perlinNoise(curX * 0.2, curY * 0.2, expansionSeed + 5000 + r * 100, 2);

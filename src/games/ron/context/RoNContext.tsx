@@ -197,11 +197,12 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   // Agentic AI state - enabled by default
   const [agenticAIEnabled, setAgenticAIEnabled] = useState(true);
 
-  // Initialize with a default 2-player game (1 human vs 1 AI)
+  // Initialize with a default 3-player game (1 human vs 2 AIs)
   const [state, setState] = useState<RoNGameState>(() =>
     createInitialRoNGameState(100, [
       { name: 'Player', type: 'human', color: '#3b82f6' },
-      { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+      { name: 'AI Red', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+      { name: 'AI Green', type: 'ai', difficulty: 'medium', color: '#22c55e' },
     ])
   );
 
@@ -214,13 +215,13 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const lastSaveTimeRef = useRef(0);
   const skipNextSaveRef = useRef(false);
 
-  // Find AI player ID
-  const aiPlayerId = state.players.find(p => p.type === 'ai')?.id || '';
+  // Find all AI player IDs
+  const aiPlayerIds = state.players.filter(p => p.type === 'ai').map(p => p.id);
   
-  // Agentic AI hook - uses OpenAI Responses SDK
+  // Agentic AI hook - uses OpenAI Responses SDK (supports multiple AIs)
   const agenticAIConfig: AgenticAIConfig = {
-    enabled: agenticAIEnabled && !!aiPlayerId,
-    aiPlayerId,
+    enabled: agenticAIEnabled && aiPlayerIds.length > 0,
+    aiPlayerIds,
     actionInterval: 100, // AI acts every 100 ticks
   };
   
@@ -851,11 +852,14 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   }) => {
     // Clear saved state when starting a new game
     clearRoNGameState();
-    
+
     const newState = createInitialRoNGameState(config.gridSize, config.playerConfigs);
     skipNextSaveRef.current = true; // Will save on next state change cycle
     setState(newState);
-  }, []);
+    
+    // Reset AI state so it starts fresh with a new conversation
+    agenticAI.reset();
+  }, [agenticAI]);
   
   // Helpers
   const getCurrentPlayer = useCallback((): RoNPlayer | undefined => {
@@ -914,13 +918,17 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const resetGame = useCallback(() => {
     const newState = createInitialRoNGameState(100, [
       { name: 'Player', type: 'human', color: '#3b82f6' },
-      { name: 'AI', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+      { name: 'AI Red', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+      { name: 'AI Green', type: 'ai', difficulty: 'medium', color: '#22c55e' },
     ]);
     setState(newState);
     latestStateRef.current = newState;
     setSelectedBuildingPos(null);
     clearRoNGameState();
-  }, []);
+    
+    // Reset AI state so it starts fresh with a new conversation
+    agenticAI.reset();
+  }, [agenticAI]);
 
   const value: RoNContextValue = {
     state,

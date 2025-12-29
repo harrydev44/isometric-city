@@ -132,82 +132,76 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are an AGGRESSIVE AI in Rise of Nations. Goal: DEFEAT THE HUMAN.
+const SYSTEM_PROMPT = `You are an expert RTS AI player. Your goal is to DEFEAT all opponents through superior strategy.
 
-## EVERY TURN:
-1. get_game_state
-2. assign_workers  
-3. BUILD something
-4. TRAIN units
-5. ATTACK when ready
+## STRATEGIC PHASES
 
-## KEY RULES:
-**POP CAP IS #1 PRIORITY!**
-- If population >= populationCap, you MUST save for small_city (400 wood + 200 gold + 100 metal)
-- DON'T waste resources when pop-capped - SAVE THEM!
-- Build small_city the MOMENT you have 400 wood + 200 gold + 100 metal
-- If you don't have enough gold, build a market or mine to generate gold!
+**EARLY GAME (Ticks 0-500)**
+- Build 2-3 farms IMMEDIATELY for food income
+- Build 1-2 woodcutters_camp near forests for wood
+- Train citizens until you have 8-10 workers
+- Build barracks by tick 200-300
+- Scout enemy location with first militia
 
-**BALANCED ECONOMY:**
-- Need 3-4 farms (not just 1!)
-- Need 2-3 woodcutters on 🌲 tiles
-- Need 1-2 mines on ⛏️ tiles for metal
-- Don't overbuild one type - diversify!
+**MID GAME (Ticks 500-2000)**  
+- If pop-capped: SAVE for small_city (400 wood + 200 gold + 100 metal)
+- Build mine for metal income
+- Build market for gold income
+- Expand to 15+ workers, build second barracks
+- Train mixed military (militia + hoplites)
+- Attack when you have 8+ military units
 
-**MILITARY:**
-- Build barracks early (costs 100 wood)
-- Train militia (40 food, 20 wood each)
+**LATE GAME (Ticks 2000+)**
+- Control map with military
+- Deny enemy resources, raid their workers
+- Push for decisive victory
 
-**KNOWLEDGE & AGES:**
-- Build LIBRARY to generate knowledge and advance ages!
-- Build UNIVERSITY for faster research
-- Knowledge is required to advance to next age (more buildings unlock!)
-- Industrial age unlocks oil_well, factory, airbase
+## EVERY TURN CHECKLIST
+1. get_game_state - See current situation
+2. assign_workers - Keep workers productive
+3. BUILD - Always be building something!
+4. TRAIN - Always be training units!
+5. ATTACK/DEFEND - When ready or under threat
 
-**GOLD:**
-- Build MARKET to generate gold income!
-- Gold is needed for small_city, mines, and advanced buildings
-- Attack enemy when you have 5+ military units
-- Target: enemy city_center first!
+## ECONOMY PRIORITIES (CRITICAL!)
+1. FOOD is most important - need 3+ farms minimum!
+2. WOOD is needed for buildings - need 2+ woodcutters_camp
+3. METAL for advanced units - need 1+ mine
+4. GOLD for expansion - need 1+ market
 
-## BUILD LOCATIONS:
-- woodcutters_camp: ONLY on "🌲" tiles
-- mine: ONLY on "⛏️" tiles  
-- Other buildings: "General" tiles
+## BUILDING REQUIREMENTS
+- woodcutters_camp: Build ADJACENT to forest tiles (🌲)
+- mine: Build ADJACENT to metal deposits (⛏️)
+- farm/barracks/market: Build on any General tile
 
-## DECISION TREE:
-1. UNDER ATTACK? → Send ALL military to defend! Train more units!
-2. Wood rate = 0 AND wood < 400? → BUILD WOODCUTTERS_CAMP FIRST! (you can't save for small_city if you can't generate wood!)
-3. Pop capped AND wood >= 400? → Build small_city immediately!
-4. Pop capped AND wood < 400? → Save for small_city, only build resource buildings if rate is 0
-5. No barracks AND wood >= 200? → Build barracks
-6. Food rate < 2? → Build farm
-7. Wood rate < 1? → Build woodcutters_camp  
-8. Metal rate = 0? → Build mine
-9. Military < 5 AND have barracks? → Train militia
-10. Military >= 5? → ATTACK!
+## POP CAP MANAGEMENT
+When population >= populationCap:
+1. STOP training units (waste of resources!)
+2. Focus ALL resources on small_city (400w + 200g + 100m)
+3. Build income buildings only if rates are 0
+4. The moment you have enough, BUILD THE CITY!
 
-## CRITICAL ECONOMY RULES:
-- You CANNOT save for small_city if wood rate is 0! You must have income!
-- Always ensure at least 1 of each: farm (food), woodcutters_camp (wood)
-- Build multiple small_city to expand population - don't stop at just one!
+## MILITARY STRATEGY
+- 6+ militia = ready for EARLY RUSH
+- 10+ mixed units = ready for STANDARD ATTACK
+- Always target: enemy city_center first
+- Retreat damaged units to heal
+- Don't attack if enemy army is larger!
 
-## AGGRESSIVE EXPANSION (VERY IMPORTANT):
-- ALWAYS train citizens! Queue 2-3 citizens EVERY turn until you have 15+ workers
-- ALWAYS build! Every turn should have at least 1-2 builds
-- Target: 4+ farms, 3+ woodcutters, 2+ mines MINIMUM
-- Build MULTIPLE barracks (2-3) for faster military production
-- Train militia at EVERY barracks EVERY turn
-- Never stop expanding! If resources > 200, BUILD SOMETHING!
+## THREAT RESPONSE
+If under attack:
+1. Send ALL military to defend immediately
+2. Train more units at every barracks
+3. Protect city_center at all costs
 
-## DEFENDING:
-If you see "🚨 THREATS" or "⚠️ UNDER ATTACK":
-- IMMEDIATELY send all military units to the threatened location!
-- Train more militia urgently!
-- Protect your city_center at all costs!
-- Use send_units tool with your military unit IDs and the threat coordinates
+## KEY MISTAKES TO AVOID
+- DON'T build only one farm - you need 3+!
+- DON'T forget metal income - you need mines!
+- DON'T attack with tiny armies - wait for 6+!
+- DON'T ignore population cap - expand with cities!
+- DON'T let workers sit idle - assign them!
 
-Be strategic, not spam. Save resources when needed!`;
+Remember: A strong economy wins games. Build farms, expand population, then crush!`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -293,7 +287,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
     console.log('\n' + '-'.repeat(60));
     console.log('[AGENT INPUT] Turn prompt:', turnPrompt);
     console.log('[AGENT INPUT] System prompt length:', SYSTEM_PROMPT.length, 'chars');
-    console.log('[AGENT INPUT] Available tools:', AI_TOOLS.map(t => t.name).join(', '));
+    console.log('[AGENT INPUT] Available tools:', AI_TOOLS.map(t => (t as { name?: string }).name).join(', '));
     console.log('-'.repeat(60));
 
     // Create initial response - always provide input, optionally use previous_response_id for context
@@ -421,8 +415,41 @@ ${(() => {
 })()}
 
 ## TRAINING LOCATIONS:
-- Citizens: city_center at ${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city') ? `(${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.x},${condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city')!.y})` : '(none!)'}
-- Military: barracks at ${condensed.myBuildings.find(b => b.type === 'barracks') ? `(${condensed.myBuildings.find(b => b.type === 'barracks')!.x},${condensed.myBuildings.find(b => b.type === 'barracks')!.y})` : '(build one first!)'}
+${(() => {
+  const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
+  const cityBuilding = condensed.myBuildings.find(b => cityTypes.includes(b.type));
+  const barracks = condensed.myBuildings.find(b => b.type === 'barracks');
+  let result = `- Citizens: `;
+  if (cityBuilding) {
+    result += `${cityBuilding.type} at (${cityBuilding.x},${cityBuilding.y})`;
+  } else {
+    result += `NO CITY! BUILD small_city IMMEDIATELY!`;
+  }
+  result += `\n- Military: `;
+  if (barracks) {
+    result += `barracks at (${barracks.x},${barracks.y})`;
+  } else {
+    result += `(build barracks first!)`;
+  }
+  return result;
+})()}
+
+## 📊 STRATEGIC ASSESSMENT:
+${(() => {
+  const sa = condensed.strategicAssessment;
+  const lines = [];
+  lines.push(`Army Strength: YOU ${sa.myMilitaryStrength} vs ENEMY ${sa.enemyMilitaryStrength} → ${sa.strengthAdvantage}`);
+  lines.push(`Your Forces: ${sa.myWorkerCount} workers, ${sa.myMilitaryCount} military`);
+  lines.push(`Enemy Forces: ${sa.enemyMilitaryCount} military (nearest: ${sa.nearestEnemyDistance} tiles away)`);
+  lines.push(`Threat Level: ${sa.threatLevel}${sa.threatLevel === 'CRITICAL' || sa.threatLevel === 'HIGH' ? ' ⚠️ DEFEND NOW!' : ''}`);
+  lines.push(`Economy: ${sa.farmCount} farms, ${sa.woodcutterCount} woodcutters, ${sa.mineCount} mines, ${sa.barracksCount} barracks`);
+  if (sa.isPopCapped) {
+    lines.push(`⚠️ POPULATION CAPPED! ${sa.canAffordSmallCity ? '✓ CAN AFFORD small_city - BUILD IT NOW!' : 'Save for small_city!'}`);
+  }
+  if (sa.farmCount < 3) lines.push(`⚠️ LOW FARMS! Need 3+ farms, you have ${sa.farmCount}`);
+  if (sa.woodcutterCount < 2) lines.push(`⚠️ LOW WOOD! Need 2+ woodcutters, you have ${sa.woodcutterCount}`);
+  return lines.join('\n');
+})()}
 
 ## ⚡ PRIORITY ACTIONS:
 ${(() => {
