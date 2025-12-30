@@ -1728,3 +1728,124 @@ export function executeReassignWorker(
     },
   };
 }
+
+/**
+ * Reassign a specific worker to gather a resource type.
+ * Finds an appropriate building for that resource automatically.
+ */
+export function executeReassignWorkerToResource(
+  state: RoNGameState,
+  aiPlayerId: string,
+  unitId: string,
+  resourceType: string
+): { newState: RoNGameState; result: ToolResult } {
+  // Find the unit
+  const unit = state.units.find(u => u.id === unitId || u.id.endsWith(unitId));
+  
+  if (!unit) {
+    return { newState: state, result: { success: false, message: `Unit ${unitId} not found` } };
+  }
+  
+  if (unit.ownerId !== aiPlayerId) {
+    return { newState: state, result: { success: false, message: `Unit ${unitId} is not yours` } };
+  }
+  
+  if (unit.type !== 'citizen') {
+    return { newState: state, result: { success: false, message: `Unit ${unitId} is not a citizen (is ${unit.type})` } };
+  }
+  
+  // Map resource type to task
+  const resourceToTask: Record<string, string> = {
+    'food': 'gather_food',
+    'wood': 'gather_wood',
+    'metal': 'gather_metal',
+    'gold': 'gather_gold',
+    'knowledge': 'gather_knowledge',
+    'oil': 'gather_oil',
+  };
+  
+  const task = resourceToTask[resourceType];
+  if (!task) {
+    return { newState: state, result: { success: false, message: `Unknown resource type: ${resourceType}` } };
+  }
+  
+  // Map resource to building types
+  const resourceToBuildings: Record<string, string[]> = {
+    'food': ['farm'],
+    'wood': ['woodcutters_camp'],
+    'metal': ['mine', 'smelter'],
+    'gold': ['market'],
+    'knowledge': ['library', 'university', 'temple'],
+    'oil': ['oil_well', 'refinery'],
+  };
+  
+  const validBuildingTypes = resourceToBuildings[resourceType] || [];
+  
+  // Find a building of this type that has room for workers (max 3 per building)
+  const MAX_WORKERS_PER_BUILDING = 3;
+  let targetBuilding: { x: number; y: number; type: string } | null = null;
+  
+  for (let y = 0; y < state.gridSize; y++) {
+    for (let x = 0; x < state.gridSize; x++) {
+      const tile = state.grid[y]?.[x];
+      if (!tile?.building) continue;
+      if (tile.building.ownerId !== aiPlayerId) continue;
+      if (tile.building.constructionProgress !== 100) continue;
+      if (!validBuildingTypes.includes(tile.building.type)) continue;
+      
+      // Count workers at this building
+      const workersHere = state.units.filter(u =>
+        u.ownerId === aiPlayerId &&
+        u.type === 'citizen' &&
+        u.taskTarget &&
+        typeof u.taskTarget === 'object' &&
+        'x' in u.taskTarget &&
+        Math.floor(u.taskTarget.x) === x &&
+        Math.floor(u.taskTarget.y) === y
+      ).length;
+      
+      if (workersHere < MAX_WORKERS_PER_BUILDING) {
+        targetBuilding = { x, y, type: tile.building.type };
+        break;
+      }
+    }
+    if (targetBuilding) break;
+  }
+  
+  if (!targetBuilding) {
+    return { 
+      newState: state, 
+      result: { 
+        success: false, 
+        message: `No ${resourceType} building with available capacity. Build more ${validBuildingTypes.join('/')}!` 
+      } 
+    };
+  }
+  
+  // Update the unit
+  const newUnits = state.units.map(u => {
+    if (u.id === unit.id) {
+      return {
+        ...u,
+        task: task as Unit['task'],
+        taskTarget: { x: targetBuilding!.x, y: targetBuilding!.y },
+        targetX: targetBuilding!.x + (Math.random() - 0.5) * 0.5,
+        targetY: targetBuilding!.y + (Math.random() - 0.5) * 0.5,
+        isMoving: true,
+        idleSince: undefined,
+      };
+    }
+    return u;
+  });
+  
+  const prevTask = unit.task || 'idle';
+  console.log(`[assign_workers] Reassigned ${unit.id} from ${prevTask} to ${task} at ${targetBuilding.type} (${targetBuilding.x}, ${targetBuilding.y})`);
+  
+  return {
+    newState: { ...state, units: newUnits },
+    result: {
+      success: true,
+      message: `Reassigned ${unitId} from ${prevTask.replace('gather_', '')} to ${resourceType} at ${targetBuilding.type}`,
+    },
+  };
+}

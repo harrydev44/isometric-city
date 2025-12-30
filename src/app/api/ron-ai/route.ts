@@ -18,8 +18,7 @@ import {
   executeCreateUnit,
   executeSendUnits,
   executeAdvanceAge,
-  executeAssignIdleWorkers,
-  executeReassignWorker,
+  executeReassignWorkerToResource,
 } from '@/games/ron/lib/aiTools';
 
 // Helper to format cost from building/unit stats
@@ -193,13 +192,23 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   },
   {
     type: 'function',
-    name: 'assign_workers',
-    description: 'Automatically assign idle workers to economic buildings. Also rebalances workers if wood/metal rate is 0. CALL THIS EVERY TURN!',
+    name: 'assign_worker',
+    description: 'Assign a worker to gather a resource. Call for EACH idle worker! Also use to reassign workers between resources.',
     strict: true,
     parameters: {
       type: 'object',
-      properties: {},
-      required: [] as string[],
+      properties: {
+        unit_id: { 
+          type: 'string', 
+          description: 'Worker ID (e.g., "citizen-0"). See game state for idle workers and their IDs.' 
+        },
+        resource_type: { 
+          type: 'string', 
+          enum: ['food', 'wood', 'metal', 'gold', 'knowledge', 'oil'],
+          description: 'Resource to gather: food(farm), wood(woodcutters_camp), metal(mine), gold(market), knowledge(library), oil(oil_well).'
+        },
+      },
+      required: ['unit_id', 'resource_type'],
       additionalProperties: false,
     },
   },
@@ -325,7 +334,7 @@ MILITARY (CRITICAL!):
 - Have 10+ military? Start attacking enemy buildings!
 - DEFENSE: If Threat Level is HIGH/CRITICAL, send military to intercept enemies!
 
-TURN ORDER: get_game_state → assign_workers, build small_city if affordable → build economy buildings → build barracks → train citizens/infantry → attack
+TURN ORDER: get_game_state → assign_worker for each idle citizen → build small_city if affordable → build economy buildings → build barracks → train citizens/infantry → attack
 EXPAND with cities! ATTACK enemies! DEFEND when threatened!`;
 
 interface AIAction {
@@ -899,37 +908,9 @@ ${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u
             break;
           }
 
-          case 'assign_workers': {
-            const res = executeAssignIdleWorkers(currentState, aiPlayerId);
-            currentState = res.newState;
-            result = res.result;
-            console.log(`  → ${result.message}`);
-            // Track unit task updates for frontend
-            if (res.result.success && (res.result.data as { assigned?: number })?.assigned && (res.result.data as { assigned: number }).assigned > 0) {
-              // Get all AI units with gather tasks
-              const aiUnits = currentState.units.filter((u: { ownerId: string; task?: string }) => 
-                u.ownerId === aiPlayerId && u.task?.startsWith('gather_')
-              );
-              aiUnits.forEach((u: { id: string; task: string; taskTarget?: unknown; targetX?: number; targetY?: number; isMoving?: boolean }) => {
-                actions.push({
-                  type: 'unit_task',
-                  data: { 
-                    unitId: u.id, 
-                    task: u.task, 
-                    taskTarget: u.taskTarget,
-                    targetX: u.targetX,
-                    targetY: u.targetY,
-                    isMoving: u.isMoving
-                  }
-                });
-              });
-            }
-            break;
-          }
-
-          case 'reassign_worker': {
-            const { unit_id, target_x, target_y } = args as { unit_id: string; target_x: number; target_y: number };
-            const res = executeReassignWorker(currentState, aiPlayerId, unit_id, target_x, target_y);
+          case 'assign_worker': {
+            const { unit_id, resource_type } = args as { unit_id: string; resource_type: string };
+            const res = executeReassignWorkerToResource(currentState, aiPlayerId, unit_id, resource_type);
             currentState = res.newState;
             result = res.result;
             console.log(`  → ${result.message}`);
