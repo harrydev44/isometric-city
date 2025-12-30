@@ -1,7 +1,13 @@
 /**
  * Rise of Nations - Unit Types
  * 
- * Units are movable entities that can gather resources, build, or fight.
+ * SIMPLIFIED SYSTEM: Each military building produces ONE unit type that scales with age.
+ * - Barracks -> Infantry (scales from militia to assault infantry)
+ * - Stable -> Cavalry (scales from light cavalry to tanks)
+ * - Siege Workshop -> Siege (scales from catapult to artillery)
+ * - Archery Range -> Ranged (scales from archers to skirmishers)
+ * - Dock -> Naval (scales from galley to destroyer)
+ * - Airfield -> Air (scales from biplane to fighter)
  */
 
 import { Age } from './ages';
@@ -16,94 +22,18 @@ export type UnitCategory =
   | 'naval'       // Ships
   | 'air';        // Aircraft
 
+// Simplified unit types - one main type per category that scales with age
 export type UnitType =
   // Civilian
   | 'citizen'     // Basic worker, gathers resources, builds
-  | 'merchant'    // Trade caravans
-  | 'scholar'     // Research boost
-  | 'spy'         // Espionage
-  // Infantry - Ancient/Classical
-  | 'militia'
-  | 'hoplite'
-  | 'legionary'
-  // Infantry - Medieval
-  | 'pikeman'
-  | 'swordsman'
-  | 'knight_foot'
-  // Infantry - Enlightenment
-  | 'musketeer'
-  | 'fusilier'
-  // Infantry - Industrial
-  | 'rifleman'
-  | 'machine_gunner'
-  // Infantry - Modern
-  | 'assault_infantry'
-  | 'special_forces'
-  // Ranged - Ancient/Classical
-  | 'slinger'
-  | 'archer'
-  | 'crossbowman'
-  // Ranged - Medieval
-  | 'longbowman'
-  // Ranged - Enlightenment/Industrial
-  | 'skirmisher'
-  // Cavalry - Ancient/Classical
-  | 'scout_cavalry'
-  | 'light_cavalry'
-  | 'heavy_cavalry'
-  // Cavalry - Medieval
-  | 'knight'
-  | 'cataphract'
-  // Cavalry - Enlightenment
-  | 'dragoon'
-  | 'cuirassier'
-  // Cavalry/Vehicles - Industrial
-  | 'armored_car'
-  | 'light_tank'
-  // Cavalry/Vehicles - Modern
-  | 'main_battle_tank'
-  | 'apc'
-  // Siege - Ancient/Classical
-  | 'battering_ram'
-  | 'catapult'
-  // Siege - Medieval
-  | 'trebuchet'
-  | 'bombard'
-  // Siege - Enlightenment
-  | 'cannon'
-  | 'mortar'
-  // Siege - Industrial
-  | 'howitzer'
-  | 'field_gun'
-  // Siege - Modern
-  | 'artillery'
-  | 'mlrs'
-  // Naval - Ancient
-  | 'fishing_boat'
-  | 'galley'
-  | 'trireme'
-  // Naval - Medieval
-  | 'carrack'
-  | 'galleass'
-  // Naval - Enlightenment
-  | 'frigate'
-  | 'ship_of_the_line'
-  // Naval - Industrial
-  | 'ironclad'
-  | 'battleship'
-  | 'cruiser'
-  // Naval - Modern
-  | 'destroyer'
-  | 'aircraft_carrier'
-  | 'submarine'
-  // Air - Industrial (late)
-  | 'biplane'
-  | 'bomber_early'
-  // Air - Modern
-  | 'fighter'
-  | 'bomber'
-  | 'helicopter'
-  | 'stealth_bomber';
+  // Military - ONE per building, scales with age
+  | 'infantry'    // Barracks: militia -> rifleman -> assault infantry
+  | 'ranged'      // Archery Range: archer -> crossbow -> skirmisher
+  | 'cavalry'     // Stable: light cavalry -> knight -> tank
+  | 'siege'       // Siege Workshop: catapult -> cannon -> artillery
+  | 'naval'       // Dock: galley -> frigate -> destroyer
+  | 'air'         // Airfield: biplane -> fighter
+  | 'fishing_boat'; // Special - dock can also make these
 
 export interface UnitStats {
   category: UnitCategory;
@@ -126,223 +56,100 @@ export interface UnitStats {
   carriesUnits?: number; // Can transport other units
 }
 
+// Age-based stat multipliers for military units
+const AGE_MULTIPLIERS: Record<Age, { health: number; attack: number; cost: number }> = {
+  'classical': { health: 1.0, attack: 1.0, cost: 1.0 },
+  'medieval': { health: 1.4, attack: 1.3, cost: 1.3 },
+  'enlightenment': { health: 1.8, attack: 1.7, cost: 1.6 },
+  'industrial': { health: 2.5, attack: 2.5, cost: 2.0 },
+  'modern': { health: 3.5, attack: 3.5, cost: 2.5 },
+};
+
+// Age-based unit names for display/drawing
+export const UNIT_AGE_NAMES: Record<UnitType, Partial<Record<Age, string>>> = {
+  'citizen': {},
+  'infantry': {
+    'classical': 'Militia',
+    'medieval': 'Pikeman',
+    'enlightenment': 'Musketeer',
+    'industrial': 'Rifleman',
+    'modern': 'Assault Infantry',
+  },
+  'ranged': {
+    'classical': 'Archer',
+    'medieval': 'Crossbowman',
+    'enlightenment': 'Skirmisher',
+    'industrial': 'Sharpshooter',
+    'modern': 'Marksman',
+  },
+  'cavalry': {
+    'classical': 'Light Cavalry',
+    'medieval': 'Knight',
+    'enlightenment': 'Dragoon',
+    'industrial': 'Armored Car',
+    'modern': 'Tank',
+  },
+  'siege': {
+    'classical': 'Catapult',
+    'medieval': 'Trebuchet',
+    'enlightenment': 'Cannon',
+    'industrial': 'Howitzer',
+    'modern': 'Artillery',
+  },
+  'naval': {
+    'classical': 'Galley',
+    'medieval': 'Carrack',
+    'enlightenment': 'Frigate',
+    'industrial': 'Ironclad',
+    'modern': 'Destroyer',
+  },
+  'air': {
+    'industrial': 'Biplane',
+    'modern': 'Fighter',
+  },
+  'fishing_boat': {},
+};
+
+// Base stats (classical age) - these get multiplied by age
 export const UNIT_STATS: Record<UnitType, UnitStats> = {
-  // Civilians
+  // Civilians - don't scale with age
   citizen: {
     category: 'civilian',
-    cost: { food: 60 },  // Reasonable cost for growth
+    cost: { food: 60 },
     health: 30,
     attack: 2,
     defense: 0,
     speed: 1.5,
     range: 1,
-    buildTime: 45,  // ~1.5 mins to train
+    buildTime: 45,
     minAge: 'classical',
     visionRange: 4,
     canBuild: true,
     canGather: true,
   },
-  merchant: {
-    category: 'civilian',
-    cost: { food: 30, gold: 50 },
-    health: 50,
-    attack: 0,
-    defense: 0,
-    speed: 2,
-    range: 0,
-    buildTime: 30,
-    minAge: 'classical',
-    visionRange: 5,
-  },
-  scholar: {
-    category: 'civilian',
-    cost: { food: 40, gold: 40, knowledge: 20 },
-    health: 25,
-    attack: 0,
-    defense: 0,
-    speed: 1.2,
-    range: 0,
-    buildTime: 40,
-    minAge: 'medieval',
-    visionRange: 4,
-  },
-  spy: {
-    category: 'civilian',
-    cost: { gold: 100 },
-    health: 20,
-    attack: 5,
-    defense: 0,
-    speed: 2.5,
-    range: 1,
-    buildTime: 50,
-    minAge: 'enlightenment',
-    visionRange: 8,
-  },
 
-  // Infantry - Ancient/Classical
-  militia: {
+  // Infantry - Barracks unit (scales with age)
+  // Classical: Militia, Medieval: Pikeman, Enlightenment: Musketeer, Industrial: Rifleman, Modern: Assault Infantry
+  infantry: {
     category: 'infantry',
     cost: { food: 40, wood: 20 },
-    health: 50,
-    attack: 8,
-    defense: 2,
-    speed: 1.2,
-    range: 1,
-    buildTime: 15,
-    minAge: 'classical',
-    visionRange: 4,
-  },
-  hoplite: {
-    category: 'infantry',
-    cost: { food: 60, metal: 30 },
-    health: 80,
-    attack: 12,
-    defense: 6,
-    speed: 1,
-    range: 1,
-    buildTime: 25,
-    minAge: 'classical',
-    visionRange: 4,
-  },
-  legionary: {
-    category: 'infantry',
-    cost: { food: 70, metal: 40, gold: 10 },
-    health: 100,
-    attack: 15,
-    defense: 8,
-    speed: 1.1,
-    range: 1,
-    buildTime: 30,
-    minAge: 'classical',
-    visionRange: 4,
-  },
-  pikeman: {
-    category: 'infantry',
-    cost: { food: 50, wood: 30, metal: 20 },
-    health: 70,
+    health: 60,
     attack: 10,
-    defense: 10,
-    speed: 1,
-    range: 2,
-    buildTime: 25,
-    minAge: 'medieval',
-    visionRange: 4,
-  },
-  swordsman: {
-    category: 'infantry',
-    cost: { food: 60, metal: 50 },
-    health: 90,
-    attack: 18,
-    defense: 5,
-    speed: 1.2,
-    range: 1,
-    buildTime: 28,
-    minAge: 'medieval',
-    visionRange: 4,
-  },
-  knight_foot: {
-    category: 'infantry',
-    cost: { food: 80, metal: 70, gold: 20 },
-    health: 120,
-    attack: 20,
-    defense: 12,
-    speed: 1.1,
-    range: 1,
-    buildTime: 35,
-    minAge: 'medieval',
-    visionRange: 5,
-  },
-  musketeer: {
-    category: 'infantry',
-    cost: { food: 60, gold: 40 },
-    health: 80,
-    attack: 25,
     defense: 3,
-    speed: 1.1,
-    range: 4,
-    buildTime: 30,
-    minAge: 'enlightenment',
-    visionRange: 5,
-  },
-  fusilier: {
-    category: 'infantry',
-    cost: { food: 70, gold: 50 },
-    health: 90,
-    attack: 30,
-    defense: 4,
-    speed: 1.1,
-    range: 5,
-    buildTime: 32,
-    minAge: 'enlightenment',
-    visionRange: 5,
-  },
-  rifleman: {
-    category: 'infantry',
-    cost: { food: 60, metal: 30, gold: 30 },
-    health: 100,
-    attack: 35,
-    defense: 5,
     speed: 1.2,
-    range: 6,
-    buildTime: 28,
-    minAge: 'industrial',
-    visionRange: 6,
-  },
-  machine_gunner: {
-    category: 'infantry',
-    cost: { food: 80, metal: 60, gold: 40 },
-    health: 90,
-    attack: 50,
-    defense: 4,
-    speed: 0.9,
-    range: 5,
-    buildTime: 35,
-    minAge: 'industrial',
-    visionRange: 5,
-  },
-  assault_infantry: {
-    category: 'infantry',
-    cost: { food: 70, metal: 40, gold: 50, oil: 10 },
-    health: 120,
-    attack: 45,
-    defense: 8,
-    speed: 1.3,
-    range: 5,
-    buildTime: 30,
-    minAge: 'modern',
-    visionRange: 6,
-  },
-  special_forces: {
-    category: 'infantry',
-    cost: { food: 100, metal: 50, gold: 80, oil: 20 },
-    health: 150,
-    attack: 60,
-    defense: 12,
-    speed: 1.5,
-    range: 6,
-    buildTime: 45,
-    minAge: 'modern',
-    visionRange: 8,
+    range: 1, // Increases in enlightenment+ (guns)
+    buildTime: 20,
+    minAge: 'classical',
+    visionRange: 4,
   },
 
-  // Ranged units
-  slinger: {
+  // Ranged - Archery Range unit (scales with age)
+  // Classical: Archer, Medieval: Crossbowman, Enlightenment: Skirmisher
+  ranged: {
     category: 'ranged',
-    cost: { food: 30 },
-    health: 30,
-    attack: 6,
-    defense: 0,
-    speed: 1.3,
-    range: 4,
-    buildTime: 12,
-    minAge: 'classical',
-    visionRange: 5,
-  },
-  archer: {
-    category: 'ranged',
-    cost: { food: 40, wood: 30 },
+    cost: { food: 35, wood: 25 },
     health: 40,
-    attack: 10,
+    attack: 8,
     defense: 1,
     speed: 1.2,
     range: 5,
@@ -350,59 +157,12 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     minAge: 'classical',
     visionRange: 6,
   },
-  crossbowman: {
-    category: 'ranged',
-    cost: { food: 50, wood: 40, metal: 20 },
-    health: 50,
-    attack: 15,
-    defense: 2,
-    speed: 1,
-    range: 6,
-    buildTime: 22,
-    minAge: 'classical',
-    visionRange: 6,
-  },
-  longbowman: {
-    category: 'ranged',
-    cost: { food: 60, wood: 50 },
-    health: 45,
-    attack: 18,
-    defense: 1,
-    speed: 1.1,
-    range: 8,
-    buildTime: 25,
-    minAge: 'medieval',
-    visionRange: 7,
-  },
-  skirmisher: {
-    category: 'ranged',
-    cost: { food: 50, gold: 30 },
-    health: 55,
-    attack: 22,
-    defense: 2,
-    speed: 1.4,
-    range: 6,
-    buildTime: 20,
-    minAge: 'enlightenment',
-    visionRange: 6,
-  },
 
-  // Cavalry
-  scout_cavalry: {
+  // Cavalry - Stable unit (scales with age)
+  // Classical: Light Cavalry, Medieval: Knight, Enlightenment: Dragoon, Industrial: Armored Car, Modern: Tank
+  cavalry: {
     category: 'cavalry',
-    cost: { food: 50, gold: 30 },
-    health: 60,
-    attack: 6,
-    defense: 2,
-    speed: 3,
-    range: 1,
-    buildTime: 20,
-    minAge: 'classical',
-    visionRange: 8,
-  },
-  light_cavalry: {
-    category: 'cavalry',
-    cost: { food: 60, gold: 50 },
+    cost: { food: 60, gold: 40 },
     health: 80,
     attack: 12,
     defense: 4,
@@ -412,239 +172,39 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     minAge: 'classical',
     visionRange: 6,
   },
-  heavy_cavalry: {
-    category: 'cavalry',
-    cost: { food: 80, metal: 60, gold: 60 },
+
+  // Siege - Siege Workshop unit (scales with age)
+  // Classical: Catapult, Medieval: Trebuchet, Enlightenment: Cannon, Industrial: Howitzer, Modern: Artillery
+  siege: {
+    category: 'siege',
+    cost: { wood: 100, metal: 50 },
+    health: 80,
+    attack: 50,
+    defense: 2,
+    speed: 0.5,
+    range: 10,
+    buildTime: 40,
+    minAge: 'classical',
+    visionRange: 8,
+  },
+
+  // Naval - Dock military unit (scales with age)
+  // Classical: Galley, Medieval: Carrack, Enlightenment: Frigate, Industrial: Ironclad, Modern: Destroyer
+  naval: {
+    category: 'naval',
+    cost: { wood: 100, gold: 50 },
     health: 120,
     attack: 20,
-    defense: 10,
-    speed: 2,
-    range: 1,
-    buildTime: 35,
-    minAge: 'classical',
-    visionRange: 5,
-  },
-  knight: {
-    category: 'cavalry',
-    cost: { food: 100, metal: 80, gold: 80 },
-    health: 180,
-    attack: 30,
-    defense: 15,
-    speed: 2.2,
-    range: 1,
-    buildTime: 45,
-    minAge: 'medieval',
-    visionRange: 5,
-  },
-  cataphract: {
-    category: 'cavalry',
-    cost: { food: 120, metal: 100, gold: 90 },
-    health: 220,
-    attack: 35,
-    defense: 20,
-    speed: 1.8,
-    range: 1,
-    buildTime: 50,
-    minAge: 'medieval',
-    visionRange: 5,
-  },
-  dragoon: {
-    category: 'cavalry',
-    cost: { food: 80, gold: 100 },
-    health: 100,
-    attack: 28,
-    defense: 6,
-    speed: 2.5,
-    range: 4,
-    buildTime: 35,
-    minAge: 'enlightenment',
-    visionRange: 6,
-  },
-  cuirassier: {
-    category: 'cavalry',
-    cost: { food: 100, metal: 80, gold: 80 },
-    health: 150,
-    attack: 35,
-    defense: 12,
-    speed: 2.2,
-    range: 1,
-    buildTime: 40,
-    minAge: 'enlightenment',
-    visionRange: 5,
-  },
-  armored_car: {
-    category: 'cavalry',
-    cost: { metal: 100, gold: 80, oil: 30 },
-    health: 120,
-    attack: 40,
-    defense: 15,
-    speed: 3.5,
-    range: 4,
-    buildTime: 35,
-    minAge: 'industrial',
-    visionRange: 7,
-  },
-  light_tank: {
-    category: 'cavalry',
-    cost: { metal: 200, gold: 150, oil: 60 },
-    health: 250,
-    attack: 60,
-    defense: 25,
-    speed: 2.5,
-    range: 5,
-    buildTime: 50,
-    minAge: 'industrial',
-    visionRange: 6,
-  },
-  main_battle_tank: {
-    category: 'cavalry',
-    cost: { metal: 400, gold: 300, oil: 120 },
-    health: 500,
-    attack: 100,
-    defense: 50,
-    speed: 2,
-    range: 6,
-    buildTime: 70,
-    minAge: 'modern',
-    visionRange: 7,
-  },
-  apc: {
-    category: 'cavalry',
-    cost: { metal: 150, gold: 100, oil: 40 },
-    health: 200,
-    attack: 25,
-    defense: 20,
-    speed: 3,
-    range: 3,
-    buildTime: 40,
-    minAge: 'modern',
-    visionRange: 6,
-    carriesUnits: 6,
-  },
-
-  // Siege
-  battering_ram: {
-    category: 'siege',
-    cost: { wood: 100 },
-    health: 150,
-    attack: 50,
-    defense: 5,
-    speed: 0.5,
-    range: 1,
-    buildTime: 40,
-    minAge: 'classical',
-    visionRange: 3,
-  },
-  catapult: {
-    category: 'siege',
-    cost: { wood: 150, metal: 50 },
-    health: 80,
-    attack: 60,
-    defense: 2,
-    speed: 0.4,
-    range: 10,
-    buildTime: 50,
-    minAge: 'classical',
-    visionRange: 8,
-  },
-  trebuchet: {
-    category: 'siege',
-    cost: { wood: 200, metal: 100, gold: 50 },
-    health: 100,
-    attack: 100,
-    defense: 2,
-    speed: 0.3,
-    range: 14,
-    buildTime: 70,
-    minAge: 'medieval',
-    visionRange: 10,
-  },
-  bombard: {
-    category: 'siege',
-    cost: { wood: 100, metal: 200, gold: 100 },
-    health: 120,
-    attack: 120,
-    defense: 3,
-    speed: 0.35,
-    range: 12,
-    buildTime: 80,
-    minAge: 'medieval',
-    visionRange: 10,
-  },
-  cannon: {
-    category: 'siege',
-    cost: { metal: 200, gold: 150 },
-    health: 100,
-    attack: 140,
-    defense: 3,
-    speed: 0.5,
-    range: 10,
-    buildTime: 60,
-    minAge: 'enlightenment',
-    visionRange: 9,
-  },
-  mortar: {
-    category: 'siege',
-    cost: { metal: 150, gold: 100 },
-    health: 60,
-    attack: 80,
-    defense: 1,
-    speed: 0.6,
-    range: 12,
-    buildTime: 45,
-    minAge: 'enlightenment',
-    visionRange: 8,
-  },
-  howitzer: {
-    category: 'siege',
-    cost: { metal: 300, gold: 200, oil: 50 },
-    health: 150,
-    attack: 180,
-    defense: 5,
-    speed: 0.7,
-    range: 14,
-    buildTime: 70,
-    minAge: 'industrial',
-    visionRange: 10,
-  },
-  field_gun: {
-    category: 'siege',
-    cost: { metal: 200, gold: 150, oil: 30 },
-    health: 100,
-    attack: 120,
-    defense: 3,
-    speed: 1,
-    range: 10,
-    buildTime: 50,
-    minAge: 'industrial',
-    visionRange: 9,
-  },
-  artillery: {
-    category: 'siege',
-    cost: { metal: 400, gold: 300, oil: 80 },
-    health: 180,
-    attack: 250,
     defense: 8,
-    speed: 0.8,
-    range: 16,
-    buildTime: 80,
-    minAge: 'modern',
-    visionRange: 12,
-  },
-  mlrs: {
-    category: 'siege',
-    cost: { metal: 500, gold: 400, oil: 120 },
-    health: 150,
-    attack: 400,
-    defense: 5,
-    speed: 1,
-    range: 20,
-    buildTime: 100,
-    minAge: 'modern',
-    visionRange: 10,
+    speed: 2,
+    range: 4,
+    buildTime: 35,
+    minAge: 'classical',
+    visionRange: 7,
+    isNaval: true,
   },
 
-  // Naval
+  // Fishing boat - special civilian naval unit
   fishing_boat: {
     category: 'naval',
     cost: { wood: 50 },
@@ -659,253 +219,76 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     isNaval: true,
     canGather: true,
   },
-  galley: {
-    category: 'naval',
-    cost: { wood: 100, gold: 30 },
-    health: 100,
-    attack: 15,
-    defense: 5,
-    speed: 2,
-    range: 2,
-    buildTime: 30,
-    minAge: 'classical',
-    visionRange: 6,
-    isNaval: true,
-    carriesUnits: 5,
-  },
-  trireme: {
-    category: 'naval',
-    cost: { wood: 150, metal: 50, gold: 50 },
-    health: 150,
-    attack: 25,
-    defense: 10,
-    speed: 2.2,
-    range: 3,
-    buildTime: 40,
-    minAge: 'classical',
-    visionRange: 7,
-    isNaval: true,
-    carriesUnits: 8,
-  },
-  carrack: {
-    category: 'naval',
-    cost: { wood: 250, metal: 80, gold: 100 },
-    health: 250,
-    attack: 40,
-    defense: 15,
-    speed: 1.8,
-    range: 5,
-    buildTime: 60,
-    minAge: 'medieval',
-    visionRange: 8,
-    isNaval: true,
-    carriesUnits: 15,
-  },
-  galleass: {
-    category: 'naval',
-    cost: { wood: 300, metal: 120, gold: 120 },
-    health: 300,
-    attack: 60,
-    defense: 20,
-    speed: 1.5,
-    range: 6,
-    buildTime: 70,
-    minAge: 'medieval',
-    visionRange: 8,
-    isNaval: true,
-    carriesUnits: 10,
-  },
-  frigate: {
-    category: 'naval',
-    cost: { wood: 300, metal: 150, gold: 150 },
-    health: 350,
-    attack: 80,
-    defense: 20,
-    speed: 2.5,
-    range: 8,
-    buildTime: 70,
-    minAge: 'enlightenment',
-    visionRange: 10,
-    isNaval: true,
-  },
-  ship_of_the_line: {
-    category: 'naval',
-    cost: { wood: 500, metal: 250, gold: 300 },
-    health: 600,
-    attack: 150,
-    defense: 40,
-    speed: 1.5,
-    range: 10,
-    buildTime: 100,
-    minAge: 'enlightenment',
-    visionRange: 12,
-    isNaval: true,
-  },
-  ironclad: {
-    category: 'naval',
-    cost: { metal: 400, gold: 300, oil: 50 },
-    health: 800,
-    attack: 200,
-    defense: 60,
-    speed: 1.8,
-    range: 10,
-    buildTime: 100,
-    minAge: 'industrial',
-    visionRange: 12,
-    isNaval: true,
-  },
-  battleship: {
-    category: 'naval',
-    cost: { metal: 700, gold: 500, oil: 150 },
-    health: 1500,
-    attack: 350,
-    defense: 100,
-    speed: 1.5,
-    range: 14,
-    buildTime: 150,
-    minAge: 'industrial',
-    visionRange: 15,
-    isNaval: true,
-  },
-  cruiser: {
-    category: 'naval',
-    cost: { metal: 500, gold: 400, oil: 100 },
-    health: 800,
-    attack: 200,
-    defense: 50,
-    speed: 2.5,
-    range: 12,
-    buildTime: 100,
-    minAge: 'industrial',
-    visionRange: 14,
-    isNaval: true,
-    antiAir: true,
-  },
-  destroyer: {
-    category: 'naval',
-    cost: { metal: 400, gold: 350, oil: 120 },
-    health: 600,
-    attack: 180,
-    defense: 35,
-    speed: 3,
-    range: 10,
-    buildTime: 80,
-    minAge: 'modern',
-    visionRange: 15,
-    isNaval: true,
-    antiAir: true,
-  },
-  aircraft_carrier: {
-    category: 'naval',
-    cost: { metal: 1000, gold: 800, oil: 300 },
-    health: 2000,
-    attack: 50,
-    defense: 80,
-    speed: 1.5,
-    range: 6,
-    buildTime: 200,
-    minAge: 'modern',
-    visionRange: 20,
-    isNaval: true,
-    carriesUnits: 12,
-    antiAir: true,
-  },
-  submarine: {
-    category: 'naval',
-    cost: { metal: 500, gold: 400, oil: 150 },
-    health: 400,
-    attack: 300,
-    defense: 20,
-    speed: 2,
-    range: 8,
-    buildTime: 100,
-    minAge: 'modern',
-    visionRange: 8,
-    isNaval: true,
-  },
 
-  // Air
-  biplane: {
+  // Air - Airfield unit (only available industrial+)
+  // Industrial: Biplane, Modern: Fighter
+  air: {
     category: 'air',
     cost: { metal: 150, gold: 100, oil: 40 },
-    health: 80,
-    attack: 30,
-    defense: 5,
+    health: 100,
+    attack: 40,
+    defense: 10,
     speed: 5,
     range: 6,
     buildTime: 40,
     minAge: 'industrial',
     visionRange: 12,
     isAir: true,
-  },
-  bomber_early: {
-    category: 'air',
-    cost: { metal: 250, gold: 200, oil: 80 },
-    health: 120,
-    attack: 100,
-    defense: 8,
-    speed: 4,
-    range: 10,
-    buildTime: 60,
-    minAge: 'industrial',
-    visionRange: 10,
-    isAir: true,
-  },
-  fighter: {
-    category: 'air',
-    cost: { metal: 300, gold: 250, oil: 100 },
-    health: 150,
-    attack: 80,
-    defense: 20,
-    speed: 7,
-    range: 8,
-    buildTime: 50,
-    minAge: 'modern',
-    visionRange: 15,
-    isAir: true,
     antiAir: true,
   },
-  bomber: {
-    category: 'air',
-    cost: { metal: 500, gold: 400, oil: 150 },
-    health: 250,
-    attack: 250,
-    defense: 15,
-    speed: 5,
-    range: 12,
-    buildTime: 80,
-    minAge: 'modern',
-    visionRange: 12,
-    isAir: true,
-  },
-  helicopter: {
-    category: 'air',
-    cost: { metal: 200, gold: 200, oil: 80 },
-    health: 180,
-    attack: 60,
-    defense: 15,
-    speed: 4,
-    range: 6,
-    buildTime: 50,
-    minAge: 'modern',
-    visionRange: 10,
-    isAir: true,
-    carriesUnits: 4,
-  },
-  stealth_bomber: {
-    category: 'air',
-    cost: { metal: 800, gold: 700, oil: 250 },
-    health: 300,
-    attack: 400,
-    defense: 30,
-    speed: 6,
-    range: 15,
-    buildTime: 120,
-    minAge: 'modern',
-    visionRange: 15,
-    isAir: true,
-  },
 };
+
+/**
+ * Get the actual stats for a unit based on the player's current age
+ * Stats scale up as the player advances through ages
+ */
+export function getUnitStatsForAge(unitType: UnitType, age: Age): UnitStats {
+  const baseStats = UNIT_STATS[unitType];
+  
+  // Civilians don't scale
+  if (baseStats.category === 'civilian' || unitType === 'fishing_boat') {
+    return baseStats;
+  }
+  
+  const multiplier = AGE_MULTIPLIERS[age];
+  
+  // Calculate scaled stats
+  const scaledStats: UnitStats = {
+    ...baseStats,
+    health: Math.round(baseStats.health * multiplier.health),
+    attack: Math.round(baseStats.attack * multiplier.attack),
+    cost: {},
+  };
+  
+  // Scale costs
+  for (const [resource, amount] of Object.entries(baseStats.cost)) {
+    if (amount) {
+      scaledStats.cost[resource as keyof Resources] = Math.round(amount * multiplier.cost);
+    }
+  }
+  
+  // Adjust range for gunpowder units (enlightenment+)
+  if (unitType === 'infantry' && (age === 'enlightenment' || age === 'industrial' || age === 'modern')) {
+    scaledStats.range = 4; // Guns have range
+  }
+  
+  // Add oil cost for modern units
+  if (age === 'modern' || age === 'industrial') {
+    if (unitType === 'cavalry' || unitType === 'siege') {
+      scaledStats.cost.oil = Math.round(20 * multiplier.cost);
+    }
+  }
+  
+  return scaledStats;
+}
+
+/**
+ * Get the display name for a unit based on age
+ */
+export function getUnitDisplayName(unitType: UnitType, age: Age): string {
+  const ageNames = UNIT_AGE_NAMES[unitType];
+  return ageNames[age] || unitType.charAt(0).toUpperCase() + unitType.slice(1);
+}
 
 // Unit instance (an actual unit in the game)
 export interface Unit {
@@ -916,6 +299,9 @@ export interface Unit {
   y: number;           // World position Y
   health: number;
   maxHealth: number;
+  
+  // Track what age the unit was created in (for stats/appearance)
+  createdAtAge?: Age;
   
   // State
   isSelected: boolean;

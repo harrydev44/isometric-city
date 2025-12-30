@@ -7,7 +7,7 @@
 
 import { RoNGameState, RoNPlayer, RoNTile } from '../types/game';
 import { RoNBuildingType, BUILDING_STATS, UNIT_PRODUCTION_BUILDINGS, ECONOMIC_BUILDINGS } from '../types/buildings';
-import { UnitType, UNIT_STATS, Unit } from '../types/units';
+import { UnitType, UNIT_STATS, Unit, getUnitStatsForAge } from '../types/units';
 import { AGE_ORDER, AGE_REQUIREMENTS } from '../types/ages';
 import { ResourceType } from '../types/resources';
 import { getTerritoryOwner, extractCityCenters } from './simulation';
@@ -461,6 +461,7 @@ export function generateCondensedGameState(
       };
     })(),
     // Filter empty tiles that can fit a 2x2 building (barracks, etc.)
+    // SORT BY DISTANCE TO CITY CENTER - prefer building near your base!
     emptyTerritoryTiles: (() => {
       const canBuildable = (tile: typeof state.grid[0][0] | undefined): boolean => {
         if (!tile) return false;
@@ -469,6 +470,12 @@ export function generateCondensedGameState(
         if (tile.forestDensity > 0) return false; // Trees block building
         return true;
       };
+      
+      // Find AI's city centers to calculate distance
+      const myCityCenters = myBuildings.filter(b => 
+        b.type === 'city_center' || b.type === 'small_city' || b.type === 'large_city' || b.type === 'major_city'
+      );
+      const primaryCity = myCityCenters[0] || { x: state.gridSize / 2, y: state.gridSize / 2 };
       
       const empty = territoryTiles.filter(t => {
         const tile = state.grid[t.y]?.[t.x];
@@ -483,7 +490,15 @@ export function generateCondensedGameState(
         const has2x2Space = canBuildable(right) && canBuildable(down) && canBuildable(diag);
         return has2x2Space;
       });
-      // Space out tiles to avoid suggesting clustered locations
+      
+      // SORT by distance to primary city center - closer tiles first!
+      empty.sort((a, b) => {
+        const distA = Math.sqrt((a.x - primaryCity.x) ** 2 + (a.y - primaryCity.y) ** 2);
+        const distB = Math.sqrt((b.x - primaryCity.x) ** 2 + (b.y - primaryCity.y) ** 2);
+        return distA - distB;
+      });
+      
+      // Space out tiles to avoid suggesting clustered locations, but keep close ones
       const spaced: typeof empty = [];
       for (const t of empty) {
         const tooClose = spaced.some(s => Math.abs(s.x - t.x) < 3 && Math.abs(s.y - t.y) < 3);
@@ -493,15 +508,19 @@ export function generateCondensedGameState(
       return spaced;
     })(),
     // Find tiles ADJACENT to forests (good for woodcutters_camp)
-    tilesNearForest: territoryTiles
-      .filter(t => {
+    // SORTED by distance to city center - prefer forests near your base!
+    tilesNearForest: (() => {
+      const myCityCenters = myBuildings.filter(b => 
+        b.type === 'city_center' || b.type === 'small_city' || b.type === 'large_city' || b.type === 'major_city'
+      );
+      const primaryCity = myCityCenters[0] || { x: state.gridSize / 2, y: state.gridSize / 2 };
+      
+      const filtered = territoryTiles.filter(t => {
         const tile = state.grid[t.y]?.[t.x];
-        // Must be buildable (no building, not water/forest/mountain, no forestDensity)
         if (!tile || tile.building) return false;
         if (tile.terrain === 'water' || tile.terrain === 'forest' || tile.terrain === 'mountain') return false;
-        if (tile.forestDensity > 0) return false; // Can't build on tiles with trees
+        if (tile.forestDensity > 0) return false;
         if (tile.hasMetalDeposit || tile.hasOilDeposit) return false;
-        // Check if adjacent to a forest
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (dx === 0 && dy === 0) continue;
@@ -512,17 +531,28 @@ export function generateCondensedGameState(
           }
         }
         return false;
-      })
-      .slice(0, 5),
+      });
+      // Sort by distance to city center
+      filtered.sort((a, b) => {
+        const distA = Math.sqrt((a.x - primaryCity.x) ** 2 + (a.y - primaryCity.y) ** 2);
+        const distB = Math.sqrt((b.x - primaryCity.x) ** 2 + (b.y - primaryCity.y) ** 2);
+        return distA - distB;
+      });
+      return filtered.slice(0, 5);
+    })(),
     // Find tiles ADJACENT to metal deposits (good for mine)
-    tilesNearMetal: territoryTiles
-      .filter(t => {
+    // SORTED by distance to city center - prefer metal near your base!
+    tilesNearMetal: (() => {
+      const myCityCenters = myBuildings.filter(b => 
+        b.type === 'city_center' || b.type === 'small_city' || b.type === 'large_city' || b.type === 'major_city'
+      );
+      const primaryCity = myCityCenters[0] || { x: state.gridSize / 2, y: state.gridSize / 2 };
+      
+      const filtered = territoryTiles.filter(t => {
         const tile = state.grid[t.y]?.[t.x];
-        // Must be buildable
         if (!tile || tile.building) return false;
         if (tile.terrain === 'water' || tile.terrain === 'forest' || tile.terrain === 'mountain') return false;
         if (tile.forestDensity > 0 || tile.hasMetalDeposit || tile.hasOilDeposit) return false;
-        // Check if adjacent to metal
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (dx === 0 && dy === 0) continue;
@@ -533,8 +563,15 @@ export function generateCondensedGameState(
           }
         }
         return false;
-      })
-      .slice(0, 5),
+      });
+      // Sort by distance to city center
+      filtered.sort((a, b) => {
+        const distA = Math.sqrt((a.x - primaryCity.x) ** 2 + (a.y - primaryCity.y) ** 2);
+        const distB = Math.sqrt((b.x - primaryCity.x) ** 2 + (b.y - primaryCity.y) ** 2);
+        return distA - distB;
+      });
+      return filtered.slice(0, 5);
+    })(),
     resourceTiles: {
       forests: forests.slice(0, 5),
       metalDeposits: metalDeposits.slice(0, 5),
@@ -788,24 +825,27 @@ export function executeCreateUnit(
   }
 
   const uType = unitType as UnitType;
-  const unitStats = UNIT_STATS[uType];
-  if (!unitStats) {
+  const baseStats = UNIT_STATS[uType];
+  if (!baseStats) {
     return { newState: state, result: { success: false, message: `Unknown unit type: ${unitType}` } };
   }
 
   // Check age requirement
   const ageIndex = AGE_ORDER.indexOf(player.age);
-  const requiredAgeIndex = AGE_ORDER.indexOf(unitStats.minAge);
+  const requiredAgeIndex = AGE_ORDER.indexOf(baseStats.minAge);
   if (ageIndex < requiredAgeIndex) {
-    return { newState: state, result: { success: false, message: `Unit requires ${unitStats.minAge} age` } };
+    return { newState: state, result: { success: false, message: `Unit requires ${baseStats.minAge} age` } };
   }
+
+  // Get age-scaled stats (costs scale with age for military units!)
+  const unitStats = getUnitStatsForAge(uType, player.age);
 
   // Check population cap
   if (player.population >= player.populationCap) {
     return { newState: state, result: { success: false, message: 'Population cap reached' } };
   }
 
-  // Check resources
+  // Check resources (using age-scaled cost)
   for (const [resource, amount] of Object.entries(unitStats.cost)) {
     if (amount && player.resources[resource as ResourceType] < amount) {
       return { newState: state, result: { success: false, message: `Not enough ${resource}` } };

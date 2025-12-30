@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { CloseIcon } from '@/components/ui/Icons';
 import { BUILDING_STATS, RoNBuildingType, UNIT_PRODUCTION_BUILDINGS } from '../types/buildings';
-import { UNIT_STATS, UnitType } from '../types/units';
+import { UNIT_STATS, UnitType, getUnitStatsForAge, getUnitDisplayName } from '../types/units';
 import { ResourceType, RESOURCE_INFO } from '../types/resources';
 
 interface RoNBuildingPanelProps {
@@ -46,9 +46,9 @@ export function RoNBuildingPanel({ onClose }: RoNBuildingPanelProps) {
   // Get health bar color
   const healthPercent = (building.health / building.maxHealth) * 100;
   
-  // Check if we can afford a unit
+  // Check if we can afford a unit (using age-scaled costs)
   const canAffordUnit = (unitType: UnitType): boolean => {
-    const stats = UNIT_STATS[unitType];
+    const stats = getUnitStatsForAge(unitType, currentPlayer.age);
     if (!stats?.cost) return true;
     
     for (const [resource, amount] of Object.entries(stats.cost)) {
@@ -187,7 +187,9 @@ export function RoNBuildingPanel({ onClose }: RoNBuildingPanelProps) {
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Train Units</div>
             <div className="grid grid-cols-2 gap-1">
               {producableUnits.map(unitType => {
-                const stats = UNIT_STATS[unitType];
+                // Get age-scaled stats for display
+                const stats = getUnitStatsForAge(unitType, currentPlayer.age);
+                const displayName = getUnitDisplayName(unitType, currentPlayer.age);
                 const canAfford = canAffordUnit(unitType);
                 const queueFull = building.queuedUnits.length >= 5;
                 const popFull = currentPlayer.population >= currentPlayer.populationCap;
@@ -203,7 +205,7 @@ export function RoNBuildingPanel({ onClose }: RoNBuildingPanelProps) {
                     className="h-auto py-1 px-2"
                   >
                     <div className="flex flex-col items-center text-xs">
-                      <span className="capitalize">{unitType.replace(/_/g, ' ')}</span>
+                      <span className="capitalize">{displayName}</span>
                       {stats?.cost && (
                         <span className="text-[9px] opacity-70">
                           {Object.entries(stats.cost)

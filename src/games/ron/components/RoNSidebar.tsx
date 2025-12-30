@@ -13,7 +13,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { AGE_INFO, AGE_ORDER } from '../types/ages';
 import { RESOURCE_INFO, ResourceType } from '../types/resources';
 import { BUILDING_STATS, RoNBuildingType } from '../types/buildings';
-import { UNIT_STATS, UnitType } from '../types/units';
+import { UNIT_STATS, UnitType, getUnitStatsForAge, getUnitDisplayName } from '../types/units';
+import { UNIT_PRODUCTION_BUILDINGS } from '../types/buildings';
 import { RoNTool, RON_TOOL_INFO } from '../types/game';
 import { SettingsIcon } from '@/components/ui/Icons';
 import { RoNSettingsPanel } from './RoNSettingsPanel';
@@ -105,117 +106,26 @@ export function RoNSidebar() {
     ? state.grid[selectedBuildingPos.y]?.[selectedBuildingPos.x]?.building
     : null;
   
-  // Available units for selected building
+  // Available units for selected building - SIMPLIFIED: one unit type per building that scales with age
   const availableUnits = useMemo(() => {
-    if (!selectedBuilding) return [];
+    if (!selectedBuilding || !currentPlayer) return [];
     
-    const units: Array<{ type: UnitType; name: string }> = [];
+    const buildingType = selectedBuilding.type as RoNBuildingType;
+    const producableUnits = UNIT_PRODUCTION_BUILDINGS[buildingType] || [];
     
-    // Units available from city centers
-    if (['city_center', 'small_city', 'large_city', 'major_city'].includes(selectedBuilding.type)) {
-      units.push({ type: 'citizen', name: 'Citizen' });
-      if (ageIndex >= AGE_ORDER.indexOf('classical')) {
-        units.push({ type: 'merchant', name: 'Merchant' });
-      }
-    }
-    
-    // Units from barracks
-    if (selectedBuilding.type === 'barracks') {
-      units.push({ type: 'militia', name: 'Militia' });
-      if (ageIndex >= AGE_ORDER.indexOf('classical')) {
-        units.push({ type: 'hoplite', name: 'Hoplite' });
-        units.push({ type: 'archer', name: 'Archer' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
-        units.push({ type: 'pikeman', name: 'Pikeman' });
-        units.push({ type: 'swordsman', name: 'Swordsman' });
-        units.push({ type: 'crossbowman', name: 'Crossbowman' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('enlightenment')) {
-        units.push({ type: 'musketeer', name: 'Musketeer' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
-        units.push({ type: 'rifleman', name: 'Rifleman' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('modern')) {
-        units.push({ type: 'assault_infantry', name: 'Assault Infantry' });
-      }
-    }
-    
-    // Units from stable
-    if (selectedBuilding.type === 'stable') {
-      units.push({ type: 'scout_cavalry', name: 'Scout Cavalry' });
-      if (ageIndex >= AGE_ORDER.indexOf('classical')) {
-        units.push({ type: 'light_cavalry', name: 'Light Cavalry' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
-        units.push({ type: 'knight', name: 'Knight' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
-        units.push({ type: 'light_tank', name: 'Light Tank' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('modern')) {
-        units.push({ type: 'main_battle_tank', name: 'Main Battle Tank' });
-      }
-    }
-    
-    // Units from airbase
-    if (selectedBuilding.type === 'airbase') {
-      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
-        units.push({ type: 'biplane', name: 'Biplane' });
-        units.push({ type: 'bomber_early', name: 'Early Bomber' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('modern')) {
-        units.push({ type: 'fighter', name: 'Fighter' });
-        units.push({ type: 'bomber', name: 'Bomber' });
-        units.push({ type: 'helicopter', name: 'Helicopter' });
-        units.push({ type: 'stealth_bomber', name: 'Stealth Bomber' });
-      }
-    }
-    
-    // Units from dock (naval)
-    if (selectedBuilding.type === 'dock') {
-      units.push({ type: 'fishing_boat', name: 'Fishing Boat' });
-      if (ageIndex >= AGE_ORDER.indexOf('classical')) {
-        units.push({ type: 'galley', name: 'Galley' });
-        units.push({ type: 'trireme', name: 'Trireme' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
-        units.push({ type: 'carrack', name: 'Carrack' });
-        units.push({ type: 'galleass', name: 'Galleass' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('enlightenment')) {
-        units.push({ type: 'frigate', name: 'Frigate' });
-        units.push({ type: 'ship_of_the_line', name: 'Ship of the Line' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
-        units.push({ type: 'ironclad', name: 'Ironclad' });
-        units.push({ type: 'battleship', name: 'Battleship' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('modern')) {
-        units.push({ type: 'destroyer', name: 'Destroyer' });
-        units.push({ type: 'cruiser', name: 'Cruiser' });
-        units.push({ type: 'aircraft_carrier', name: 'Aircraft Carrier' });
-        units.push({ type: 'submarine', name: 'Submarine' });
-      }
-    }
-    
-    // Units from siege factory
-    if (selectedBuilding.type === 'siege_factory') {
-      units.push({ type: 'catapult', name: 'Catapult' });
-      if (ageIndex >= AGE_ORDER.indexOf('medieval')) {
-        units.push({ type: 'trebuchet', name: 'Trebuchet' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('enlightenment')) {
-        units.push({ type: 'cannon', name: 'Cannon' });
-      }
-      if (ageIndex >= AGE_ORDER.indexOf('industrial')) {
-        units.push({ type: 'howitzer', name: 'Howitzer' });
-      }
-    }
-    
-    return units;
-  }, [selectedBuilding, ageIndex]);
+    // Filter by age requirement and map to display names
+    return producableUnits
+      .filter(unitType => {
+        const stats = UNIT_STATS[unitType as UnitType];
+        if (!stats) return false;
+        const requiredAgeIndex = AGE_ORDER.indexOf(stats.minAge);
+        return ageIndex >= requiredAgeIndex;
+      })
+      .map(unitType => ({
+        type: unitType as UnitType,
+        name: getUnitDisplayName(unitType as UnitType, currentPlayer.age),
+      }));
+  }, [selectedBuilding, ageIndex, currentPlayer]);
   
   return (
     <div className="w-56 bg-slate-900 border-r border-slate-700 flex flex-col h-screen fixed left-0 top-0 z-40">
@@ -250,7 +160,8 @@ export function RoNSidebar() {
             </div>
             <div className="flex flex-col gap-1">
               {availableUnits.map(({ type, name }) => {
-                const stats = UNIT_STATS[type];
+                // Use age-scaled stats for display
+                const stats = getUnitStatsForAge(type, currentPlayer.age);
                 const canAfford = Object.entries(stats.cost).every(
                   ([resource, amount]) => 
                     !amount || currentPlayer.resources[resource as ResourceType] >= amount
@@ -272,7 +183,7 @@ export function RoNSidebar() {
                     <span>{name}</span>
                     <span className="text-xs opacity-60">
                       {Object.entries(stats.cost)
-                        .filter(([_, v]) => v)
+                        .filter(([, v]) => v)
                         .map(([k, v]) => `${v}${RESOURCE_INFO[k as ResourceType].icon}`)
                         .join(' ')}
                     </span>

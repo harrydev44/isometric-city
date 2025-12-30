@@ -200,7 +200,9 @@ function drawMilitaryUnit(
   const stats = UNIT_STATS[unit.type];
   // Naval units largest, cavalry/tanks medium-large, air smaller (they circle so look bigger), infantry smaller
   // All scales increased by 50% for better visibility
-  const isTankOrVehicle = unit.type.includes('tank') || unit.type.includes('armored');
+  const unitAge = unit.createdAtAge || 'classical';
+  const isTankOrVehicle = unit.type.includes('tank') || unit.type.includes('armored') ||
+    (unit.type === 'cavalry' && (unitAge === 'industrial' || unitAge === 'modern'));
   const baseScale = stats.category === 'naval' ? 1.5 :
                     stats.category === 'air' ? 0.7 :  // Smaller aircraft with larger circles
                     stats.category === 'cavalry' ? (isTankOrVehicle ? 1.5 : 1.05) :
@@ -262,27 +264,22 @@ function drawInfantryUnit(
   scale: number,
   animPhase: number
 ): void {
-  // Dispatch to specific infantry drawing function
-  switch (unit.type) {
-    case 'militia':
+  // Infantry drawing based on age - the unit type is now just 'infantry' that scales with age
+  const age = unit.createdAtAge || 'classical';
+  switch (age) {
+    case 'classical':
       drawMilitia(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
-    case 'hoplite':
-      drawHoplite(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
-      break;
-    case 'pikeman':
+    case 'medieval':
       drawPikeman(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
-    case 'swordsman':
-      drawSwordsman(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
-      break;
-    case 'musketeer':
+    case 'enlightenment':
       drawMusketeer(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
-    case 'rifleman':
+    case 'industrial':
       drawRifleman(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
-    case 'assault_infantry':
+    case 'modern':
       drawAssaultInfantry(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
     default:
@@ -842,15 +839,17 @@ function drawRangedUnit(
   scale: number,
   animPhase: number
 ): void {
-  // Dispatch to specific ranged unit drawing function
-  switch (unit.type) {
-    case 'archer':
+  // Ranged drawing based on age - the unit type is now just 'ranged' that scales with age
+  const age = unit.createdAtAge || 'classical';
+  switch (age) {
+    case 'classical':
       drawArcher(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
-    case 'crossbowman':
+    case 'medieval':
       drawCrossbowman(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
       break;
     default:
+      // Enlightenment+ uses generic ranged (skirmisher/sharpshooter)
       drawGenericRanged(ctx, centerX, centerY, color, darkerColor, scale, animPhase, unit.isMoving);
   }
 }
@@ -1092,7 +1091,10 @@ function drawCavalryUnit(
   scale: number,
   animPhase: number
 ): void {
-  const isTank = unit.type.includes('tank') || unit.type.includes('armored');
+  // For simplified 'cavalry' type, determine if it's a tank/vehicle based on age
+  const age = unit.createdAtAge || 'classical';
+  const isTank = unit.type.includes('tank') || unit.type.includes('armored') ||
+    (unit.type === 'cavalry' && (age === 'industrial' || age === 'modern'));
   
   if (isTank) {
     // Draw tank/armored vehicle
@@ -1389,45 +1391,31 @@ function drawNavalUnit(
 ): void {
   const bob = Math.sin(animPhase * 2) * 1 * scale;
   
-  // Draw based on specific ship type
-  switch (unit.type) {
-    case 'fishing_boat':
-      drawFishingBoat(ctx, centerX, centerY, color, darkerColor, scale, bob);
-      break;
-    case 'galley':
+  // Handle fishing boat (civilian naval unit)
+  if (unit.type === 'fishing_boat') {
+    drawFishingBoat(ctx, centerX, centerY, color, darkerColor, scale, bob);
+    return;
+  }
+  
+  // Naval military units scale with age
+  const age = unit.createdAtAge || 'classical';
+  switch (age) {
+    case 'classical':
       drawGalley(ctx, centerX, centerY, color, darkerColor, scale, bob, animPhase);
       break;
-    case 'trireme':
-      drawTrireme(ctx, centerX, centerY, color, darkerColor, scale, bob, animPhase);
-      break;
-    case 'carrack':
-    case 'galleass':
+    case 'medieval':
       drawCarrack(ctx, centerX, centerY, color, darkerColor, scale, bob);
       break;
-    case 'frigate':
-    case 'ship_of_the_line':
+    case 'enlightenment':
       drawFrigate(ctx, centerX, centerY, color, darkerColor, lighterColor, scale, bob);
       break;
-    case 'ironclad':
+    case 'industrial':
       drawIronclad(ctx, centerX, centerY, color, darkerColor, scale, bob);
       break;
-    case 'battleship':
-      drawBattleship(ctx, centerX, centerY, color, darkerColor, lighterColor, scale, bob);
-      break;
-    case 'destroyer':
+    case 'modern':
       drawDestroyer(ctx, centerX, centerY, color, darkerColor, scale, bob);
       break;
-    case 'cruiser':
-      drawCruiser(ctx, centerX, centerY, color, darkerColor, lighterColor, scale, bob);
-      break;
-    case 'aircraft_carrier':
-      drawAircraftCarrier(ctx, centerX, centerY, color, darkerColor, lighterColor, scale, bob);
-      break;
-    case 'submarine':
-      drawSubmarine(ctx, centerX, centerY, color, darkerColor, scale, bob, animPhase);
-      break;
     default:
-      // Generic sailboat fallback
       drawGenericSailboat(ctx, centerX, centerY, color, darkerColor, scale, bob);
   }
 }
@@ -2115,28 +2103,16 @@ function drawAirUnit(
   ctx.ellipse(centerX + circleX, centerY + circleY + 10, 8 * scale, 3 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
   
-  // Dispatch to specific aircraft type
-  switch (unit.type) {
-    case 'biplane':
+  // Air unit scales with age (biplane -> fighter)
+  const age = unit.createdAtAge || 'industrial';
+  switch (age) {
+    case 'industrial':
       drawBiplane(ctx, drawX, drawY, color, darkerColor, scale, heading);
       break;
-    case 'bomber_early':
-      drawBomberEarly(ctx, drawX, drawY, color, darkerColor, scale, heading);
-      break;
-    case 'fighter':
+    case 'modern':
+    default:
       drawFighter(ctx, drawX, drawY, color, darkerColor, lighterColor, scale, heading);
       break;
-    case 'bomber':
-      drawBomber(ctx, drawX, drawY, color, darkerColor, scale, heading);
-      break;
-    case 'helicopter':
-      drawHelicopter(ctx, drawX, drawY, color, darkerColor, scale, animPhase);
-      break;
-    case 'stealth_bomber':
-      drawStealthBomber(ctx, drawX, drawY, color, darkerColor, scale, heading);
-      break;
-    default:
-      drawGenericAircraft(ctx, drawX, drawY, color, darkerColor, scale, heading);
   }
 }
 

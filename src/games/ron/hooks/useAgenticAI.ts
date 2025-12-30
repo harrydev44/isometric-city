@@ -299,7 +299,7 @@ export function useAgenticAI(
                 playerName: aiPlayer.name,
                 timestamp: Date.now(),
                 type: 'tool_result',
-                content: tc.result.length > 300 ? tc.result.slice(0, 300) + '...' : tc.result,
+                content: tc.result, // Full content - no truncation
                 toolName: tc.name,
               });
             }

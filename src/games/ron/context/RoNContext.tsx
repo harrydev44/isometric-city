@@ -19,7 +19,7 @@ import {
 import { Age, AGE_ORDER, AGE_REQUIREMENTS } from '../types/ages';
 import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS } from '../types/buildings';
-import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
+import { Unit, UnitType, UnitTask, UNIT_STATS, getUnitStatsForAge } from '../types/units';
 import { simulateRoNTick } from '../lib/simulation';
 import { useAgenticAI, AgenticAIMessage, AgenticAIConfig } from '../hooks/useAgenticAI';
 
@@ -882,18 +882,21 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
       const currentPlayer = prev.players.find(p => p.id === building.ownerId);
       if (!currentPlayer || currentPlayer.id !== prev.currentPlayerId) return prev;
       
-      const unitStats = UNIT_STATS[unitType];
-      if (!unitStats) return prev;
+      const baseStats = UNIT_STATS[unitType];
+      if (!baseStats) return prev;
       
       // Check age requirement
       const ageIndex = AGE_ORDER.indexOf(currentPlayer.age);
-      const requiredAgeIndex = AGE_ORDER.indexOf(unitStats.minAge);
+      const requiredAgeIndex = AGE_ORDER.indexOf(baseStats.minAge);
       if (ageIndex < requiredAgeIndex) return prev;
+      
+      // Get age-scaled stats (costs scale with age!)
+      const unitStats = getUnitStatsForAge(unitType, currentPlayer.age);
       
       // Check population cap
       if (currentPlayer.population >= currentPlayer.populationCap) return prev;
       
-      // Check resources
+      // Check resources using age-scaled cost
       const cost = unitStats.cost;
       for (const [resource, amount] of Object.entries(cost)) {
         if (amount && currentPlayer.resources[resource as ResourceType] < amount) {

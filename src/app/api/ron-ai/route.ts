@@ -21,6 +21,12 @@ import {
 } from '@/games/ron/lib/aiTools';
 
 // ============================================================================
+// AI MODEL CONFIGURATION
+// ============================================================================
+// Change this to switch AI models (e.g., 'gpt-4.1', 'gpt-4o', 'gpt-5.1-2025-11-13')
+export const AI_MODEL = 'gpt-4.1';
+
+// ============================================================================
 // AGENT LOGGING SYSTEM
 // ============================================================================
 
@@ -195,15 +201,15 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   {
     type: 'function',
     name: 'train_unit',
-    description: 'Train a unit at a building. Citizens at city_center (50 food). Militia at barracks (40 food, 20 wood). Hoplite at barracks (60 food, 40 metal).',
+    description: 'Train a unit. Citizens at city (60 food). Infantry at barracks (40f+20w, scales with age). Ranged at barracks (35f+25w). Cavalry at stable (60f+40g). Siege at siege_factory.',
     strict: true,
     parameters: {
       type: 'object',
       properties: {
         unit_type: {
           type: 'string',
-          enum: ['citizen', 'militia', 'hoplite', 'archer', 'cavalry'],
-          description: 'Type of unit to train',
+          enum: ['citizen', 'infantry', 'ranged', 'cavalry', 'siege', 'naval', 'air'],
+          description: 'Type of unit to train. Military units auto-scale with your age.',
         },
         building_x: { type: 'number', description: 'X coordinate of production building' },
         building_y: { type: 'number', description: 'Y coordinate of production building' },
@@ -237,42 +243,39 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
       additionalProperties: false,
     },
   },
-  {
-    type: 'function',
-    name: 'send_message',
-    description: 'Send a taunting message to the opponent. Be creative and aggressive!',
-    strict: true,
-    parameters: {
-      type: 'object',
-      properties: {
-        message: { type: 'string', description: 'The message to send' },
-      },
-      required: ['message'],
-      additionalProperties: false,
-    },
-  },
+  // {
+  //   type: 'function',
+  //   name: 'send_message',
+  //   description: 'Send a taunting message to the opponent. Be creative and aggressive!',
+  //   strict: true,
+  //   parameters: {
+  //     type: 'object',
+  //     properties: {
+  //       message: { type: 'string', description: 'The message to send' },
+  //     },
+  //     required: ['message'],
+  //     additionalProperties: false,
+  //   },
+  // },
 ];
 
-const SYSTEM_PROMPT = `RTS AI. Be CONCISE. Multiple enemies - attack any!
+const SYSTEM_PROMPT = `You are playing a RTS game called Rise of Nations. You are playing against many other extremely skilled players who want to destroy your cities.
 
-COSTS: farm 50w, woodcutter 30w, mine 80w+50g, barracks 100w, market 60w+30g, small_city 400w+100m+200g
-TRAIN: citizen 60f, militia 40f+20w
+COSTS: farm 50w, woodcutter 30w, mine 80w+50g, barracks 100w+50g, market 60w+30g, small_city 200w+100g
+TRAIN: citizen 60f, infantry 40f+20w (scales with age - same unit, stronger each age)
 
 ECONOMY PRIORITY:
 1. Build farm + woodcutters_camp FIRST
-2. Train 2-3 citizens
-3. BUILD BARRACKS EARLY (at pop 4-5)! Start militia production!
-4. Attack once you have 3+ militia!
+2. Train citizens, keep building cities with farms, wood, mines, markets, smelters, libraries, etc.
+3. BUILD BARRACKS EARLY (at pop 4-5)! Start infantry production immediately.
 
 RULES:
-- Pop capped? Save for small_city (need 200g+100m+400w)
-- Low food? Build farms, assign to food!
-- 5+ military? ATTACK enemy cities!
-- CRITICAL: Use ONLY the EXACT coordinates from "General:" list when building barracks/markets!
-- If "General: NO VALID TILES" - don't try to build large buildings!
+- Pop capped? Build a small_city
+- Low resources? Build buildings and assign workers.
+- Have 10+ military? ATTACK enemy cities!
 
-TURN: get_game_state → build farms/barracks → train citizens/militia → attack → assign_workers
-ATTACK to win!`;
+TURN: get_game_state → build farms/barracks → train citizens/infantry → attack → assign_workers
+ATTACK enemy cities to win!`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -396,20 +399,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
     }
     
     // Add strategic hints based on current state
-    let strategicHint = '';
-    if (barracksCount === 0 && aiPlayer.population >= 4 && aiPlayer.resources.wood >= 100) {
-      strategicHint = '\n🚨 BUILD BARRACKS NOW! You have 4+ pop and 100+ wood!';
-    } else if (barracksCount > 0 && militaryCount === 0 && aiPlayer.resources.food >= 40 && aiPlayer.resources.wood >= 20) {
-      strategicHint = '\n🚨 TRAIN MILITIA NOW! You have barracks and resources!';
-    } else if (militaryCount >= 3) {
-      strategicHint = '\n⚔️ ATTACK NOW! Send your militia to enemy cities!';
-    }
+    // let strategicHint = '';
+    // if (barracksCount === 0 && aiPlayer.population >= 4 && aiPlayer.resources.wood >= 100) {
+    //   strategicHint = '\n🚨 BUILD BARRACKS NOW! You have 4+ pop and 100+ wood!';
+    // } else if (barracksCount > 0 && militaryCount === 0 && aiPlayer.resources.food >= 40 && aiPlayer.resources.wood >= 20) {
+    //   strategicHint = '\n🚨 TRAIN INFANTRY NOW! You have barracks and resources!';
+    // } else if (militaryCount >= 3) {
+    //   strategicHint = '\n⚔️ ATTACK NOW! Send your infantry to enemy cities!';
+    // }
     
     // Simple state summary - let the AI reason about what to do from system prompt
     const turnPrompt = `Turn ${gameState.tick}. You are ${aiPlayer.name}.
 Resources: ${Math.round(aiPlayer.resources.food)}F / ${Math.round(aiPlayer.resources.wood)}W / ${Math.round(aiPlayer.resources.metal)}M / ${Math.round(aiPlayer.resources.gold)}G
 Population: ${aiPlayer.population}/${aiPlayer.populationCap}${popCapped ? ' (CAPPED)' : ''}
-Military: ${militaryCount} units | Barracks: ${barracksCount}${strategicHint}
+Military: ${militaryCount} units | Barracks: ${barracksCount}
 ${enemyCityPos ? `Enemy city spotted at (${enemyCityPos.x},${enemyCityPos.y})` : 'No enemy cities visible'}
 Age: ${aiPlayer.age}
 
@@ -425,7 +428,7 @@ Start by calling get_game_state to see full details, then take actions.`;
     // Create initial response - always provide input, optionally use previous_response_id for context
     const startTime = Date.now();
     let response = await client.responses.create({
-      model: 'gpt-5.1-2025-11-13',
+      model: AI_MODEL,
       instructions: SYSTEM_PROMPT,
       input: turnPrompt,
       tools: AI_TOOLS,
@@ -591,10 +594,10 @@ ${(() => {
       result += `  ✅ Can train citizens at: ${cities.map(c => `(${c.x},${c.y})`).join(', ')}\n`;
     }
     if (canTrainMilitia && barracks.length > 0) {
-      result += `  ✅ Can train militia at: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}\n`;
+      result += `  ✅ Can train infantry at: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}\n`;
     }
     if (!canTrainCitizen) result += `  ❌ Cannot train citizen (need 60 food, have ${Math.round(p.resources.food)})\n`;
-    if (!canTrainMilitia && barracks.length > 0) result += `  ❌ Cannot train militia (need 40f+20w)\n`;
+    if (!canTrainMilitia && barracks.length > 0) result += `  ❌ Cannot train infantry (need 40f+20w)\n`;
   }
   
   result += `\n### BUILDINGS YOU CAN AFFORD:\n`;
@@ -896,7 +899,7 @@ ${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u
       try {
         const continueStart = Date.now();
         response = await client.responses.create({
-          model: 'gpt-5.1-2025-11-13',
+          model: AI_MODEL,
           instructions: SYSTEM_PROMPT,
           previous_response_id: response.id,
           input: toolResults.map(r => ({

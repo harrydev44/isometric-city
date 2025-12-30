@@ -481,18 +481,19 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
 };
 
 // Buildings that can produce units and what they can produce
+// SIMPLIFIED: Each military building produces ONE unit type that scales with age
 export const UNIT_PRODUCTION_BUILDINGS: Partial<Record<RoNBuildingType, string[]>> = {
   city_center: ['citizen'],
   small_city: ['citizen'],
   large_city: ['citizen'],
   major_city: ['citizen'],
-  barracks: ['militia', 'hoplite', 'legionary', 'pikeman', 'swordsman', 'rifleman', 'machine_gunner'],
-  stable: ['light_cavalry', 'heavy_cavalry', 'cataphract', 'knight', 'cuirassier', 'armored_car', 'light_tank'],
-  siege_factory: ['catapult', 'trebuchet', 'cannon', 'howitzer'],
-  dock: ['fishing_boat', 'galley', 'trireme', 'carrack', 'galleass', 'frigate', 'ship_of_the_line', 'ironclad', 'battleship', 'cruiser', 'destroyer', 'aircraft_carrier', 'submarine'],
-  auto_plant: ['light_tank', 'main_battle_tank', 'armored_car'],
-  factory: ['militia', 'machine_gunner'],
-  airbase: ['fighter', 'bomber'],
+  barracks: ['infantry', 'ranged'], // Infantry & Ranged both from barracks
+  stable: ['cavalry'],              // Cavalry scales: light cavalry -> knight -> dragoon -> armored car -> tank
+  siege_factory: ['siege'],         // Siege scales: catapult -> trebuchet -> cannon -> howitzer -> artillery
+  dock: ['fishing_boat', 'naval'],  // Naval scales: galley -> carrack -> frigate -> ironclad -> destroyer
+  auto_plant: ['cavalry'],          // Modern cavalry (tanks)
+  factory: ['infantry'],            // Alternative infantry production
+  airbase: ['air'],                 // Air scales: biplane -> fighter
 };
 
 // Economic buildings that need workers

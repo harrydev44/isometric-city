@@ -12,7 +12,7 @@ import { RoNGameState, RoNPlayer, RoNTile } from '../types/game';
 import { Age, AGE_ORDER, AGE_REQUIREMENTS, AGE_POPULATION_BONUS } from '../types/ages';
 import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_PRODUCTION_BUILDINGS } from '../types/buildings';
-import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
+import { Unit, UnitType, UnitTask, UNIT_STATS, getUnitStatsForAge } from '../types/units';
 
 // Simulation constants
 const CONSTRUCTION_SPEED = 0.5; // Progress per tick (slow construction)
@@ -604,7 +604,13 @@ function updateBuildings(state: RoNGameState): RoNGameState {
       // Unit production
       if (building.constructionProgress >= 100 && building.queuedUnits.length > 0) {
         const unitType = building.queuedUnits[0] as UnitType;
-        const unitStats = UNIT_STATS[unitType];
+        
+        // Get the player's age to scale unit stats
+        const owner = state.players.find(p => p.id === building.ownerId);
+        const ownerAge = owner?.age || 'classical';
+        
+        // Get age-scaled stats (military units scale with age!)
+        const unitStats = getUnitStatsForAge(unitType, ownerAge);
         
         if (unitStats) {
           updatedBuilding.productionProgress += PRODUCTION_SPEED;
@@ -646,6 +652,7 @@ function updateBuildings(state: RoNGameState): RoNGameState {
               y: spawnY,
               health: unitStats.health,
               maxHealth: unitStats.health,
+              createdAtAge: ownerAge, // Track what age unit was created in
               isSelected: false,
               isMoving: false,
               task: 'idle',
@@ -1453,7 +1460,9 @@ function updateUnits(state: RoNGameState): RoNGameState {
       }
       
       if (updatedUnit.attackCooldown === 0) {
-        const unitStats = UNIT_STATS[unit.type];
+        // Get age-scaled stats for combat (use unit's created age for consistent stats)
+        const unitAge = updatedUnit.createdAtAge || 'classical';
+        const unitStats = getUnitStatsForAge(unit.type, unitAge);
         const attackRange = unitStats?.range || 1;
         const damage = unitStats?.attack || 1;
         

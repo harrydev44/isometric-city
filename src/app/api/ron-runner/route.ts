@@ -139,13 +139,15 @@ async function processAITurn(playerId: string): Promise<{ success: boolean; acti
       aiTurnCount++;
 
       const actions = result.actions || [];
-      for (const action of actions) {
-        recentActions.push({
-          tick: gameState.tick,
-          playerId,
-          type: action.type,
-          args: action.data || {},
-        });
+      if (gameState) {
+        for (const action of actions) {
+          recentActions.push({
+            tick: gameState.tick,
+            playerId,
+            type: action.type,
+            args: action.data || {},
+          });
+        }
       }
 
       // Keep only last 50 actions
