@@ -409,9 +409,8 @@ WORKER MANAGEMENT (CRITICAL):
 PRIORITIES:
 1. Economy first: train citizens, build farms/woodcutters/mines, assign all workers
 2. Expand: build small_city when at pop cap (requires 400w+200g+100m)
-3. REBALANCE workers based on what you need - move workers from excess resources!
-4. Military: only attack with 8+ units, never attack early with just 2-3 units
-5. Late game: destroy enemy city_centers to win
+3. Military: only attack with 8+ units, never attack early with just 2-3 units. Train units to defend yourself too.
+4. Mid/Late game: destroy enemy city_centers to win
 
 A strong economy (15+ workers, 3+ cities) beats a rushed attack. Be patient. Build big.`;
 
