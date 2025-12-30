@@ -20,7 +20,7 @@ interface AIAgentsSidebarProps {
 
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 600;
-const DEFAULT_WIDTH = 340;
+const DEFAULT_WIDTH = 410;
 
 export const AI_SIDEBAR_DEFAULT_WIDTH = DEFAULT_WIDTH;
 
@@ -311,7 +311,7 @@ function ResourceBar({ player }: { player: RoNPlayer }) {
         </span>
       ))}
       <span className={`${popColor} whitespace-pre ml-0.5`} title="Population">
-        👥{String(player.population).padStart(2, '\u2007')}/{player.populationCap}
+        {String(player.population).padStart(2, '\u2007')}/{player.populationCap}
       </span>
     </div>
   );

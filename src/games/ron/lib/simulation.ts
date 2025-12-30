@@ -15,7 +15,7 @@ import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_
 import { Unit, UnitType, UnitTask, UNIT_STATS, getUnitStatsForAge } from '../types/units';
 
 // Simulation constants
-const CONSTRUCTION_SPEED = 1.0; // Progress per tick (doubled from 0.5 for faster construction)
+const CONSTRUCTION_SPEED = 1.4; // Progress per tick (increased for ~30% faster construction)
 const PRODUCTION_SPEED = 1.0; // Unit production progress per tick (doubled from 0.5 for faster training)
 const UNIT_MOVE_SPEED = 0.1; // Movement per tick (in tiles)
 const ATTACK_COOLDOWN = 10; // Ticks between attacks
