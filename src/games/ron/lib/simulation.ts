@@ -1034,32 +1034,39 @@ function updateUnits(state: RoNGameState): RoNGameState {
       }
     }
     
-    // Auto-attack for military units: ALWAYS check for nearby enemies and engage them
-    // Military units should fight back when attacked and engage enemy units automatically
+    // Auto-attack for military units: check for nearby enemies and engage them
+    // But respect explicit move commands - units should complete their move first
     if (isMilitaryUnit(updatedUnit)) {
-      const nearbyEnemies = findNearbyEnemies(updatedUnit, state.units, AUTO_ATTACK_RANGE);
+      // Skip auto-attack if unit has an explicit move command (player directed them somewhere)
+      const hasExplicitMoveCommand = updatedUnit.task === 'move' && updatedUnit.isMoving;
       
-      if (nearbyEnemies.length > 0) {
-        const currentTarget = updatedUnit.taskTarget;
-        const closestEnemy = nearbyEnemies[0];
+      if (!hasExplicitMoveCommand) {
+        const nearbyEnemies = findNearbyEnemies(updatedUnit, state.units, AUTO_ATTACK_RANGE);
         
-        // Check if we should switch to attacking this enemy:
-        // 1. Not currently attacking anything
-        // 2. Current target is dead or out of range
-        // 3. A closer enemy is attacking us (prioritize threats)
-        const shouldEngage = 
-          updatedUnit.task !== 'attack' || 
-          !currentTarget ||
-          (typeof currentTarget === 'string' && !state.units.find(u => u.id === currentTarget && u.health > 0));
-        
-        if (shouldEngage) {
-          updatedUnit.task = 'attack';
-          updatedUnit.taskTarget = closestEnemy.id;
-          updatedUnit.targetX = closestEnemy.x;
-          updatedUnit.targetY = closestEnemy.y;
-          updatedUnit.isMoving = true;
-          // Reset cooldown so unit can attack immediately when in range
-          updatedUnit.attackCooldown = 0;
+        if (nearbyEnemies.length > 0) {
+          const currentTarget = updatedUnit.taskTarget;
+          const closestEnemy = nearbyEnemies[0];
+          
+          // Check if we should switch to attacking this enemy:
+          // 1. Currently idle (no task)
+          // 2. Current attack target is dead or invalid
+          const shouldEngage = 
+            updatedUnit.task === 'idle' || 
+            updatedUnit.task === undefined ||
+            (updatedUnit.task === 'attack' && (
+              !currentTarget ||
+              (typeof currentTarget === 'string' && !state.units.find(u => u.id === currentTarget && u.health > 0))
+            ));
+          
+          if (shouldEngage) {
+            updatedUnit.task = 'attack';
+            updatedUnit.taskTarget = closestEnemy.id;
+            updatedUnit.targetX = closestEnemy.x;
+            updatedUnit.targetY = closestEnemy.y;
+            updatedUnit.isMoving = true;
+            // Reset cooldown so unit can attack immediately when in range
+            updatedUnit.attackCooldown = 0;
+          }
         }
       }
     }
@@ -1393,25 +1400,49 @@ function updateUnits(state: RoNGameState): RoNGameState {
 
 /**
  * Check victory conditions
+ * Players are eliminated if they have no cities for 2 minutes (~1200 ticks at speed 1)
  */
+const ELIMINATION_TICKS = 1200; // ~2 minutes at normal speed (10 ticks/sec)
+
 function checkVictoryConditions(state: RoNGameState): RoNGameState {
-  // Check if any player has no buildings (defeated)
+  const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
+  
   const newPlayers = state.players.map(player => {
     if (player.isDefeated) return player;
     
-    let hasBuildings = false;
+    // Check if player has any cities
+    let hasCities = false;
     state.grid.forEach(row => {
       row.forEach(tile => {
-        if (tile.ownerId === player.id && tile.building) {
-          hasBuildings = true;
+        if (tile.ownerId === player.id && tile.building && cityTypes.includes(tile.building.type)) {
+          hasCities = true;
         }
       });
     });
     
-    if (!hasBuildings) {
-      return { ...player, isDefeated: true };
+    // Track when player lost their cities
+    let noCitySinceTick = player.noCitySinceTick;
+    
+    if (hasCities) {
+      // Player has cities - clear the timer
+      noCitySinceTick = null;
+    } else {
+      // Player has no cities
+      if (noCitySinceTick === null) {
+        // Just lost cities - start the timer
+        noCitySinceTick = state.tick;
+        console.log(`[ELIMINATION] ${player.name} has no cities! Timer started at tick ${state.tick}`);
+      } else {
+        // Check if elimination timer expired
+        const ticksWithoutCity = state.tick - noCitySinceTick;
+        if (ticksWithoutCity >= ELIMINATION_TICKS) {
+          console.log(`[ELIMINATION] ${player.name} eliminated! No cities for ${ticksWithoutCity} ticks`);
+          return { ...player, isDefeated: true, noCitySinceTick };
+        }
+      }
     }
-    return player;
+    
+    return { ...player, noCitySinceTick };
   });
   
   // Check for winner

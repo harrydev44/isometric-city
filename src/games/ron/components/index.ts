@@ -8,3 +8,4 @@ export { RoNSidebar } from './RoNSidebar';
 export { RoNMiniMap } from './RoNMiniMap';
 export { RoNBuildingPanel } from './RoNBuildingPanel';
 export { AIMessagePanel } from './AIMessagePanel';
+export { AIAgentsSidebar } from './AIAgentsSidebar';

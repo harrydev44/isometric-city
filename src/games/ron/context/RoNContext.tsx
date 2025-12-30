@@ -174,6 +174,7 @@ interface RoNContextValue {
   agenticAI: {
     enabled: boolean;
     messages: AgenticAIMessage[];
+    conversations: import('../hooks/useAgenticAI').AIPlayerConversation[];
     isThinking: boolean;
     lastError: string | null;
     thoughts: string | null;
@@ -181,6 +182,7 @@ interface RoNContextValue {
   setAgenticAIEnabled: (enabled: boolean) => void;
   markAIMessageRead: (messageId: string) => void;
   clearAIMessages: () => void;
+  clearAIConversations: () => void;
 }
 
 const RoNContext = createContext<RoNContextValue | null>(null);
@@ -228,9 +230,23 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const agenticAI = useAgenticAI(state, setState, agenticAIConfig);
 
   // Load game state from localStorage on mount
+  // Check for ?reset=1 URL parameter to force new game
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
+
+    // Check for reset URL parameter
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('reset') === '1' || params.get('newgame') === 'true') {
+        console.log('[CONTROL] URL parameter detected - starting fresh game');
+        clearRoNGameState();
+        // Remove the parameter from URL without reload
+        window.history.replaceState({}, '', window.location.pathname);
+        setIsStateReady(true);
+        return; // Don't load saved state
+      }
+    }
 
     const saved = loadRoNGameState();
     if (saved) {
@@ -274,6 +290,93 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(saveInterval);
   }, [isStateReady]);
+
+  // Poll for external control commands (from supervisor script)
+  useEffect(() => {
+    if (!isStateReady) return;
+
+    const checkCommands = async () => {
+      try {
+        const res = await fetch('/api/ron-control');
+        const data = await res.json();
+        
+        if (data.commands && data.commands.length > 0) {
+          const pendingCommands = data.commands.filter((cmd: { applied?: boolean }) => !cmd.applied);
+          
+          for (const cmd of pendingCommands) {
+            console.log('[CONTROL] Applying command:', cmd.action);
+            
+            switch (cmd.action) {
+              case 'reset':
+                // Reset game to fresh state
+                const newState = createInitialRoNGameState(100, [
+                  { name: 'Player', type: 'human', color: '#3b82f6' },
+                  { name: 'AI Red', type: 'ai', difficulty: 'medium', color: '#ef4444' },
+                  { name: 'AI Green', type: 'ai', difficulty: 'medium', color: '#22c55e' },
+                ]);
+                setState(newState);
+                latestStateRef.current = newState;
+                agenticAI.reset();
+                clearRoNGameState();
+                console.log('[CONTROL] Game reset complete');
+                break;
+                
+              case 'boost':
+                // Boost AI resources
+                if (cmd.data) {
+                  setState(prev => ({
+                    ...prev,
+                    players: prev.players.map(p => {
+                      if (p.type === 'ai') {
+                        return {
+                          ...p,
+                          resources: {
+                            ...p.resources,
+                            food: p.resources.food + ((cmd.data as Record<string, number>).food || 0),
+                            wood: p.resources.wood + ((cmd.data as Record<string, number>).wood || 0),
+                            metal: p.resources.metal + ((cmd.data as Record<string, number>).metal || 0),
+                            gold: p.resources.gold + ((cmd.data as Record<string, number>).gold || 0),
+                          }
+                        };
+                      }
+                      return p;
+                    })
+                  }));
+                  console.log('[CONTROL] AI resources boosted');
+                }
+                break;
+                
+              case 'speed':
+                // Change game speed
+                if (cmd.data && typeof (cmd.data as Record<string, number>).speed === 'number') {
+                  const speed = (cmd.data as Record<string, number>).speed as 0 | 1 | 2 | 3;
+                  setState(prev => ({ ...prev, gameSpeed: speed }));
+                  console.log('[CONTROL] Game speed set to', speed);
+                }
+                break;
+            }
+            
+            // Mark command as applied
+            cmd.applied = true;
+          }
+          
+          // Update commands file to mark as applied
+          if (pendingCommands.length > 0) {
+            await fetch('/api/ron-control', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'mark_applied', data: { commands: data.commands } })
+            });
+          }
+        }
+      } catch {
+        // Silently ignore errors - control API might not be available
+      }
+    };
+
+    const controlInterval = setInterval(checkCommands, 2000);
+    return () => clearInterval(controlInterval);
+  }, [isStateReady, agenticAI]);
   
   // Simulation loop
   useEffect(() => {
@@ -958,6 +1061,7 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     agenticAI: {
       enabled: agenticAIEnabled,
       messages: agenticAI.messages,
+      conversations: agenticAI.conversations,
       isThinking: agenticAI.isThinking,
       lastError: agenticAI.lastError,
       thoughts: agenticAI.thoughts,
@@ -965,6 +1069,7 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     setAgenticAIEnabled,
     markAIMessageRead: agenticAI.markMessageRead,
     clearAIMessages: agenticAI.clearMessages,
+    clearAIConversations: agenticAI.clearConversations,
   };
   
   return (

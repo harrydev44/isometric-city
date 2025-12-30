@@ -425,7 +425,13 @@ export function generateCondensedGameState(
       population: aiPlayer.population,
       populationCap: aiPlayer.populationCap,
     },
-    myUnits: myUnits.slice(0, 30), // Increased limit
+    // Prioritize military units over citizens for attack commands
+    myUnits: (() => {
+      const military = myUnits.filter(u => u.type !== 'citizen');
+      const citizens = myUnits.filter(u => u.type === 'citizen');
+      // Include all military (up to 50) plus some citizens
+      return [...military.slice(0, 50), ...citizens.slice(0, 10)];
+    })(),
     // Ensure important buildings are included first (cities, barracks)
     myBuildings: (() => {
       const importantTypes = ['city_center', 'small_city', 'large_city', 'major_city', 'barracks', 'stable', 'dock', 'library', 'market'];
@@ -1037,26 +1043,38 @@ export function executeAssignIdleWorkers(
     (u.task === 'idle' || u.task === 'move' || stuckWorkers.some(sw => sw.id === u.id))
   );
 
-  // SMART REBALANCING: If food rate is high but wood/metal rate is 0, reassign some farmers
+  // SMART REBALANCING: If food rate is high but wood/metal/gold rate is 0, reassign some farmers
   const foodRate = player.resourceRates.food;
   const woodRate = player.resourceRates.wood;
   const metalRate = player.resourceRates.metal;
-  
-  // Check if we have a wood/metal building but no production
-  const hasWoodBuilding = state.grid.flat().some(t => 
-    t?.building?.ownerId === aiPlayerId && 
+  const goldRate = player.resourceRates.gold;
+  // Pop cap check for gold prioritization
+  const popCapped = player.population >= player.populationCap;
+  const needsGoldForCity = popCapped && player.resources.gold < 200;
+
+  // Check if we have buildings but no production
+  const hasWoodBuilding = state.grid.flat().some(t =>
+    t?.building?.ownerId === aiPlayerId &&
     t?.building?.type === 'woodcutters_camp' &&
     t?.building?.constructionProgress === 100
   );
-  const hasMineBuilding = state.grid.flat().some(t => 
-    t?.building?.ownerId === aiPlayerId && 
+  const hasMineBuilding = state.grid.flat().some(t =>
+    t?.building?.ownerId === aiPlayerId &&
     t?.building?.type === 'mine' &&
     t?.building?.constructionProgress === 100
   );
-  
+  const hasMarketBuilding = state.grid.flat().some(t =>
+    t?.building?.ownerId === aiPlayerId &&
+    t?.building?.type === 'market' &&
+    t?.building?.constructionProgress === 100
+  );
+
   // Find farmers to reassign if we have unproductive resource buildings
-  console.log(`[assign_workers] Checking rebalance: idleCount=${idleCitizens.length}, hasWoodBuilding=${hasWoodBuilding}, woodRate=${woodRate}, hasMineBuilding=${hasMineBuilding}, metalRate=${metalRate}`);
-  if (idleCitizens.length === 0 && ((hasWoodBuilding && woodRate === 0) || (hasMineBuilding && metalRate === 0))) {
+  const needsRebalance = (hasWoodBuilding && woodRate === 0) || 
+                         (hasMineBuilding && metalRate === 0) ||
+                         (hasMarketBuilding && goldRate === 0 && needsGoldForCity);
+  console.log(`[assign_workers] Checking rebalance: idleCount=${idleCitizens.length}, hasWoodBuilding=${hasWoodBuilding}, woodRate=${woodRate}, hasMineBuilding=${hasMineBuilding}, metalRate=${metalRate}, hasMarket=${hasMarketBuilding}, goldRate=${goldRate}, needsGoldForCity=${needsGoldForCity}`);
+  if (idleCitizens.length === 0 && needsRebalance) {
     // Find ALL workers (any task) to potentially reassign
     const allWorkers = state.units.filter(u =>
       u.ownerId === aiPlayerId &&
@@ -1110,7 +1128,7 @@ export function executeAssignIdleWorkers(
     maxWorkers: number;
   }> = [];
 
-  // DYNAMIC resource priority based on current rates
+  // DYNAMIC resource priority based on current rates and game state
   // If a resource rate is 0, that resource gets HIGHEST priority
   const baseResourcePriority: Record<string, number> = {
     'gather_food': 100,
@@ -1131,6 +1149,42 @@ export function executeAssignIdleWorkers(
   }
   if (player.resourceRates.food === 0) {
     resourcePriority['gather_food'] = 200;
+  }
+  
+  // CRITICAL: Boost gold priority when pop-capped and need gold for small_city!
+  if (popCapped && needsGoldForCity) {
+    resourcePriority['gather_gold'] = 250; // HIGHEST priority when saving for city!
+    console.log(`[assign_workers] BOOSTING GOLD PRIORITY - pop capped and need 200 gold (have ${Math.round(player.resources.gold)})`);
+  } else if (player.resourceRates.gold === 0) {
+    resourcePriority['gather_gold'] = 120; // Boost if no gold income
+  }
+  
+  // INDUSTRIAL AGE+: Boost oil priority when we have oil wells
+  const isIndustrialPlus = ['industrial', 'modern'].includes(player.age);
+  if (isIndustrialPlus) {
+    // Check if we have any oil infrastructure
+    let hasOilBuildings = false;
+    for (let y = 0; y < state.gridSize; y++) {
+      for (let x = 0; x < state.gridSize; x++) {
+        const tile = state.grid[y]?.[x];
+        if (tile?.building?.ownerId === aiPlayerId && 
+            ['oil_well', 'oil_platform', 'refinery'].includes(tile.building.type)) {
+          hasOilBuildings = true;
+          break;
+        }
+      }
+      if (hasOilBuildings) break;
+    }
+    
+    if (hasOilBuildings) {
+      // Boost oil gathering priority at Industrial age
+      if (player.resourceRates.oil === 0) {
+        resourcePriority['gather_oil'] = 180; // High priority if no oil income but have buildings
+        console.log(`[assign_workers] BOOSTING OIL PRIORITY - Industrial age with oil buildings but 0 rate`);
+      } else {
+        resourcePriority['gather_oil'] = 80; // Normal boost at Industrial age
+      }
+    }
   }
 
   // Scan for economic buildings

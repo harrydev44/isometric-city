@@ -12,6 +12,7 @@ import { RoNSidebar } from './RoNSidebar';
 import { RoNMiniMap } from './RoNMiniMap';
 import { RoNBuildingPanel } from './RoNBuildingPanel';
 import { AIMessagePanel } from './AIMessagePanel';
+import { AIAgentsSidebar, AI_SIDEBAR_DEFAULT_WIDTH } from './AIAgentsSidebar';
 import { Button } from '@/components/ui/button';
 import { AGE_INFO } from '../types/ages';
 import { PLAYER_COLORS } from '../lib/renderConfig';
@@ -30,6 +31,7 @@ function GameContent({ onExit }: { onExit?: () => void }) {
     setAgenticAIEnabled,
     markAIMessageRead,
     clearAIMessages,
+    clearAIConversations,
   } = useRoN();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{ 
@@ -37,6 +39,7 @@ function GameContent({ onExit }: { onExit?: () => void }) {
     zoom: number; 
     canvasSize: { width: number; height: number } 
   } | null>(null);
+  const [aiSidebarWidth, setAiSidebarWidth] = useState(AI_SIDEBAR_DEFAULT_WIDTH);
   
   const currentPlayer = getCurrentPlayer();
   
@@ -102,33 +105,57 @@ function GameContent({ onExit }: { onExit?: () => void }) {
   // Match IsoCity's layout structure exactly
   return (
     <div className="w-full h-full min-h-[720px] overflow-hidden bg-slate-900 flex">
-      {/* Sidebar - uses same pattern as IsoCity */}
+      {/* Left Sidebar - uses same pattern as IsoCity */}
       <RoNSidebar />
       
       {/* Main game area - uses flex-col like IsoCity */}
-      <div className="flex-1 flex flex-col ml-56">
+      <div 
+        className="flex-1 flex flex-col ml-56 transition-[margin]"
+        style={{ marginRight: agenticAI.enabled ? aiSidebarWidth : 0 }}
+      >
         {/* Top bar - as flex child (not absolute) like IsoCity */}
         <div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
           {/* Left section: Players, Speed control */}
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              {state.players.map((player, index) => (
-                <div 
-                  key={player.id}
-                  className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${
-                    player.id === currentPlayer?.id ? 'bg-secondary' : ''
-                  }`}
-                >
+              {state.players.map((player, index) => {
+                // Calculate elimination timer
+                const ELIMINATION_TICKS = 1200;
+                const ticksWithoutCity = player.noCitySinceTick !== null 
+                  ? state.tick - player.noCitySinceTick 
+                  : 0;
+                const secondsRemaining = player.noCitySinceTick !== null
+                  ? Math.max(0, Math.ceil((ELIMINATION_TICKS - ticksWithoutCity) / 10))
+                  : null;
+                
+                return (
                   <div 
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: PLAYER_COLORS[index] }}
-                  />
-                  <span className="text-foreground">{player.name}</span>
-                  {player.isDefeated && (
-                    <span className="text-red-500 text-xs">☠️</span>
-                  )}
-                </div>
-              ))}
+                    key={player.id}
+                    className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${
+                      player.id === currentPlayer?.id ? 'bg-secondary' : ''
+                    }`}
+                    title={secondsRemaining !== null 
+                      ? `No cities! Eliminated in ${secondsRemaining}s` 
+                      : player.isDefeated 
+                        ? 'Defeated' 
+                        : `${player.name} - ${player.population}/${player.populationCap} pop`
+                    }
+                  >
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: PLAYER_COLORS[index] }}
+                    />
+                    <span className="text-foreground">{player.name}</span>
+                    {player.isDefeated ? (
+                      <span className="text-red-500 text-xs">Eliminated</span>
+                    ) : secondsRemaining !== null ? (
+                      <span className="text-amber-500 text-xs font-mono animate-pulse">
+                        {secondsRemaining}s
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
             
             {/* Speed control - same component as IsoCity */}
@@ -251,6 +278,17 @@ function GameContent({ onExit }: { onExit?: () => void }) {
           )}
         </div>
       </div>
+      
+      {/* Right Sidebar - AI Agents (only when AI is enabled) */}
+      {agenticAI.enabled && (
+        <div className="fixed right-0 top-0 h-screen z-40">
+          <AIAgentsSidebar 
+            conversations={agenticAI.conversations}
+            onClear={clearAIConversations}
+            onWidthChange={setAiSidebarWidth}
+          />
+        </div>
+      )}
     </div>
   );
 }

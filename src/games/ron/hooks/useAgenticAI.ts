@@ -25,14 +25,38 @@ export interface AgenticAIMessage {
   isRead: boolean;
 }
 
+// Conversation entry for displaying in sidebar
+export interface AIConversationEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  timestamp: number;
+  type: 'prompt' | 'thinking' | 'tool_call' | 'tool_result' | 'message';
+  content: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  isCollapsed?: boolean;
+}
+
+// Per-player conversation history
+export interface AIPlayerConversation {
+  playerId: string;
+  playerName: string;
+  color: string;
+  entries: AIConversationEntry[];
+  isThinking: boolean;
+}
+
 export interface UseAgenticAIResult {
   messages: AgenticAIMessage[];
+  conversations: AIPlayerConversation[];  // Full conversation history per player
   isThinking: boolean;
   thinkingPlayerIds: string[];  // Which AIs are currently thinking
   lastError: string | null;
   thoughts: string | null;
   markMessageRead: (messageId: string) => void;
   clearMessages: () => void;
+  clearConversations: () => void;
   reset: () => void;
 }
 
@@ -52,12 +76,43 @@ export function useAgenticAI(
   config: AgenticAIConfig
 ): UseAgenticAIResult {
   const [messages, setMessages] = useState<AgenticAIMessage[]>([]);
+  const [conversations, setConversations] = useState<AIPlayerConversation[]>([]);
   const [thinkingPlayerIds, setThinkingPlayerIds] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   
   // Per-AI state refs (keyed by player ID)
   const aiStatesRef = useRef<Map<string, AIPlayerState>>(new Map());
   const latestStateRef = useRef(gameState);
+  
+  // Helper to add conversation entry
+  const addConversationEntry = useCallback((entry: Omit<AIConversationEntry, 'id'>) => {
+    setConversations(prev => {
+      const existingIdx = prev.findIndex(c => c.playerId === entry.playerId);
+      const newEntry: AIConversationEntry = {
+        ...entry,
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+      
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          entries: [...updated[existingIdx].entries, newEntry].slice(-50), // Keep last 50 entries
+        };
+        return updated;
+      } else {
+        // Get player info
+        const player = latestStateRef.current.players.find(p => p.id === entry.playerId);
+        return [...prev, {
+          playerId: entry.playerId,
+          playerName: entry.playerName,
+          color: player?.color || '#888',
+          entries: [newEntry],
+          isThinking: false,
+        }];
+      }
+    });
+  }, []);
   
   useEffect(() => {
     latestStateRef.current = gameState;
@@ -67,11 +122,6 @@ export function useAgenticAI(
   useEffect(() => {
     const currentIds = new Set(config.aiPlayerIds);
     const stateMap = aiStatesRef.current;
-    
-    // Log AI player configuration
-    // if (config.aiPlayerIds.length > 0) {
-    //   console.log(`[MULTI-AI] Configured ${config.aiPlayerIds.length} AI players:`, config.aiPlayerIds);
-    // }
     
     // Add new AI players
     for (const id of config.aiPlayerIds) {
@@ -156,6 +206,23 @@ export function useAgenticAI(
     aiState.isProcessing = true;
     aiState.lastCallTime = Date.now();
     setThinkingPlayerIds(prev => [...prev.filter(id => id !== aiPlayerId), aiPlayerId]);
+    
+    // Update conversation thinking state
+    setConversations(prev => prev.map(c => 
+      c.playerId === aiPlayerId ? { ...c, isThinking: true } : c
+    ));
+    
+    // Log the prompt being sent
+    const tick = state.tick;
+    const popCapped = aiPlayer.population >= aiPlayer.populationCap;
+    const promptSummary = `Tick ${tick} | Pop ${aiPlayer.population}/${aiPlayer.populationCap}${popCapped ? ' [CAPPED]' : ''} | Food ${Math.round(aiPlayer.resources.food)} Wood ${Math.round(aiPlayer.resources.wood)} Metal ${Math.round(aiPlayer.resources.metal)}`;
+    addConversationEntry({
+      playerId: aiPlayerId,
+      playerName: aiPlayer.name,
+      timestamp: Date.now(),
+      type: 'prompt',
+      content: promptSummary,
+    });
 
     try {
       const response = await fetch('/api/ron-ai', {
@@ -172,6 +239,13 @@ export function useAgenticAI(
 
       if (result.error) {
         setLastError(`[${aiPlayer.name}] ${result.error}`);
+        addConversationEntry({
+          playerId: aiPlayerId,
+          playerName: aiPlayer.name,
+          timestamp: Date.now(),
+          type: 'message',
+          content: `Error: ${result.error}`,
+        });
         // Reset response ID on errors to start fresh
         if (result.error.includes('400') || result.error.includes('invalid')) {
           aiState.responseId = undefined;
@@ -184,8 +258,75 @@ export function useAgenticAI(
           aiState.responseId = result.responseId;
         }
         
+        // Update prompt with full details from API response if available
+        if (result.turnPrompt) {
+          // Update the last prompt entry with full details
+          setConversations(prev => {
+            const convIdx = prev.findIndex(c => c.playerId === aiPlayerId);
+            if (convIdx >= 0) {
+              const entries = [...prev[convIdx].entries];
+              // Find the last prompt entry and update it
+              for (let i = entries.length - 1; i >= 0; i--) {
+                if (entries[i].type === 'prompt') {
+                  entries[i] = { ...entries[i], content: result.turnPrompt };
+                  break;
+                }
+              }
+              const updated = [...prev];
+              updated[convIdx] = { ...updated[convIdx], entries };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        
+        // Add tool calls to conversation
+        if (result.toolCalls?.length > 0) {
+          for (const tc of result.toolCalls as Array<{ name: string; args: Record<string, unknown>; result?: string }>) {
+            addConversationEntry({
+              playerId: aiPlayerId,
+              playerName: aiPlayer.name,
+              timestamp: Date.now(),
+              type: 'tool_call',
+              content: tc.name,
+              toolName: tc.name,
+              toolArgs: tc.args,
+            });
+            if (tc.result) {
+              addConversationEntry({
+                playerId: aiPlayerId,
+                playerName: aiPlayer.name,
+                timestamp: Date.now(),
+                type: 'tool_result',
+                content: tc.result.length > 300 ? tc.result.slice(0, 300) + '...' : tc.result,
+                toolName: tc.name,
+              });
+            }
+          }
+        }
+        
+        // Add AI thinking/reasoning to conversation
+        if (result.thinking) {
+          addConversationEntry({
+            playerId: aiPlayerId,
+            playerName: aiPlayer.name,
+            timestamp: Date.now(),
+            type: 'thinking',
+            content: result.thinking,
+          });
+        }
+        
         // Add messages with player attribution
         if (result.messages?.length > 0) {
+          for (const msg of result.messages as string[]) {
+            addConversationEntry({
+              playerId: aiPlayerId,
+              playerName: aiPlayer.name,
+              timestamp: Date.now(),
+              type: 'message',
+              content: msg,
+            });
+          }
           setMessages(prev => [
             ...prev,
             ...result.messages.map((msg: string) => ({
@@ -322,28 +463,39 @@ export function useAgenticAI(
     } finally {
       aiState.isProcessing = false;
       setThinkingPlayerIds(prev => prev.filter(id => id !== aiPlayerId));
+      setConversations(prev => prev.map(c => 
+        c.playerId === aiPlayerId ? { ...c, isThinking: false } : c
+      ));
     }
-  }, [config.enabled, setGameState]);
+  }, [config.enabled, setGameState, addConversationEntry]);
+
+  // Store processAITurn in a ref to avoid dependency issues
+  const processAITurnRef = useRef(processAITurn);
+  processAITurnRef.current = processAITurn;
 
   // Schedule AI turns with staggered timing
+  // Only re-run when enabled status or player IDs change (NOT when processAITurn changes)
   useEffect(() => {
     if (!config.enabled || config.aiPlayerIds.length === 0) return;
 
+    console.log('[AI] 🚀 Starting AI for', config.aiPlayerIds.length, 'players');
+
     // Initial calls with stagger
     const initialTimeouts = config.aiPlayerIds.map((id, index) => 
-      setTimeout(() => processAITurn(id), 2000 + index * STAGGER_DELAY_MS)
+      setTimeout(() => processAITurnRef.current(id), 2000 + index * STAGGER_DELAY_MS)
     );
 
     // Interval calls with stagger
     const intervals = config.aiPlayerIds.map((id, index) => 
-      setInterval(() => processAITurn(id), POLL_INTERVAL_MS + index * STAGGER_DELAY_MS)
+      setInterval(() => processAITurnRef.current(id), POLL_INTERVAL_MS + index * STAGGER_DELAY_MS)
     );
 
     return () => {
       initialTimeouts.forEach(t => clearTimeout(t));
       intervals.forEach(i => clearInterval(i));
     };
-  }, [config.enabled, config.aiPlayerIds, processAITurn]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.enabled, JSON.stringify(config.aiPlayerIds)]);
 
   const markMessageRead = useCallback((messageId: string) => {
     setMessages(prev => prev.map(msg => 
@@ -352,11 +504,13 @@ export function useAgenticAI(
   }, []);
 
   const clearMessages = useCallback(() => setMessages([]), []);
+  const clearConversations = useCallback(() => setConversations([]), []);
 
   // Reset all AI state - call this when restarting the game
   const reset = useCallback(() => {
     // Clear messages and errors
     setMessages([]);
+    setConversations([]);
     setLastError(null);
     setThinkingPlayerIds([]);
     
@@ -372,12 +526,14 @@ export function useAgenticAI(
 
   return {
     messages,
+    conversations,
     isThinking: thinkingPlayerIds.length > 0,
     thinkingPlayerIds,
     lastError,
     thoughts: null,
     markMessageRead,
     clearMessages,
+    clearConversations,
     reset,
   };
 }

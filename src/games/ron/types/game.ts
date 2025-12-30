@@ -25,6 +25,8 @@ export interface RoNPlayer {
   populationCap: number;
   isDefeated: boolean;
   hasWon: boolean;
+  // Elimination timer - tick when player lost their last city (null if they have cities)
+  noCitySinceTick: number | null;
   // Research/tech progress
   researchProgress: number;     // Progress toward next age
   // Visibility
@@ -195,6 +197,7 @@ export function createInitialRoNGameState(
       populationCap: 10,
       isDefeated: false,
       hasWon: false,
+      noCitySinceTick: null,
       researchProgress: 0,
       exploredTiles,
       visibleTiles,

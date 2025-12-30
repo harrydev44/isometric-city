@@ -123,43 +123,43 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   empty: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
   grass: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
   water: { cost: {}, maxHealth: 0, buildTime: 0, minAge: 'classical', size: { width: 1, height: 1 } },
-  road: { cost: { wood: 10 }, maxHealth: 100, buildTime: 10, minAge: 'classical', size: { width: 1, height: 1 } },
+  road: { cost: { wood: 10 }, maxHealth: 100, buildTime: 5, minAge: 'classical', size: { width: 1, height: 1 } },
   
-  // City centers - 3x3 buildings like IsoCity city hall
+  // City centers - 3x3 buildings like IsoCity city hall (DOUBLED HOUSING!)
   city_center: { 
     cost: { wood: 200, gold: 100 }, 
     maxHealth: 2000, 
-    buildTime: 100, 
+    buildTime: 50, 
     minAge: 'classical', 
     size: { width: 3, height: 3 },
-    providesHousing: 10,
+    providesHousing: 20,  // Doubled!
     visionRange: 8,
   },
   small_city: { 
     cost: { wood: 400, gold: 200, metal: 100 }, 
     maxHealth: 3000, 
-    buildTime: 150, 
+    buildTime: 75, 
     minAge: 'classical', 
     size: { width: 3, height: 3 },
-    providesHousing: 20,
+    providesHousing: 40,  // Doubled!
     visionRange: 10,
   },
   large_city: { 
     cost: { wood: 600, gold: 400, metal: 200 }, 
     maxHealth: 4000, 
-    buildTime: 200, 
+    buildTime: 100, 
     minAge: 'medieval', 
     size: { width: 3, height: 3 },
-    providesHousing: 35,
+    providesHousing: 70,  // Doubled!
     visionRange: 12,
   },
   major_city: { 
     cost: { wood: 1000, gold: 800, metal: 400 }, 
     maxHealth: 5000, 
-    buildTime: 250, 
+    buildTime: 125, 
     minAge: 'enlightenment', 
     size: { width: 3, height: 3 },
-    providesHousing: 50,
+    providesHousing: 100,  // Doubled!
     visionRange: 15,
   },
   
@@ -167,7 +167,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   farm: {
     cost: { wood: 50 },
     maxHealth: 500,
-    buildTime: 40,
+    buildTime: 20,
     minAge: 'classical',
     size: { width: 1, height: 1 },
     maxWorkers: 5,
@@ -175,7 +175,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   woodcutters_camp: { 
     cost: { wood: 30 }, 
     maxHealth: 300, 
-    buildTime: 30, 
+    buildTime: 15, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
     maxWorkers: 5,
@@ -183,7 +183,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   granary: { 
     cost: { wood: 80 }, 
     maxHealth: 600, 
-    buildTime: 50, 
+    buildTime: 25, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
     providesStorage: { food: 300 },
@@ -192,7 +192,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   lumber_mill: {
     cost: { wood: 100, gold: 30 },
     maxHealth: 700,
-    buildTime: 60,
+    buildTime: 30,
     minAge: 'classical',
     size: { width: 1, height: 1 },
     gatherBonus: { wood: 0.25 },
@@ -201,7 +201,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   mine: {
     cost: { wood: 80, gold: 50 },
     maxHealth: 800,
-    buildTime: 70,
+    buildTime: 35,
     minAge: 'classical',
     size: { width: 1, height: 1 },
     maxWorkers: 5,
@@ -209,7 +209,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   smelter: { 
     cost: { wood: 120, gold: 80, metal: 50 }, 
     maxHealth: 900, 
-    buildTime: 80, 
+    buildTime: 40, 
     minAge: 'medieval', 
     size: { width: 2, height: 2 },
     gatherBonus: { metal: 0.3 },
@@ -218,7 +218,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   market: {
     cost: { wood: 120 },  // No gold cost - market is how you GET gold
     maxHealth: 600,
-    buildTime: 60,
+    buildTime: 30,
     minAge: 'classical',
     size: { width: 2, height: 2 },
     maxWorkers: 5,
@@ -226,7 +226,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   oil_well: { 
     cost: { wood: 200, metal: 150, gold: 100 }, 
     maxHealth: 800, 
-    buildTime: 100, 
+    buildTime: 50, 
     minAge: 'industrial', 
     size: { width: 1, height: 1 },
     maxWorkers: 4,
@@ -234,7 +234,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   oil_platform: { 
     cost: { wood: 300, metal: 250, gold: 200 }, 
     maxHealth: 1000, 
-    buildTime: 150, 
+    buildTime: 75, 
     minAge: 'industrial', 
     size: { width: 2, height: 2 },
     maxWorkers: 6,
@@ -242,7 +242,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   refinery: {
     cost: { wood: 250, metal: 200, gold: 150 },
     maxHealth: 1200,
-    buildTime: 120,
+    buildTime: 60,
     minAge: 'industrial',
     size: { width: 2, height: 2 },
     gatherBonus: { oil: 0.5 },
@@ -253,7 +253,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   library: {
     cost: { wood: 100, gold: 80 },
     maxHealth: 700,
-    buildTime: 80,
+    buildTime: 40,
     minAge: 'classical',
     size: { width: 2, height: 2 },
     maxWorkers: 3,
@@ -262,21 +262,21 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
     cost: { wood: 200, gold: 200, knowledge: 50 },
     maxWorkers: 5,
     maxHealth: 1000, 
-    buildTime: 120, 
+    buildTime: 60, 
     minAge: 'medieval', 
     size: { width: 2, height: 2 },
   },
   temple: { 
     cost: { wood: 150, gold: 100 }, 
     maxHealth: 800, 
-    buildTime: 90, 
+    buildTime: 45, 
     minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   senate: { 
     cost: { wood: 300, gold: 400, knowledge: 100 }, 
     maxHealth: 1500, 
-    buildTime: 150, 
+    buildTime: 75, 
     minAge: 'enlightenment', 
     size: { width: 2, height: 2 },
   },
@@ -285,7 +285,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   barracks: { 
     cost: { wood: 100, gold: 50 }, 
     maxHealth: 1000, 
-    buildTime: 60, 
+    buildTime: 30, 
     minAge: 'classical', 
     size: { width: 2, height: 2 },
     garrisonSlots: 5,
@@ -293,7 +293,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   stable: { 
     cost: { wood: 150, gold: 100 }, 
     maxHealth: 1000, 
-    buildTime: 80, 
+    buildTime: 40, 
     minAge: 'classical', 
     size: { width: 2, height: 2 },
     garrisonSlots: 3,
@@ -301,35 +301,35 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   siege_factory: { 
     cost: { wood: 200, metal: 150, gold: 100 }, 
     maxHealth: 1200, 
-    buildTime: 100, 
+    buildTime: 50, 
     minAge: 'medieval', 
     size: { width: 2, height: 2 },
   },
   dock: { 
     cost: { wood: 150, gold: 80 }, 
     maxHealth: 1000, 
-    buildTime: 80, 
+    buildTime: 40, 
     minAge: 'classical', 
     size: { width: 2, height: 2 },
   },
   auto_plant: { 
     cost: { wood: 300, metal: 400, gold: 300, oil: 100 }, 
     maxHealth: 2000, 
-    buildTime: 150, 
+    buildTime: 75, 
     minAge: 'industrial', 
     size: { width: 3, height: 3 },
   },
   factory: { 
     cost: { wood: 200, metal: 200, gold: 150 }, 
     maxHealth: 1500, 
-    buildTime: 120, 
+    buildTime: 60, 
     minAge: 'industrial', 
     size: { width: 2, height: 2 },
   },
   airbase: { 
     cost: { wood: 400, metal: 500, gold: 400, oil: 200 }, 
     maxHealth: 2500, 
-    buildTime: 200, 
+    buildTime: 100, 
     minAge: 'modern', 
     size: { width: 4, height: 4 },
     garrisonSlots: 8,
@@ -337,7 +337,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   missile_silo: { 
     cost: { metal: 1000, gold: 1000, oil: 500, knowledge: 500 }, 
     maxHealth: 3000, 
-    buildTime: 300, 
+    buildTime: 150, 
     minAge: 'modern', 
     size: { width: 2, height: 2 },
   },
@@ -346,7 +346,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   tower: { 
     cost: { wood: 50 }, 
     maxHealth: 500, 
-    buildTime: 40, 
+    buildTime: 20, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
     attackDamage: 10,
@@ -356,14 +356,14 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   stockade: { 
     cost: { wood: 100 }, 
     maxHealth: 800, 
-    buildTime: 60, 
+    buildTime: 30, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
   },
   fort: { 
     cost: { wood: 150, metal: 100 }, 
     maxHealth: 1500, 
-    buildTime: 100, 
+    buildTime: 50, 
     minAge: 'medieval',  // Not available in Classical era
     size: { width: 2, height: 2 },
     attackDamage: 20,
@@ -374,7 +374,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   fortress: { 
     cost: { wood: 250, metal: 200, gold: 100 }, 
     maxHealth: 2500, 
-    buildTime: 150, 
+    buildTime: 75, 
     minAge: 'medieval', 
     size: { width: 3, height: 3 },
     attackDamage: 35,
@@ -385,7 +385,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   castle: { 
     cost: { wood: 400, metal: 300, gold: 200 }, 
     maxHealth: 4000, 
-    buildTime: 200, 
+    buildTime: 100, 
     minAge: 'medieval', 
     size: { width: 3, height: 3 },
     attackDamage: 50,
@@ -396,7 +396,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   bunker: { 
     cost: { metal: 200, gold: 100 }, 
     maxHealth: 2000, 
-    buildTime: 80, 
+    buildTime: 40, 
     minAge: 'modern', 
     size: { width: 1, height: 1 },
     attackDamage: 40,
@@ -406,7 +406,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   lookout: { 
     cost: { wood: 40 }, 
     maxHealth: 200, 
-    buildTime: 20, 
+    buildTime: 10, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
     visionRange: 10,
@@ -414,7 +414,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   observation_post: { 
     cost: { wood: 60, metal: 30 }, 
     maxHealth: 300, 
-    buildTime: 30, 
+    buildTime: 15, 
     minAge: 'classical', 
     size: { width: 1, height: 1 },
     visionRange: 15,
@@ -422,7 +422,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   redoubt: { 
     cost: { wood: 80, metal: 50 }, 
     maxHealth: 600, 
-    buildTime: 50, 
+    buildTime: 25, 
     minAge: 'enlightenment', 
     size: { width: 1, height: 1 },
     attackDamage: 25,
@@ -434,7 +434,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   air_defense_gun: { 
     cost: { metal: 150, gold: 100 }, 
     maxHealth: 800, 
-    buildTime: 60, 
+    buildTime: 30, 
     minAge: 'industrial', 
     size: { width: 1, height: 1 },
     attackDamage: 50,
@@ -443,7 +443,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   radar_air_defense: { 
     cost: { metal: 250, gold: 200, oil: 50 }, 
     maxHealth: 1000, 
-    buildTime: 80, 
+    buildTime: 40, 
     minAge: 'modern', 
     size: { width: 1, height: 1 },
     attackDamage: 80,
@@ -453,7 +453,7 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   sam_installation: { 
     cost: { metal: 400, gold: 300, oil: 100 }, 
     maxHealth: 1200, 
-    buildTime: 100, 
+    buildTime: 50, 
     minAge: 'modern', 
     size: { width: 2, height: 2 },
     attackDamage: 120,
@@ -461,23 +461,23 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   },
   
   // Wonders (expensive, unique effects)
-  pyramids: { cost: { wood: 500, gold: 500 }, maxHealth: 5000, buildTime: 500, minAge: 'classical', size: { width: 3, height: 3 } },
-  colosseum: { cost: { wood: 400, gold: 600, metal: 200 }, maxHealth: 4000, buildTime: 400, minAge: 'classical', size: { width: 3, height: 3 } },
-  colossus: { cost: { metal: 800, gold: 600 }, maxHealth: 3000, buildTime: 450, minAge: 'classical', size: { width: 2, height: 2 } },
-  hanging_gardens: { cost: { wood: 600, gold: 400 }, maxHealth: 3500, buildTime: 400, minAge: 'classical', size: { width: 3, height: 3 } },
-  terra_cotta_army: { cost: { metal: 500, gold: 500 }, maxHealth: 2500, buildTime: 350, minAge: 'classical', size: { width: 3, height: 3 } },
-  angkor_wat: { cost: { wood: 700, gold: 700 }, maxHealth: 4500, buildTime: 500, minAge: 'medieval', size: { width: 4, height: 4 } },
-  forbidden_city: { cost: { wood: 800, gold: 1000, metal: 300 }, maxHealth: 5000, buildTime: 550, minAge: 'medieval', size: { width: 4, height: 4 } },
-  versailles: { cost: { wood: 1000, gold: 1500 }, maxHealth: 4000, buildTime: 500, minAge: 'enlightenment', size: { width: 4, height: 4 } },
-  kremlin: { cost: { wood: 800, metal: 600, gold: 1000 }, maxHealth: 6000, buildTime: 550, minAge: 'enlightenment', size: { width: 3, height: 3 } },
-  taj_mahal: { cost: { wood: 600, metal: 400, gold: 1200 }, maxHealth: 4000, buildTime: 450, minAge: 'enlightenment', size: { width: 3, height: 3 } },
-  porcelain_tower: { cost: { wood: 500, gold: 800, knowledge: 200 }, maxHealth: 3000, buildTime: 400, minAge: 'enlightenment', size: { width: 2, height: 2 } },
-  red_fort: { cost: { wood: 700, metal: 500, gold: 800 }, maxHealth: 5500, buildTime: 500, minAge: 'enlightenment', size: { width: 3, height: 3 } },
-  temple_of_tikal: { cost: { wood: 600, gold: 600 }, maxHealth: 3500, buildTime: 400, minAge: 'classical', size: { width: 3, height: 3 } },
-  statue_of_liberty: { cost: { metal: 1000, gold: 1500 }, maxHealth: 4000, buildTime: 500, minAge: 'industrial', size: { width: 2, height: 2 } },
-  eiffel_tower: { cost: { metal: 1500, gold: 1000 }, maxHealth: 3500, buildTime: 450, minAge: 'industrial', size: { width: 2, height: 2 } },
-  supercollider: { cost: { metal: 2000, gold: 2000, knowledge: 1000, oil: 500 }, maxHealth: 5000, buildTime: 600, minAge: 'modern', size: { width: 4, height: 4 } },
-  space_program: { cost: { metal: 2500, gold: 3000, knowledge: 1500, oil: 1000 }, maxHealth: 6000, buildTime: 700, minAge: 'modern', size: { width: 4, height: 4 } },
+  pyramids: { cost: { wood: 500, gold: 500 }, maxHealth: 5000, buildTime: 250, minAge: 'classical', size: { width: 3, height: 3 } },
+  colosseum: { cost: { wood: 400, gold: 600, metal: 200 }, maxHealth: 4000, buildTime: 200, minAge: 'classical', size: { width: 3, height: 3 } },
+  colossus: { cost: { metal: 800, gold: 600 }, maxHealth: 3000, buildTime: 225, minAge: 'classical', size: { width: 2, height: 2 } },
+  hanging_gardens: { cost: { wood: 600, gold: 400 }, maxHealth: 3500, buildTime: 200, minAge: 'classical', size: { width: 3, height: 3 } },
+  terra_cotta_army: { cost: { metal: 500, gold: 500 }, maxHealth: 2500, buildTime: 175, minAge: 'classical', size: { width: 3, height: 3 } },
+  angkor_wat: { cost: { wood: 700, gold: 700 }, maxHealth: 4500, buildTime: 250, minAge: 'medieval', size: { width: 4, height: 4 } },
+  forbidden_city: { cost: { wood: 800, gold: 1000, metal: 300 }, maxHealth: 5000, buildTime: 275, minAge: 'medieval', size: { width: 4, height: 4 } },
+  versailles: { cost: { wood: 1000, gold: 1500 }, maxHealth: 4000, buildTime: 250, minAge: 'enlightenment', size: { width: 4, height: 4 } },
+  kremlin: { cost: { wood: 800, metal: 600, gold: 1000 }, maxHealth: 6000, buildTime: 275, minAge: 'enlightenment', size: { width: 3, height: 3 } },
+  taj_mahal: { cost: { wood: 600, metal: 400, gold: 1200 }, maxHealth: 4000, buildTime: 225, minAge: 'enlightenment', size: { width: 3, height: 3 } },
+  porcelain_tower: { cost: { wood: 500, gold: 800, knowledge: 200 }, maxHealth: 3000, buildTime: 200, minAge: 'enlightenment', size: { width: 2, height: 2 } },
+  red_fort: { cost: { wood: 700, metal: 500, gold: 800 }, maxHealth: 5500, buildTime: 250, minAge: 'enlightenment', size: { width: 3, height: 3 } },
+  temple_of_tikal: { cost: { wood: 600, gold: 600 }, maxHealth: 3500, buildTime: 200, minAge: 'classical', size: { width: 3, height: 3 } },
+  statue_of_liberty: { cost: { metal: 1000, gold: 1500 }, maxHealth: 4000, buildTime: 250, minAge: 'industrial', size: { width: 2, height: 2 } },
+  eiffel_tower: { cost: { metal: 1500, gold: 1000 }, maxHealth: 3500, buildTime: 225, minAge: 'industrial', size: { width: 2, height: 2 } },
+  supercollider: { cost: { metal: 2000, gold: 2000, knowledge: 1000, oil: 500 }, maxHealth: 5000, buildTime: 300, minAge: 'modern', size: { width: 4, height: 4 } },
+  space_program: { cost: { metal: 2500, gold: 3000, knowledge: 1500, oil: 1000 }, maxHealth: 6000, buildTime: 350, minAge: 'modern', size: { width: 4, height: 4 } },
 };
 
 // Buildings that can produce units and what they can produce

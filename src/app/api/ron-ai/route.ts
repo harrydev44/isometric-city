@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { RoNGameState } from '@/games/ron/types/game';
+import { RoNGameState, RoNTile, RoNPlayer } from '@/games/ron/types/game';
+import { Unit } from '@/games/ron/types/units';
 import {
   generateCondensedGameState,
   executeBuildBuilding,
@@ -99,7 +100,7 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   {
     type: 'function',
     name: 'send_units',
-    description: 'Send military units to attack an enemy position',
+    description: 'Send military units to attack enemy OR patrol/move within your territory. Use task "attack" to attack enemies, or "move" to patrol and defend territory.',
     strict: true,
     parameters: {
       type: 'object',
@@ -111,8 +112,13 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
         },
         target_x: { type: 'number', description: 'Target X coordinate' },
         target_y: { type: 'number', description: 'Target Y coordinate' },
+        task: { 
+          type: 'string', 
+          enum: ['attack', 'move'],
+          description: 'Task for units: "attack" to attack enemies, "move" to patrol/defend territory' 
+        },
       },
-      required: ['unit_ids', 'target_x', 'target_y'],
+      required: ['unit_ids', 'target_x', 'target_y', 'task'],
       additionalProperties: false,
     },
   },
@@ -132,76 +138,86 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are an expert RTS AI player. Your goal is to DEFEAT all opponents through superior strategy.
+const SYSTEM_PROMPT = `You are a strategic RTS AI. Read the game state carefully and only take actions that are POSSIBLE.
 
-## STRATEGIC PHASES
+## CRITICAL: CHECK BEFORE ACTING!
+Before every action, verify you have the resources:
+- farm: 50 wood
+- woodcutters_camp: 30 wood  
+- mine: 80 wood + 50 gold
+- barracks: 100 wood
+- market: 60 wood + 30 gold
+- small_city: 400 wood + 100 metal + 200 gold (increases pop cap by 20!)
+- train citizen: 50 food (REQUIRES pop < popCap!)
+- train militia: 40 food + 20 wood (REQUIRES pop < popCap!)
 
-**EARLY GAME (Ticks 0-500)**
-- Build 2-3 farms IMMEDIATELY for food income
-- Build 1-2 woodcutters_camp near forests for wood
-- Train citizens until you have 8-10 workers
-- Build barracks by tick 200-300
-- Scout enemy location with first militia
+## AGE PROGRESSION
+Ages: classical -> medieval -> enlightenment -> industrial -> modern
+- Build library to research and advance ages
+- Use advance_age tool when you have enough resources
+- Higher ages unlock better units and buildings!
 
-**MID GAME (Ticks 500-2000)**  
-- If pop-capped: SAVE for small_city (400 wood + 200 gold + 100 metal)
-- Build mine for metal income
-- Build market for gold income
-- Expand to 15+ workers, build second barracks
-- Train mixed military (militia + hoplites)
-- Attack when you have 8+ military units
+## INDUSTRIAL AGE+ OIL ECONOMY (CRITICAL!)
+When you reach INDUSTRIAL AGE, you MUST build oil infrastructure:
+- oil_well: 200 wood + 150 metal + 100 gold (requires oil deposit tile)
+- refinery: 250 wood + 200 metal + 150 gold (boosts oil gathering +50%!)
+Oil is needed for: auto_plant, airbase, missile_silo, modern age advancement
+PRIORITY at Industrial: 1) Build oil_well on oil deposits, 2) Build refinery, 3) Assign workers to oil buildings
 
-**LATE GAME (Ticks 2000+)**
-- Control map with military
-- Deny enemy resources, raid their workers
-- Push for decisive victory
-
-## EVERY TURN CHECKLIST
-1. get_game_state - See current situation
-2. assign_workers - Keep workers productive
-3. BUILD - Always be building something!
-4. TRAIN - Always be training units!
-5. ATTACK/DEFEND - When ready or under threat
-
-## ECONOMY PRIORITIES (CRITICAL!)
-1. FOOD is most important - need 3+ farms minimum!
-2. WOOD is needed for buildings - need 2+ woodcutters_camp
-3. METAL for advanced units - need 1+ mine
-4. GOLD for expansion - need 1+ market
-
-## BUILDING REQUIREMENTS
-- woodcutters_camp: Build ADJACENT to forest tiles (🌲)
-- mine: Build ADJACENT to metal deposits (⛏️)
-- farm/barracks/market: Build on any General tile
-
-## POP CAP MANAGEMENT
+## POPULATION CAP RULES
 When population >= populationCap:
-1. STOP training units (waste of resources!)
-2. Focus ALL resources on small_city (400w + 200g + 100m)
-3. Build income buildings only if rates are 0
-4. The moment you have enough, BUILD THE CITY!
+- You CANNOT train ANY units (citizens or military) - don't try!
+- Your ONLY goal is to build small_city (400w + 100m + 200g)
+- SAVE wood - don't build farms/woodcutters/barracks until you have 400 wood
+- Build markets (if gold < 200) or mines (if metal < 100) if you need them
+- The moment you have enough resources, build small_city!
 
-## MILITARY STRATEGY
-- 6+ militia = ready for EARLY RUSH
-- 10+ mixed units = ready for STANDARD ATTACK
-- Always target: enemy city_center first
-- Retreat damaged units to heal
-- Don't attack if enemy army is larger!
+## WHEN NOT POP CAPPED
+1. Train citizens at cities (need workers for economy)
+2. Build farms, woodcutters, mines for resources
+3. Build barracks, train militia for military
+4. At Industrial+: Build oil_well and refinery!
+5. Attack enemy when you have 5+ military units
 
-## THREAT RESPONSE
-If under attack:
-1. Send ALL military to defend immediately
-2. Train more units at every barracks
-3. Protect city_center at all costs
+## IDLE WORKERS = BUILD MORE ECONOMY!
+If assign_workers says "no capacity" but you have idle workers:
+- Build more farms (each farm can have 5 workers)
+- Build more woodcutters_camp near forests
+- Build more mines near metal deposits
+- Build more markets for gold
+Keep building until all workers have jobs!
 
-## KEY MISTAKES TO AVOID
-- DON'T build only one farm - you need 3+!
-- DON'T forget metal income - you need mines!
-- DON'T attack with tiny armies - wait for 6+!
-- DON'T ignore population cap - expand with cities!
-- DON'T let workers sit idle - assign them!
+## ATTACK STRATEGY - CRITICAL FOR WINNING!
+- Build barracks EARLY (by tick 300)
+- Train militia constantly once you have barracks
+- When you have 5+ military: START ATTACKING!
+- Use send_units with task="attack" to attack enemy buildings (especially city_center)
+- KEEP ATTACKING every turn while training more units
+- Destroying enemy cities wins the game!
+- If enemy has no cities for 2 minutes, they lose!
 
-Remember: A strong economy wins games. Build farms, expand population, then crush!`;
+## PATROL & DEFENSE
+- Keep your military ACTIVE! Never let them sit idle!
+- If not attacking, use send_units with task="move" to PATROL your territory
+- Move units between your cities and resource buildings
+- Patrol routes: city -> barracks -> mines -> markets -> back to city
+- Patrolling units will intercept enemy attacks!
+
+## TURN ORDER
+1. get_game_state - see your resources and what's possible
+2. Check: Am I pop capped?
+   - YES: Focus ONLY on getting resources for small_city
+   - NO: Train units, build buildings, attack
+3. At Industrial+: Build oil infrastructure if you have none!
+4. If military >= 5: send_units to attack enemy!
+5. assign_workers - put idle workers to work
+
+## IMPORTANT
+- Read error messages! If an action fails, don't repeat it!
+- Check resource costs before building
+- Check population cap before training
+- Use coordinates from the buildable tiles list in game state
+- ATTACK! Passive play loses!`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -280,8 +296,38 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
       // Ignore boost errors
     }
 
-    // Initial prompt to the agent
-    const turnPrompt = `New turn! Tick: ${gameState.tick}. Analyze the game state and take strategic actions. Remember: call get_game_state first, then assign_workers, then build/train as needed.`;
+    // Compute key metrics for turn prompt
+    const popCapped = aiPlayer.population >= aiPlayer.populationCap;
+    const barracksCount = gameState.grid.flat().filter((t: RoNTile) => t.building?.type === 'barracks' && t.building?.ownerId === aiPlayerId).length;
+    const militaryCount = gameState.units.filter((u: Unit) => u.ownerId === aiPlayerId && u.type !== 'citizen').length;
+    const canAffordCity = aiPlayer.resources.wood >= 400 && aiPlayer.resources.metal >= 100 && aiPlayer.resources.gold >= 200;
+    
+    // Find enemy city for attack target
+    const enemyPlayer = gameState.players.find((pl: RoNPlayer) => pl.id !== aiPlayerId && !pl.isDefeated);
+    let enemyCityPos: { x: number; y: number } | null = null;
+    if (enemyPlayer) {
+      for (let y = 0; y < gameState.gridSize; y++) {
+        for (let x = 0; x < gameState.gridSize; x++) {
+          const tile = gameState.grid[y]?.[x];
+          if (tile?.building?.ownerId === enemyPlayer.id && 
+              ['city_center', 'small_city', 'large_city', 'major_city'].includes(tile.building.type)) {
+            enemyCityPos = { x, y };
+            break;
+          }
+        }
+        if (enemyCityPos) break;
+      }
+    }
+    
+    // Simple state summary - let the AI reason about what to do from system prompt
+    const turnPrompt = `Turn ${gameState.tick}. You are ${aiPlayer.name}.
+Resources: ${Math.round(aiPlayer.resources.food)}F / ${Math.round(aiPlayer.resources.wood)}W / ${Math.round(aiPlayer.resources.metal)}M / ${Math.round(aiPlayer.resources.gold)}G
+Population: ${aiPlayer.population}/${aiPlayer.populationCap}${popCapped ? ' (CAPPED)' : ''}
+Military: ${militaryCount} units | Barracks: ${barracksCount}
+${enemyCityPos ? `Enemy city spotted at (${enemyCityPos.x},${enemyCityPos.y})` : 'No enemy cities visible'}
+Age: ${aiPlayer.age}
+
+Start by calling get_game_state to see full details, then take actions.`;
 
     // Log what we're sending to the agent
     console.log('\n' + '-'.repeat(60));
@@ -293,7 +339,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
     // Create initial response - always provide input, optionally use previous_response_id for context
     const startTime = Date.now();
     let response = await client.responses.create({
-      model: 'gpt-5-mini-2025-08-07',
+      model: 'gpt-5.1-2025-11-13',
       instructions: SYSTEM_PROMPT,
       input: turnPrompt,
       tools: AI_TOOLS,
@@ -306,7 +352,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
 
     // Process tool calls in a loop
     let iterations = 0;
-    const maxIterations = 10;
+    const maxIterations = 12; // More iterations for aggressive play
+    
+    // Track all tool calls for frontend display
+    const allToolCalls: Array<{ name: string; args: Record<string, unknown>; result: string }> = [];
+    let lastThinking = '';
 
     while (response.output && iterations < maxIterations) {
       iterations++;
@@ -330,6 +380,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
           .join('');
         if (textContent) {
           console.log(`[AGENT THINKING] ${textContent}`);
+          lastThinking = textContent;
         }
       }
 
@@ -414,157 +465,188 @@ ${(() => {
   return threats.length > 0 ? '\n🚨 THREATS:\n' + threats.slice(0, 3).join('\n') : '';
 })()}
 
-## TRAINING LOCATIONS:
+## WHAT YOU CAN DO RIGHT NOW:
 ${(() => {
+  const popCapped = p.population >= p.populationCap;
+  const canTrainCitizen = !popCapped && p.resources.food >= 50;
+  const canTrainMilitia = !popCapped && p.resources.food >= 40 && p.resources.wood >= 20;
+  const canBuildFarm = p.resources.wood >= 50;
+  const canBuildWoodcutter = p.resources.wood >= 30;
+  const canBuildMine = p.resources.wood >= 80 && p.resources.gold >= 50;
+  const canBuildMarket = p.resources.wood >= 60 && p.resources.gold >= 30;
+  const canBuildBarracks = p.resources.wood >= 100;
+  const canBuildSmallCity = p.resources.wood >= 400 && p.resources.metal >= 100 && p.resources.gold >= 200;
+  
   const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
-  const cityBuilding = condensed.myBuildings.find(b => cityTypes.includes(b.type));
-  const barracks = condensed.myBuildings.find(b => b.type === 'barracks');
-  let result = `- Citizens: `;
-  if (cityBuilding) {
-    result += `${cityBuilding.type} at (${cityBuilding.x},${cityBuilding.y})`;
+  const cities = condensed.myBuildings.filter(b => cityTypes.includes(b.type));
+  const barracks = condensed.myBuildings.filter(b => b.type === 'barracks');
+  
+  let result = '';
+  
+  if (popCapped) {
+    result += `⛔ POPULATION CAPPED (${p.population}/${p.populationCap}) - CANNOT TRAIN UNITS!\n`;
+    result += `   Your ONLY goal: Build small_city (need 400w+100m+200g)\n`;
+    result += `   Have: ${Math.round(p.resources.wood)}w / ${Math.round(p.resources.metal)}m / ${Math.round(p.resources.gold)}g\n`;
+    if (canBuildSmallCity) {
+      result += `   ✅ YOU CAN BUILD small_city NOW! DO IT!\n`;
+    } else {
+      const need = [];
+      if (p.resources.wood < 400) need.push(`${Math.round(400 - p.resources.wood)} more wood`);
+      if (p.resources.metal < 100) need.push(`${Math.round(100 - p.resources.metal)} more metal`);
+      if (p.resources.gold < 200) need.push(`${Math.round(200 - p.resources.gold)} more gold`);
+      result += `   Need: ${need.join(', ')}\n`;
+    }
   } else {
-    result += `NO CITY! BUILD small_city IMMEDIATELY!`;
+    result += `### TRAINING (pop ${p.population}/${p.populationCap}):\n`;
+    if (canTrainCitizen && cities.length > 0) {
+      result += `  ✅ Can train citizens at: ${cities.map(c => `(${c.x},${c.y})`).join(', ')}\n`;
+    }
+    if (canTrainMilitia && barracks.length > 0) {
+      result += `  ✅ Can train militia at: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}\n`;
+    }
+    if (!canTrainCitizen) result += `  ❌ Cannot train citizen (need 50 food, have ${Math.round(p.resources.food)})\n`;
+    if (!canTrainMilitia && barracks.length > 0) result += `  ❌ Cannot train militia (need 40f+20w)\n`;
   }
-  result += `\n- Military: `;
-  if (barracks) {
-    result += `barracks at (${barracks.x},${barracks.y})`;
-  } else {
-    result += `(build barracks first!)`;
+  
+  result += `\n### BUILDINGS YOU CAN AFFORD:\n`;
+  if (canBuildSmallCity) result += `  ✅ small_city (400w+100m+200g) - PRIORITY IF POP CAPPED!\n`;
+  if (canBuildFarm) result += `  ✅ farm (50w)\n`;
+  if (canBuildWoodcutter) result += `  ✅ woodcutters_camp (30w)\n`;
+  if (canBuildMine) result += `  ✅ mine (80w+50g)\n`;
+  if (canBuildMarket) result += `  ✅ market (60w+30g)\n`;
+  if (canBuildBarracks) result += `  ✅ barracks (100w)\n`;
+  
+  // Industrial Age+ Oil buildings
+  const isIndustrialPlus = ['industrial', 'modern'].includes(p.age);
+  if (isIndustrialPlus) {
+    const canBuildOilWell = p.resources.wood >= 200 && p.resources.metal >= 150 && p.resources.gold >= 100;
+    const canBuildRefinery = p.resources.wood >= 250 && p.resources.metal >= 200 && p.resources.gold >= 150;
+    const oilWells = condensed.myBuildings.filter(b => b.type === 'oil_well');
+    const refineries = condensed.myBuildings.filter(b => b.type === 'refinery');
+    const oilDeposits = condensed.resourceTiles.oilDeposits;
+    
+    result += `\n### 🛢️ OIL ECONOMY (Industrial Age+):\n`;
+    result += `  Current oil: ${Math.round(p.resources.oil)} (rate: ${p.resourceRates.oil.toFixed(1)}/s)\n`;
+    result += `  Oil wells: ${oilWells.length} | Refineries: ${refineries.length}\n`;
+    
+    if (oilWells.length === 0 && oilDeposits.length > 0) {
+      result += `  ⚠️ NO OIL WELLS! Build oil_well NEAR oil deposits!\n`;
+      result += `  📍 Oil deposits at: ${oilDeposits.map((d: { x: number; y: number }) => `(${d.x},${d.y})`).join(', ')}\n`;
+    }
+    if (refineries.length === 0 && oilWells.length > 0) {
+      result += `  ⚠️ NO REFINERY! Build refinery to boost oil +50%!\n`;
+    }
+    
+    if (canBuildOilWell) result += `  ✅ oil_well (200w+150m+100g) - build near oil deposit!\n`;
+    if (canBuildRefinery) result += `  ✅ refinery (250w+200m+150g) - boosts oil gathering!\n`;
+    
+    if (oilWells.length > 0) {
+      result += `  👷 Assign workers to oil_wells for oil income!\n`;
+    }
   }
+  
+  if (!canBuildFarm && !canBuildWoodcutter) {
+    result += `  ❌ Not enough wood for any buildings!\n`;
+  }
+  
   return result;
 })()}
 
 ## 📊 STRATEGIC ASSESSMENT:
 ${(() => {
   const sa = condensed.strategicAssessment;
+  // Provide factual strategic info - let AI reason about what to do
   const lines = [];
-  lines.push(`Army Strength: YOU ${sa.myMilitaryStrength} vs ENEMY ${sa.enemyMilitaryStrength} → ${sa.strengthAdvantage}`);
+  
+  // Military comparison
+  lines.push(`Military Strength: You ${sa.myMilitaryStrength} vs Enemy ${sa.enemyMilitaryStrength} (${sa.strengthAdvantage})`);
   lines.push(`Your Forces: ${sa.myWorkerCount} workers, ${sa.myMilitaryCount} military`);
-  lines.push(`Enemy Forces: ${sa.enemyMilitaryCount} military (nearest: ${sa.nearestEnemyDistance} tiles away)`);
-  lines.push(`Threat Level: ${sa.threatLevel}${sa.threatLevel === 'CRITICAL' || sa.threatLevel === 'HIGH' ? ' ⚠️ DEFEND NOW!' : ''}`);
-  lines.push(`Economy: ${sa.farmCount} farms, ${sa.woodcutterCount} woodcutters, ${sa.mineCount} mines, ${sa.barracksCount} barracks`);
+  lines.push(`Enemy Forces: ${sa.enemyMilitaryCount} military (nearest ${sa.nearestEnemyDistance} tiles away)`);
+  lines.push(`Threat Level: ${sa.threatLevel}`);
+  
+  // Economy summary
+  const marketCount = condensed.myBuildings.filter(b => b.type === 'market').length;
+  lines.push(`Economy: ${sa.farmCount} farms, ${sa.woodcutterCount} woodcutters, ${sa.mineCount} mines, ${marketCount} markets, ${sa.barracksCount} barracks`);
+  
+  // Population status
   if (sa.isPopCapped) {
-    lines.push(`⚠️ POPULATION CAPPED! ${sa.canAffordSmallCity ? '✓ CAN AFFORD small_city - BUILD IT NOW!' : 'Save for small_city!'}`);
+    const woodNeeded = Math.max(0, 400 - p.resources.wood);
+    const metalNeeded = Math.max(0, 100 - p.resources.metal);
+    const goldNeeded = Math.max(0, 200 - p.resources.gold);
+    lines.push(`Population: CAPPED at ${p.population}/${p.populationCap}`);
+    if (sa.canAffordSmallCity) {
+      lines.push(`small_city cost: 400w/100m/200g - CAN AFFORD`);
+    } else {
+      lines.push(`small_city cost: 400w/100m/200g - Need ${woodNeeded > 0 ? `${woodNeeded}w ` : ''}${metalNeeded > 0 ? `${metalNeeded}m ` : ''}${goldNeeded > 0 ? `${goldNeeded}g` : ''}`);
+    }
   }
-  if (sa.farmCount < 3) lines.push(`⚠️ LOW FARMS! Need 3+ farms, you have ${sa.farmCount}`);
-  if (sa.woodcutterCount < 2) lines.push(`⚠️ LOW WOOD! Need 2+ woodcutters, you have ${sa.woodcutterCount}`);
+  
+  // Industrial Age oil info
+  const isIndustrialPlus = ['industrial', 'modern'].includes(p.age);
+  if (isIndustrialPlus) {
+    const oilWells = condensed.myBuildings.filter(b => b.type === 'oil_well').length;
+    const refineries = condensed.myBuildings.filter(b => b.type === 'refinery').length;
+    lines.push(`Oil Economy: ${oilWells} oil wells, ${refineries} refineries, ${p.resourceRates.oil.toFixed(1)}/s oil rate`);
+  }
+  
+  // Enemy targets
+  const enemyCity = condensed.enemyBuildings.find(b => 
+    ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)
+  );
+  if (enemyCity) {
+    lines.push(`Enemy Target: ${enemyCity.type} at (${enemyCity.x}, ${enemyCity.y})`);
+  }
+  
+  // Military unit IDs for send_units command
+  const militaryUnits = condensed.myUnits.filter(u => u.type !== 'citizen');
+  if (militaryUnits.length > 0) {
+    lines.push(`Your Military IDs: ${militaryUnits.slice(0, 10).map(u => u.id).join(', ')}${militaryUnits.length > 10 ? ` (+${militaryUnits.length - 10} more)` : ''}`);
+  }
+  
   return lines.join('\n');
 })()}
 
-## ⚡ PRIORITY ACTIONS:
+## AVAILABLE BUILD LOCATIONS:
 ${(() => {
-  const suggestions: string[] = [];
-  const farmCount = condensed.myBuildings.filter(b => b.type === 'farm').length;
-  const woodCount = condensed.myBuildings.filter(b => b.type === 'woodcutters_camp').length;
-  const mineCount = condensed.myBuildings.filter(b => b.type === 'mine').length;
-  const barracksExists = condensed.myBuildings.some(b => b.type === 'barracks');
-  const militaryCount = condensed.myUnits.filter(u => u.type !== 'citizen').length;
   const cityTile = condensed.emptyTerritoryTiles?.[0];
   const forestTile = condensed.tilesNearForest?.[0];
   const metalTile = condensed.tilesNearMetal?.[0];
-  const popCapped = p.population >= p.populationCap;
-
-  // CRITICAL: Deadlock detection - can't save for small_city if wood rate is 0!
-  if (p.resourceRates.wood === 0 && p.resources.wood < 400) {
-    if (forestTile) {
-      suggestions.push(`🚨 CRITICAL DEADLOCK! Wood rate is 0 - you can NEVER save for small_city! BUILD woodcutters_camp at (${forestTile.x},${forestTile.y}) IMMEDIATELY!`);
-    }
-  }
-
-  // #1 PRIORITY: Pop cap - must expand!
-  // small_city costs: wood 400, gold 200, metal 100
-  if (popCapped) {
-    const hasEnoughForCity = p.resources.wood >= 400 && p.resources.metal >= 100 && p.resources.gold >= 200;
-    if (hasEnoughForCity && cityTile) {
-      suggestions.push(`🚨 URGENT: BUILD small_city at (${cityTile.x},${cityTile.y}) NOW! You have resources!`);
-    } else {
-      const needWood = Math.max(0, 400 - p.resources.wood);
-      const needMetal = Math.max(0, 100 - p.resources.metal);
-      const needGold = Math.max(0, 200 - p.resources.gold);
-      suggestions.push(`⏳ POP CAPPED! Saving for small_city - need ${needWood} more wood, ${needMetal} more metal, ${needGold} more gold.`);
-      if (needGold > 0 && cityTile) {
-        suggestions.push(`💰 BUILD market at (${cityTile.x},${cityTile.y}) for gold income!`);
-      }
-    }
-  }
-
-  // Always need resource income - even if pop-capped!
-  if (p.resourceRates.food < 1 && cityTile) {
-    suggestions.push(`🌾 LOW FOOD! BUILD farm at (${cityTile.x},${cityTile.y})`);
-  }
-  if (p.resourceRates.wood < 1 && forestTile) {
-    suggestions.push(`🪵 LOW WOOD! BUILD woodcutters_camp at (${forestTile.x},${forestTile.y})`);
-  }
-  if (p.resourceRates.metal === 0 && metalTile) {
-    suggestions.push(`⛏️ NO METAL! BUILD mine at (${metalTile.x},${metalTile.y})`);
-  }
+  const oilTiles = condensed.resourceTiles?.oilDeposits || [];
   
-  // Knowledge and gold suggestions
-  const hasLibrary = condensed.myBuildings.some(b => b.type === 'library');
-  const hasMarket = condensed.myBuildings.some(b => b.type === 'market');
-  if (!hasLibrary && cityTile && p.resources.wood >= 80) {
-    suggestions.push(`📚 BUILD library at (${cityTile.x},${cityTile.y}) for knowledge income and age advancement!`);
-  }
-  if (!hasMarket && cityTile && p.resources.wood >= 60 && (p.resourceRates.gold || 0) === 0) {
-    suggestions.push(`💰 BUILD market at (${cityTile.x},${cityTile.y}) for gold income!`);
-  }
-
-  // Only suggest other builds if NOT pop-capped or already have enough for small_city
-  if (!popCapped || (p.resources.wood >= 400 && p.resources.metal >= 100)) {
-    if (!barracksExists && p.resources.wood >= 100 && cityTile) {
-      suggestions.push(`⚔️ BUILD barracks at (${cityTile.x},${cityTile.y})`);
-    }
-    if (p.resourceRates.metal === 0 && mineCount < 2 && metalTile) {
-      suggestions.push(`⛏️ BUILD mine at (${metalTile.x},${metalTile.y})`);
-    }
-    if (p.resourceRates.wood < 1 && woodCount < 3 && forestTile) {
-      suggestions.push(`🪵 BUILD woodcutters_camp at (${forestTile.x},${forestTile.y})`);
-    }
-  }
+  const locations: string[] = [];
+  if (cityTile) locations.push(`General: (${cityTile.x},${cityTile.y})`);
+  if (forestTile) locations.push(`Near forest: (${forestTile.x},${forestTile.y})`);
+  if (metalTile) locations.push(`Near metal: (${metalTile.x},${metalTile.y})`);
+  if (oilTiles.length > 0) locations.push(`Oil deposits: ${oilTiles.slice(0,3).map((t: {x: number, y: number}) => `(${t.x},${t.y})`).join(', ')}`);
   
-  // Citizen training - need workers for economy! BE AGGRESSIVE!
-  const citizenCount = condensed.myUnits.filter(u => u.type === 'citizen').length;
-  const cityCenter = condensed.myBuildings.find(b => b.type === 'city_center' || b.type === 'small_city');
-  const allCityCenters = condensed.myBuildings.filter(b => b.type === 'city_center' || b.type === 'small_city');
-  if (!popCapped && cityCenter && citizenCount < 20 && p.resources.food >= 50) {
-    suggestions.push(`👷 TRAIN 2-3 citizens NOW! You only have ${citizenCount} workers - need 15+!`);
-    for (const cc of allCityCenters.slice(0, 2)) {
-      suggestions.push(`  → Train citizen at (${cc.x},${cc.y})`);
-    }
-  }
+  return locations.join('\n') || 'No valid build locations in territory';
+})()}
 
-  // Multiple barracks for faster military
-  const barracksCount = condensed.myBuildings.filter(b => b.type === 'barracks').length;
-  if (barracksCount < 2 && p.resources.wood >= 100 && cityTile) {
-    suggestions.push(`🏰 BUILD 2nd barracks at (${cityTile.x},${cityTile.y}) for faster military!`);
-  }
+## TRAINING LOCATIONS:
+${(() => {
+  const cities = condensed.myBuildings.filter(b => ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type));
+  const barracks = condensed.myBuildings.filter(b => b.type === 'barracks');
+  
+  const locs: string[] = [];
+  if (cities.length > 0) locs.push(`Citizens at: ${cities.slice(0,5).map(c => `(${c.x},${c.y})`).join(', ')}`);
+  if (barracks.length > 0) locs.push(`Militia at: ${barracks.slice(0,5).map(b => `(${b.x},${b.y})`).join(', ')}`);
+  
+  return locs.join('\n') || 'No training buildings';
+})()}
 
-  // Military actions
-  if (barracksExists && militaryCount < 5 && !popCapped) {
-    suggestions.push(`🗡️ TRAIN militia at barracks`);
-  }
-  if (militaryCount >= 5 && condensed.enemyBuildings.length > 0) {
-    const enemy = condensed.enemyBuildings[0];
-    suggestions.push(`⚔️ ATTACK enemy at (${enemy.x},${enemy.y})!`);
-  }
+## RESOURCE RATES:
+Food: ${p.resourceRates.food.toFixed(1)}/s | Wood: ${p.resourceRates.wood.toFixed(1)}/s | Metal: ${p.resourceRates.metal.toFixed(1)}/s | Gold: ${p.resourceRates.gold.toFixed(1)}/s
+${(() => {
+  const warnings: string[] = [];
+  if (p.resourceRates.food === 0) warnings.push('No food income');
+  if (p.resourceRates.wood === 0) warnings.push('No wood income');
+  if (p.resourceRates.metal === 0) warnings.push('No metal income');
+  if (p.resourceRates.gold === 0) warnings.push('No gold income');
+  return warnings.length > 0 ? `Note: ${warnings.join(', ')}` : '';
+})()}
 
-  // Expansion reminder
-  if (!popCapped && p.resources.wood >= 400 && cityTile) {
-    suggestions.push(`🏙️ Build another small_city at (${cityTile.x},${cityTile.y}) to expand population cap!`);
-  }
-
-  // Always build something if resources are high!
-  if (p.resources.wood >= 150 && suggestions.length < 3) {
-    if (farmCount < 5 && cityTile) suggestions.push(`🌾 Build more farms! (have ${farmCount}, want 5+)`);
-    if (woodCount < 4 && forestTile) suggestions.push(`🪵 Build more woodcutters! (have ${woodCount}, want 4+)`);
-    if (mineCount < 3 && metalTile) suggestions.push(`⛏️ Build more mines! (have ${mineCount}, want 3+)`);
-  }
-
-  // ALWAYS remind to be aggressive
-  suggestions.push(`⚡ EVERY TURN: Train citizens, train militia, build buildings! Never idle!`);
-
-  return suggestions.join('\n');
-})()}`;
+## IDLE WORKERS: ${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u.task)).length}
+${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u.task)).length > 5 ? 'Note: Many idle workers! Build more farms/woodcutters/mines to employ them.' : ''}`;
 
             result = { success: true, message: stateStr };
             // Detailed logging
@@ -645,8 +727,9 @@ ${(() => {
           }
 
           case 'send_units': {
-            const { unit_ids, target_x, target_y } = args as { unit_ids: string[]; target_x: number; target_y: number };
-            const res = executeSendUnits(currentState, aiPlayerId, unit_ids, target_x, target_y, 'attack');
+            const { unit_ids, target_x, target_y, task } = args as { unit_ids: string[]; target_x: number; target_y: number; task?: string };
+            const unitTask = task === 'move' ? 'move' : 'attack'; // Default to attack if not specified
+            const res = executeSendUnits(currentState, aiPlayerId, unit_ids, target_x, target_y, unitTask);
             currentState = res.newState;
             result = res.result;
             console.log(`  → ${result.message}`);
@@ -676,6 +759,13 @@ ${(() => {
         const outputStr = JSON.stringify(result);
         console.log(`[TOOL RESULT] ${toolCall.name}: ${result.success ? '✓' : '✗'} ${result.message.substring(0, 100)}${result.message.length > 100 ? '...' : ''}`);
         
+        // Track tool call for frontend
+        allToolCalls.push({
+          name: toolCall.name,
+          args: args,
+          result: result.message,
+        });
+        
         toolResults.push({
           call_id: toolCall.call_id,
           output: outputStr,
@@ -687,7 +777,7 @@ ${(() => {
       try {
         const continueStart = Date.now();
         response = await client.responses.create({
-          model: 'gpt-5-mini-2025-08-07',
+          model: 'gpt-5.1-2025-11-13',
           instructions: SYSTEM_PROMPT,
           previous_response_id: response.id,
           input: toolResults.map(r => ({
@@ -725,6 +815,9 @@ ${(() => {
       messages,
       actions, // Explicit actions for frontend to apply
       responseId: response.id,
+      toolCalls: allToolCalls, // For frontend conversation display
+      thinking: lastThinking, // Last AI reasoning
+      turnPrompt, // The prompt sent to the agent
     });
 
   } catch (error) {
