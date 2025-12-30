@@ -8,23 +8,49 @@
 import { Unit, UnitTask, UNIT_STATS } from '../types/units';
 import { TILE_WIDTH, TILE_HEIGHT, gridToScreen } from '@/components/game/shared';
 
-// Skin tone colors (similar to IsoCity)
-const SKIN_TONES = ['#f5d0c5', '#e8beac', '#d4a574', '#c68642', '#8d5524', '#5c3317'];
+// Skin tone colors - realistic range
+const SKIN_TONES = [
+  '#f5d0c5', // Very light
+  '#e8c4b0', // Light
+  '#d4a574', // Light tan
+  '#c49366', // Medium
+  '#a67c52', // Tan
+  '#8b6242', // Brown
+  '#6b4a32', // Dark brown
+  '#4a3628', // Very dark
+];
 
-// Clothing colors for civilians
-const CIVILIAN_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+// Clothing colors for civilians - muted, realistic tones
+const CIVILIAN_COLORS = [
+  '#4a6fa5', // Slate blue
+  '#5a8a6a', // Forest green
+  '#8a7a5a', // Khaki
+  '#7a5a5a', // Dusty rose
+  '#6a5a7a', // Dusty purple
+  '#5a7a7a', // Teal
+];
 
-// Hair colors
-const HAIR_COLORS = ['#2c1810', '#4a3728', '#8b4513', '#d4a574', '#f5deb3', '#1a1a1a'];
+// Hair colors - natural spectrum
+const HAIR_COLORS = [
+  '#1a1410', // Black
+  '#2d1f18', // Dark brown
+  '#4a3520', // Brown
+  '#6b4c28', // Light brown
+  '#8b6538', // Auburn
+  '#a07040', // Dirty blonde
+  '#c4a060', // Blonde
+  '#808080', // Gray
+];
 
-// Tool colors for different tasks
+// Tool colors for different tasks - realistic metal and wood
 const TOOL_COLORS: Record<string, string> = {
-  gather_wood: '#8b4513',   // Brown axe
-  gather_metal: '#6b7280',  // Grey pickaxe
-  gather_food: '#f59e0b',   // Golden scythe
-  gather_gold: '#fbbf24',   // Gold pan
-  gather_oil: '#1f2937',    // Dark oil tool
-  build: '#a16207',         // Hammer
+  gather_wood: '#6b4423',   // Dark wood axe handle
+  gather_metal: '#5a5a5a',  // Steel pickaxe
+  gather_food: '#c4a048',   // Bronze scythe
+  gather_gold: '#d4a020',   // Gold pan
+  gather_oil: '#2a2a2a',    // Dark oil tool
+  gather_fish: '#708090',   // Fishing rod
+  build: '#7a5020',         // Wooden hammer
 };
 
 /**
