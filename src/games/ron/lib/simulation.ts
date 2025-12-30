@@ -15,8 +15,8 @@ import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_
 import { Unit, UnitType, UnitTask, UNIT_STATS, getUnitStatsForAge } from '../types/units';
 
 // Simulation constants
-const CONSTRUCTION_SPEED = 0.5; // Progress per tick (slow construction)
-const PRODUCTION_SPEED = 0.5; // Unit production progress per tick (balanced)
+const CONSTRUCTION_SPEED = 1.0; // Progress per tick (doubled from 0.5 for faster construction)
+const PRODUCTION_SPEED = 1.0; // Unit production progress per tick (doubled from 0.5 for faster training)
 const UNIT_MOVE_SPEED = 0.1; // Movement per tick (in tiles)
 const ATTACK_COOLDOWN = 10; // Ticks between attacks
 const RESOURCE_GATHER_RATE = 0.20; // Base gathering per tick per worker (balanced economy)

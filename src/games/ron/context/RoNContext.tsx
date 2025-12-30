@@ -512,6 +512,13 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
       const minY = Math.min(start.y, end.y) - 1;
       const maxY = Math.max(start.y, end.y) + 1;
 
+      // Debug: log selection bounds
+      console.log('[SELECTION] Bounds:', { minX, maxX, minY, maxY, start, end });
+
+      // Get all player-owned units for comparison
+      const playerUnits = prev.units.filter(u => u.ownerId === currentPlayer.id);
+      const playerMilitary = playerUnits.filter(u => UNIT_STATS[u.type]?.category !== 'civilian');
+      
       // First pass: find all units in area owned by player
       const unitsInArea = prev.units.filter(u => {
         const inArea = u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY;
@@ -524,6 +531,23 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
         const stats = UNIT_STATS[u.type];
         return stats?.category !== 'civilian';
       });
+
+      // Debug: log selection results
+      console.log('[SELECTION] Total player units:', playerUnits.length, 'military:', playerMilitary.length);
+      console.log('[SELECTION] Units in area:', unitsInArea.length, 'military in area:', militaryUnitsInArea.length);
+      
+      // Log units that were NOT selected (to help debug)
+      const unitsOutsideArea = playerMilitary.filter(u => {
+        const inArea = u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY;
+        return !inArea;
+      });
+      if (unitsOutsideArea.length > 0) {
+        console.log('[SELECTION] Military units OUTSIDE selection area:', unitsOutsideArea.slice(0, 5).map(u => ({
+          id: u.id.slice(0, 8),
+          type: u.type,
+          pos: { x: u.x.toFixed(1), y: u.y.toFixed(1) },
+        })));
+      }
 
       // If there are military units, only select military; otherwise select all
       const unitsToSelect = militaryUnitsInArea.length > 0 ? militaryUnitsInArea : unitsInArea;

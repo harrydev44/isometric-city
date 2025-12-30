@@ -293,21 +293,24 @@ const SYSTEM_PROMPT = `You are playing a RTS game called Rise of Nations. You ar
 COSTS: farm ${BUILDING_COSTS.farm}, woodcutter ${BUILDING_COSTS.woodcutter}, mine ${BUILDING_COSTS.mine}, barracks ${BUILDING_COSTS.barracks}, market ${BUILDING_COSTS.market}, small_city ${BUILDING_COSTS.small_city}
 TRAIN: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (scales with age - same unit, stronger each age)
 
+CITY DEVELOPMENT (PRIORITY!):
+1. BUILD CITIES when you can afford small_city (${BUILDING_COSTS.small_city}) - more cities = more population cap + territory!
+2. Each city should have a FULL SET of buildings nearby: farm, woodcutters_camp, mine, market, library, barracks, smelter
+3. Spread your cities across the map to claim more territory and resources
+
 ECONOMY PRIORITY:
-1. Build farm + woodcutters_camp FIRST
-2. Train citizens, keep building cities with farms, wood, mines, markets, smelters, libraries, etc.
-3. BUILD BARRACKS EARLY (at pop 4-5)! Start infantry production immediately.
-4. BUILD MORE BARRACKS if enemy has more military than you! Each barracks can train 1 unit at a time - more barracks = faster army!
+1. Build farm + woodcutters_camp near each city
+2. Train citizens continuously from ALL your cities
+3. Build mine near metal, market for gold, library for knowledge
+4. BUILD BARRACKS at each city! More barracks = faster army production
 
-RULES:
-- Pop capped? Build a small_city
-- Low resources? Build buildings and assign workers.
-- Enemy stronger? BUILD MORE BARRACKS! You need multiple barracks to produce military fast enough.
+MILITARY:
+- BUILD MORE BARRACKS if enemy has more military! Each barracks trains 1 unit at a time.
 - Have 10+ military? ATTACK enemy cities!
-- DEFENSE: If Threat Level is HIGH or CRITICAL, send your military to intercept enemy units near your city! Use send_units to move military to enemy unit positions.
+- DEFENSE: If Threat Level is HIGH/CRITICAL, send military to intercept enemies!
 
-TURN: get_game_state → build farms/barracks → train citizens/infantry → DEFEND if threatened → attack → assign_workers
-ATTACK enemy cities to win! DEFEND your cities when under attack!`;
+TURN ORDER: get_game_state → build small_city if affordable → build economy buildings → build barracks → train citizens/infantry → attack → assign_workers
+EXPAND with cities! ATTACK enemies! DEFEND when threatened!`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
