@@ -19,6 +19,7 @@ import {
   executeSendUnits,
   executeAdvanceAge,
   executeReassignWorkerToResource,
+  CondensedGameState,
 } from '@/games/ron/lib/aiTools';
 
 // Helper to format cost from building/unit stats
@@ -36,6 +37,101 @@ function formatCost(cost: Partial<Record<string, number>>): string {
 // Helper to check if player can afford a building
 function canAfford(resources: Record<string, number>, cost: Partial<Record<string, number>>): boolean {
   return Object.entries(cost).every(([key, value]) => (resources[key] || 0) >= (value || 0));
+}
+
+// Format condensed game state into a readable string for the AI
+function formatGameStateForAI(condensed: CondensedGameState): string {
+  const p = condensed.myPlayer;
+  
+  return `## RESOURCES:
+Food: ${Math.round(p.resources.food)} (+${p.resourceRates.food.toFixed(1)}/s)
+Wood: ${Math.round(p.resources.wood)} (+${p.resourceRates.wood.toFixed(1)}/s)
+Metal: ${Math.round(p.resources.metal)} (+${p.resourceRates.metal.toFixed(1)}/s)
+Gold: ${Math.round(p.resources.gold)} (+${(p.resourceRates.gold || 0).toFixed(1)}/s)
+Knowledge: ${Math.round(p.resources.knowledge || 0)} (+${(p.resourceRates.knowledge || 0).toFixed(1)}/s)
+Oil: ${Math.round(p.resources.oil || 0)} (+${(p.resourceRates.oil || 0).toFixed(1)}/s)
+
+## POPULATION: ${p.population}/${p.populationCap} | Age: ${p.age}
+
+## YOUR BUILDINGS:
+${condensed.myBuildings.map(b => `- ${b.type} at (${b.x},${b.y})`).join('\n') || '(none)'}
+
+## YOUR WORKERS:
+${(() => {
+  const citizens = condensed.myUnits.filter(u => u.type === 'citizen');
+  const byTask: Record<string, string[]> = {};
+  for (const c of citizens) {
+    const task = c.task || 'idle';
+    if (!byTask[task]) byTask[task] = [];
+    byTask[task].push(c.id);
+  }
+  const lines: string[] = [];
+  if (byTask['idle']?.length) lines.push(`IDLE (need assignment!): ${byTask['idle'].join(', ')}`);
+  if (byTask['gather_food']?.length) lines.push(`Food: ${byTask['gather_food'].join(', ')}`);
+  if (byTask['gather_wood']?.length) lines.push(`Wood: ${byTask['gather_wood'].join(', ')}`);
+  if (byTask['gather_metal']?.length) lines.push(`Metal: ${byTask['gather_metal'].join(', ')}`);
+  if (byTask['gather_gold']?.length) lines.push(`Gold: ${byTask['gather_gold'].join(', ')}`);
+  if (byTask['gather_knowledge']?.length) lines.push(`Knowledge: ${byTask['gather_knowledge'].join(', ')}`);
+  if (byTask['gather_oil']?.length) lines.push(`Oil: ${byTask['gather_oil'].join(', ')}`);
+  return lines.length > 0 ? lines.join('\n') : '(no workers)';
+})()}
+
+## YOUR MILITARY:
+${condensed.myUnits.filter(u => u.type !== 'citizen').map(u => `${u.id}`).join(', ') || 'none'}
+
+## TERRITORY: x ${condensed.territoryBounds.minX}-${condensed.territoryBounds.maxX}, y ${condensed.territoryBounds.minY}-${condensed.territoryBounds.maxY}
+
+## BUILD LOCATIONS:
+General: ${(condensed.emptyTerritoryTiles || []).slice(0, 5).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
+For city expansion: ${(condensed.tilesForCityExpansion || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
+Near forest: ${(condensed.tilesNearForest || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
+Near metal: ${(condensed.tilesNearMetal || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
+Near oil: ${(condensed.tilesNearOil || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
+
+## ENEMIES:
+Buildings: ${condensed.enemyBuildings.slice(0, 8).map(b => `${b.type}@(${b.x},${b.y})`).join(', ') || 'none visible'}
+Units: ${condensed.enemyUnits.slice(0, 8).map(u => `${u.type}@(${Math.round(u.x)},${Math.round(u.y)})`).join(', ') || 'none visible'}
+Cities: ${condensed.enemyBuildings.filter(b => ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)).map(c => `(${c.x},${c.y})`).join(', ') || 'none'}
+
+## TRAINING BUILDINGS:
+${(() => {
+  const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
+  const cities = condensed.myBuildings.filter(b => cityTypes.includes(b.type));
+  const barracks = condensed.myBuildings.filter(b => b.type === 'barracks');
+  const stables = condensed.myBuildings.filter(b => b.type === 'stable');
+  const docks = condensed.myBuildings.filter(b => b.type === 'dock');
+  
+  const locs: string[] = [];
+  if (cities.length > 0) locs.push(`Citizens: ${cities.map(c => `(${c.x},${c.y})`).join(', ')}`);
+  if (barracks.length > 0) locs.push(`Infantry/Ranged: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}`);
+  if (stables.length > 0) locs.push(`Cavalry: ${stables.map(b => `(${b.x},${b.y})`).join(', ')}`);
+  if (docks.length > 0) locs.push(`Naval: ${docks.map(b => `(${b.x},${b.y})`).join(', ')}`);
+  
+  return locs.join('\n') || 'none';
+})()}
+
+## MILITARY STATUS:
+${(() => {
+  const sa = condensed.strategicAssessment;
+  const lines = [];
+  lines.push(`Your military: ${sa.myMilitaryCount} units (strength ${sa.myMilitaryStrength})`);
+  lines.push(`Enemy military: ${sa.enemyMilitaryCount} units (strength ${sa.enemyMilitaryStrength}), nearest ${sa.nearestEnemyDistance} tiles away`);
+  
+  const militaryUnits = condensed.myUnits.filter(u => u.type !== 'citizen');
+  if (militaryUnits.length > 0) {
+    lines.push(`Your unit IDs: ${militaryUnits.slice(0, 10).map(u => u.id).join(', ')}${militaryUnits.length > 10 ? ` (+${militaryUnits.length - 10} more)` : ''}`);
+  }
+  
+  const enemyCities = condensed.enemyBuildings.filter(b => 
+    ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)
+  );
+  if (enemyCities.length > 0) {
+    const targets = enemyCities.slice(0, 5).map(c => `${c.type}@(${c.x},${c.y})`).join(', ');
+    lines.push(`Enemy cities: ${targets}${enemyCities.length > 5 ? ` (+${enemyCities.length - 5} more)` : ''}`);
+  }
+  
+  return lines.join('\n');
+})()}`;
 }
 
 // Generate costs dynamically from actual game data to prevent divergence
@@ -181,7 +277,7 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   {
     type: 'function',
     name: 'get_game_state',
-    description: 'Get the current game state including resources, buildings, units, and enemy positions. Call this first to understand the situation.',
+    description: 'Refresh the game state after taking actions. The initial state is provided in the prompt - use this to see updated resources/units after building or training.',
     strict: true,
     parameters: {
       type: 'object',
@@ -268,7 +364,7 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   {
     type: 'function',
     name: 'send_units',
-    description: 'Send military units to attack enemy OR patrol/move within your territory. Use task "attack" to attack enemies, or "move" to patrol and defend territory.',
+    description: 'Send military units to a location. They will auto-attack enemy buildings/units at the destination.',
     strict: true,
     parameters: {
       type: 'object',
@@ -276,17 +372,12 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
         unit_ids: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Array of unit IDs to send',
+          description: 'Array of unit IDs to send (from game state)',
         },
         target_x: { type: 'number', description: 'Target X coordinate' },
         target_y: { type: 'number', description: 'Target Y coordinate' },
-        task: { 
-          type: 'string', 
-          enum: ['attack', 'move'],
-          description: 'Task for units: "attack" to attack enemies, "move" to patrol/defend territory' 
-        },
       },
-      required: ['unit_ids', 'target_x', 'target_y', 'task'],
+      required: ['unit_ids', 'target_x', 'target_y'],
       additionalProperties: false,
     },
   },
@@ -312,11 +403,11 @@ const SYSTEM_PROMPT = `You are an AI player in Rise of Nations, a real-time stra
 GAME MECHANICS:
 - Buildings: farm ${BUILDING_COSTS.farm}, woodcutters_camp ${BUILDING_COSTS.woodcutters_camp}, mine ${BUILDING_COSTS.mine}, market ${BUILDING_COSTS.market}, barracks ${BUILDING_COSTS.barracks}, library ${BUILDING_COSTS.library}, smelter ${BUILDING_COSTS.smelter}, small_city ${BUILDING_COSTS.small_city}
 - Units: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (strength scales with age)
-- Population cap increases with cities (small_city adds population)
+- Population cap increases with cities: small_city adds +20 pop cap
 - You can only build within your territory (around your cities)
 - Workers gather resources when assigned to buildings: farm→food, woodcutters_camp→wood, mine→metal, market→gold
 
-Each turn: get_game_state to see situation, then take actions. Be concise.`;
+Each turn: take actions based on the state provided. Be concise. If unsure, continue building cities with all resource buildings within them, workers assigned to them, militaries, and expanding your territory.`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -471,25 +562,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
       console.log(`[TARGETING] ${aiPlayer.name} targeting ${enemyCityPos.ownerName}'s ${enemyCityPos.type} at (${enemyCityPos.x}, ${enemyCityPos.y})`);
     }
     
-    // Add strategic hints based on current state
-    // let strategicHint = '';
-    // if (barracksCount === 0 && aiPlayer.population >= 4 && aiPlayer.resources.wood >= 100) {
-    //   strategicHint = '\n🚨 BUILD BARRACKS NOW! You have 4+ pop and 100+ wood!';
-    // } else if (barracksCount > 0 && militaryCount === 0 && aiPlayer.resources.food >= 40 && aiPlayer.resources.wood >= 20) {
-    //   strategicHint = '\n🚨 TRAIN INFANTRY NOW! You have barracks and resources!';
-    // } else if (militaryCount >= 3) {
-    //   strategicHint = '\n⚔️ ATTACK NOW! Send your infantry to enemy cities!';
-    // }
+    // Generate full game state upfront to include in prompt (saves a round-trip)
+    const initialCondensed = generateCondensedGameState(gameState, aiPlayerId);
+    const initialState = formatGameStateForAI(initialCondensed);
     
-    // Simple state summary - let the AI reason about what to do from system prompt
-    const turnPrompt = `Turn ${gameState.tick}. You are ${aiPlayer.name}.
-Resources: ${Math.round(aiPlayer.resources.food)}F / ${Math.round(aiPlayer.resources.wood)}W / ${Math.round(aiPlayer.resources.metal)}M / ${Math.round(aiPlayer.resources.gold)}G
-Population: ${aiPlayer.population}/${aiPlayer.populationCap}${popCapped ? ' (CAPPED)' : ''}
-Military: ${militaryCount} units | Barracks: ${barracksCount}
-${enemyCityPos ? `Enemy city spotted at (${enemyCityPos.x},${enemyCityPos.y})` : 'No enemy cities visible'}
-Age: ${aiPlayer.age}${threatInfo}
+    // Include full state in prompt so AI can act immediately
+    const turnPrompt = `Turn ${gameState.tick}. You are ${aiPlayer.name}.${threatInfo}
 
-Start by calling get_game_state to see full details, then take actions.`;
+${initialState}
+
+Take actions now based on the state above. You can call get_game_state later if you need to refresh after taking actions.`;
 
     // Log what we're sending to the agent
     console.log('\n' + '-'.repeat(60));
@@ -571,120 +653,15 @@ Start by calling get_game_state to see full details, then take actions.`;
 
         switch (toolCall.name) {
           case 'get_game_state': {
+            // Refresh game state mid-turn (state was already provided in initial prompt)
             const condensed = generateCondensedGameState(currentState, aiPlayerId);
-            // Debug: log what tiles are near forest/metal
-            console.log('[AI DEBUG] tilesNearForest:', condensed.tilesNearForest?.map(t => `(${t.x},${t.y})`).join(', ') || 'EMPTY');
-            console.log('[AI DEBUG] tilesNearMetal:', condensed.tilesNearMetal?.map(t => `(${t.x},${t.y})`).join(', ') || 'EMPTY');
-            const p = condensed.myPlayer;
-            
-            // Format a readable game state - facts only, no directives
-            const stateStr = `## RESOURCES:
-Food: ${Math.round(p.resources.food)} (+${p.resourceRates.food.toFixed(1)}/s)
-Wood: ${Math.round(p.resources.wood)} (+${p.resourceRates.wood.toFixed(1)}/s)
-Metal: ${Math.round(p.resources.metal)} (+${p.resourceRates.metal.toFixed(1)}/s)
-Gold: ${Math.round(p.resources.gold)} (+${(p.resourceRates.gold || 0).toFixed(1)}/s)
-Knowledge: ${Math.round(p.resources.knowledge || 0)} (+${(p.resourceRates.knowledge || 0).toFixed(1)}/s)
-Oil: ${Math.round(p.resources.oil || 0)} (+${(p.resourceRates.oil || 0).toFixed(1)}/s)
-
-## POPULATION: ${p.population}/${p.populationCap} | Age: ${p.age}
-
-## YOUR BUILDINGS:
-${condensed.myBuildings.map(b => `- ${b.type} at (${b.x},${b.y})`).join('\n') || '(none)'}
-
-## YOUR WORKERS:
-${(() => {
-  const citizens = condensed.myUnits.filter(u => u.type === 'citizen');
-  const byTask: Record<string, string[]> = {};
-  for (const c of citizens) {
-    const task = c.task || 'idle';
-    if (!byTask[task]) byTask[task] = [];
-    byTask[task].push(c.id);
-  }
-  const lines: string[] = [];
-  // Show IDLE first - these need assignment!
-  if (byTask['idle']?.length) lines.push(`IDLE (need assignment!): ${byTask['idle'].join(', ')}`);
-  if (byTask['gather_food']?.length) lines.push(`Food: ${byTask['gather_food'].join(', ')}`);
-  if (byTask['gather_wood']?.length) lines.push(`Wood: ${byTask['gather_wood'].join(', ')}`);
-  if (byTask['gather_metal']?.length) lines.push(`Metal: ${byTask['gather_metal'].join(', ')}`);
-  if (byTask['gather_gold']?.length) lines.push(`Gold: ${byTask['gather_gold'].join(', ')}`);
-  if (byTask['gather_knowledge']?.length) lines.push(`Knowledge: ${byTask['gather_knowledge'].join(', ')}`);
-  if (byTask['gather_oil']?.length) lines.push(`Oil: ${byTask['gather_oil'].join(', ')}`);
-  return lines.length > 0 ? lines.join('\n') : '(no workers)';
-})()}
-
-## YOUR MILITARY:
-${condensed.myUnits.filter(u => u.type !== 'citizen').map(u => `${u.id}`).join(', ') || 'none'}
-
-## TERRITORY: x ${condensed.territoryBounds.minX}-${condensed.territoryBounds.maxX}, y ${condensed.territoryBounds.minY}-${condensed.territoryBounds.maxY}
-
-## BUILD LOCATIONS:
-General: ${(condensed.emptyTerritoryTiles || []).slice(0, 5).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
-For city expansion: ${(condensed.tilesForCityExpansion || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
-Near forest: ${(condensed.tilesNearForest || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
-Near metal: ${(condensed.tilesNearMetal || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
-Near oil: ${(condensed.tilesNearOil || []).slice(0, 4).map(t => `(${t.x},${t.y})`).join(', ') || 'none'}
-
-## ENEMIES:
-Buildings: ${condensed.enemyBuildings.slice(0, 8).map(b => `${b.type}@(${b.x},${b.y})`).join(', ') || 'none visible'}
-Units: ${condensed.enemyUnits.slice(0, 8).map(u => `${u.type}@(${Math.round(u.x)},${Math.round(u.y)})`).join(', ') || 'none visible'}
-Cities: ${condensed.enemyBuildings.filter(b => ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)).map(c => `(${c.x},${c.y})`).join(', ') || 'none'}
-
-## TRAINING BUILDINGS:
-${(() => {
-  const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
-  const cities = condensed.myBuildings.filter(b => cityTypes.includes(b.type));
-  const barracks = condensed.myBuildings.filter(b => b.type === 'barracks');
-  const stables = condensed.myBuildings.filter(b => b.type === 'stable');
-  const docks = condensed.myBuildings.filter(b => b.type === 'dock');
-  
-  const locs: string[] = [];
-  if (cities.length > 0) locs.push(`Citizens: ${cities.map(c => `(${c.x},${c.y})`).join(', ')}`);
-  if (barracks.length > 0) locs.push(`Infantry/Ranged: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}`);
-  if (stables.length > 0) locs.push(`Cavalry: ${stables.map(b => `(${b.x},${b.y})`).join(', ')}`);
-  if (docks.length > 0) locs.push(`Naval: ${docks.map(b => `(${b.x},${b.y})`).join(', ')}`);
-  
-  return locs.join('\n') || 'none';
-})()}
-
-## MILITARY STATUS:
-${(() => {
-  const sa = condensed.strategicAssessment;
-  const lines = [];
-  lines.push(`Your military: ${sa.myMilitaryCount} units (strength ${sa.myMilitaryStrength})`);
-  lines.push(`Enemy military: ${sa.enemyMilitaryCount} units (strength ${sa.enemyMilitaryStrength}), nearest ${sa.nearestEnemyDistance} tiles away`);
-  
-  // Military unit IDs for send_units command
-  const militaryUnits = condensed.myUnits.filter(u => u.type !== 'citizen');
-  if (militaryUnits.length > 0) {
-    lines.push(`Your unit IDs: ${militaryUnits.slice(0, 10).map(u => u.id).join(', ')}${militaryUnits.length > 10 ? ` (+${militaryUnits.length - 10} more)` : ''}`);
-  }
-  
-  // Enemy cities as potential targets
-  const enemyCities = condensed.enemyBuildings.filter(b => 
-    ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)
-  );
-  if (enemyCities.length > 0) {
-    const targets = enemyCities.slice(0, 5).map(c => `${c.type}@(${c.x},${c.y})`).join(', ');
-    lines.push(`Enemy cities: ${targets}${enemyCities.length > 5 ? ` (+${enemyCities.length - 5} more)` : ''}`);
-  }
-  
-  return lines.join('\n');
-})()}
-
-`;
+            const stateStr = formatGameStateForAI(condensed);
 
             result = { success: true, message: stateStr };
             // Detailed logging
-            console.log(`[TOOL OUTPUT] Game state retrieved (${stateStr.length} chars)`);
-            console.log(`  [STATE] Tick: ${condensed.tick} | Pop: ${p.population}/${p.populationCap} | Military: ${condensed.myUnits.filter(u => u.type !== 'citizen').length}`);
-            console.log(`  [STATE] Resources: Food ${Math.round(p.resources.food)} (${p.resourceRates.food}/s) | Wood ${Math.round(p.resources.wood)} (${p.resourceRates.wood}/s) | Metal ${Math.round(p.resources.metal)} (${p.resourceRates.metal}/s) | Gold ${Math.round(p.resources.gold)}`);
-            console.log(`  [STATE] Buildings: ${condensed.myBuildings.map(b => b.type).join(', ')}`);
-            console.log(`  [STATE] Citizens: ${condensed.myUnits.filter(u => u.type === 'citizen').length} | Idle: ${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || u.task === 'move')).length}`);
-            // Log the full prompt going to AI (first 2000 chars)
-            console.log(`\n[FULL PROMPT TO AI] (showing first 2500 chars):\n${'-'.repeat(50)}`);
-            console.log(stateStr.substring(0, 2500));
-            if (stateStr.length > 2500) console.log(`\n... (${stateStr.length - 2500} more chars)`);
-            console.log('-'.repeat(50));
+            const mp = condensed.myPlayer;
+            console.log(`[TOOL OUTPUT] Game state refreshed (${stateStr.length} chars)`);
+            console.log(`  [STATE] Tick: ${condensed.tick} | Pop: ${mp.population}/${mp.populationCap} | Military: ${condensed.myUnits.filter(u => u.type !== 'citizen').length}`);
             break;
           }
 
@@ -750,8 +727,15 @@ ${(() => {
           }
 
           case 'send_units': {
-            const { unit_ids, target_x, target_y, task } = args as { unit_ids: string[]; target_x: number; target_y: number; task?: string };
-            const unitTask = task === 'move' ? 'move' : 'attack'; // Default to attack if not specified
+            const { unit_ids, target_x, target_y } = args as { unit_ids: string[]; target_x: number; target_y: number };
+            // Auto-detect: if there's an enemy building/unit at target, attack; otherwise move
+            const targetTile = currentState.grid[Math.floor(target_y)]?.[Math.floor(target_x)];
+            const hasEnemyBuilding = targetTile?.building && targetTile.building.ownerId !== aiPlayerId;
+            const hasEnemyUnit = currentState.units.some((u: Unit) => 
+              u.ownerId !== aiPlayerId && 
+              Math.abs(u.x - target_x) < 2 && Math.abs(u.y - target_y) < 2
+            );
+            const unitTask = (hasEnemyBuilding || hasEnemyUnit) ? 'attack' : 'move';
             const res = executeSendUnits(currentState, aiPlayerId, unit_ids, target_x, target_y, unitTask);
             currentState = res.newState;
             result = res.result;

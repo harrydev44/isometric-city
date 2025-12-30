@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AIPlayerConversation, AIConversationEntry } from '../hooks/useAgenticAI';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cpu, Sparkles, Terminal, MessageSquare, Zap } from 'lucide-react';
 import { RoNPlayer } from '../types/game';
 
 interface AIAgentsSidebarProps {
@@ -17,94 +17,124 @@ interface AIAgentsSidebarProps {
   onWidthChange?: (width: number) => void;
 }
 
-const MIN_WIDTH = 280;
+const MIN_WIDTH = 300;
 const MAX_WIDTH = 600;
-const DEFAULT_WIDTH = 320;
+const DEFAULT_WIDTH = 340;
 
 export const AI_SIDEBAR_DEFAULT_WIDTH = DEFAULT_WIDTH;
 
-function ToolCallEntry({ entry, isExpanded, onToggle }: { 
-  entry: AIConversationEntry; 
-  isExpanded: boolean; 
-  onToggle: () => void;
-}) {
-  const hasArgs = entry.toolArgs && Object.keys(entry.toolArgs).length > 0;
-  
-  return (
-    <div className="border border-slate-700 rounded overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 px-2 py-1.5 bg-slate-800 hover:bg-slate-700 transition-colors text-left"
-      >
-        {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-        )}
-        <span className="text-xs text-blue-400 font-mono">{entry.toolName}</span>
-        {!hasArgs && (
-          <span className="text-xs text-slate-600 font-mono">()</span>
-        )}
-      </button>
-      {isExpanded && (
-        <div className="px-2 py-2 bg-slate-900 text-xs font-mono text-slate-500 border-t border-slate-700 max-h-[300px] overflow-y-auto">
-          {hasArgs ? (
-            Object.entries(entry.toolArgs!).map(([key, value]) => (
-              <div key={key} className="whitespace-pre-wrap break-all">
-                <span className="text-slate-600">{key}:</span>{' '}
-                <span className="text-slate-400">
-                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                </span>
-              </div>
-            ))
-          ) : (
-            <span className="text-slate-600">no arguments</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
+// Fixed-width resource formatting to prevent flickering
+function formatResource(val: number, width: number = 5): string {
+  let str: string;
+  if (val >= 10000) {
+    str = `${(val / 1000).toFixed(0)}k`;
+  } else if (val >= 1000) {
+    str = `${(val / 1000).toFixed(1)}k`;
+  } else {
+    str = Math.floor(val).toString();
+  }
+  return str.padStart(width, '\u2007'); // Use figure space for fixed width
 }
 
-function ToolResultEntry({ entry }: { entry: AIConversationEntry }) {
+// Combined tool call + result entry
+function ToolInvocationEntry({ 
+  toolCall, 
+  toolResult 
+}: { 
+  toolCall: AIConversationEntry; 
+  toolResult?: AIConversationEntry;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
-  // Detect success: explicit keywords OR game state output (starts with ##)
-  const isSuccess = entry.content.includes('success') || entry.content.includes('Success') || 
-                   entry.content.includes('Built') || entry.content.includes('Queued') ||
-                   entry.content.includes('Assigned') || entry.content.includes('Reassigned') ||
-                   entry.content.includes('Sent') || entry.content.includes('Trained') ||
-                   entry.content.startsWith('##') || entry.content.includes('## ');
+  const hasArgs = toolCall.toolArgs && Object.keys(toolCall.toolArgs).length > 0;
   
-  // Truncate preview to first line or first 80 chars
-  const getPreview = (content: string) => {
-    const firstLine = content.split('\n')[0];
-    if (firstLine.length > 80) {
-      return firstLine.slice(0, 80) + '...';
+  // Detect success from result
+  const isSuccess = toolResult ? (
+    toolResult.content.includes('success') || toolResult.content.includes('Success') || 
+    toolResult.content.includes('Built') || toolResult.content.includes('Queued') ||
+    toolResult.content.includes('Assigned') || toolResult.content.includes('Reassigned') ||
+    toolResult.content.includes('Sent') || toolResult.content.includes('Trained') ||
+    toolResult.content.startsWith('##') || toolResult.content.includes('## ')
+  ) : undefined;
+  
+  const getStatusStyles = () => {
+    if (!toolResult) {
+      return {
+        bg: 'bg-slate-800/80',
+        border: 'border-slate-600/30',
+        icon: 'text-amber-400',
+        glow: '',
+      };
     }
-    return firstLine + (content.includes('\n') ? '...' : '');
+    if (isSuccess) {
+      return {
+        bg: 'bg-emerald-950/40',
+        border: 'border-emerald-500/20',
+        icon: 'text-emerald-400',
+        glow: 'shadow-[inset_0_1px_0_0_rgba(16,185,129,0.1)]',
+      };
+    }
+    return {
+      bg: 'bg-rose-950/30',
+      border: 'border-rose-500/20',
+      icon: 'text-rose-400',
+      glow: 'shadow-[inset_0_1px_0_0_rgba(244,63,94,0.1)]',
+    };
   };
   
+  const styles = getStatusStyles();
+  
   return (
-    <div className={`border rounded overflow-hidden ${isSuccess ? 'border-green-800/50' : 'border-amber-800/50'}`}>
+    <div className={`rounded-lg border ${styles.border} ${styles.glow} overflow-hidden transition-all duration-150`}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-full flex items-center gap-2 px-2 py-1.5 ${isSuccess ? 'bg-green-950/30' : 'bg-amber-950/30'} hover:bg-opacity-50 transition-colors text-left`}
+        className={`w-full flex items-center gap-2 px-3 py-2 ${styles.bg} hover:brightness-110 transition-all text-left group`}
       >
-        {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+        <div className={`flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}>
+          <ChevronRight className="w-3 h-3 text-slate-500 group-hover:text-slate-400" />
+        </div>
+        <Terminal className={`w-3.5 h-3.5 ${styles.icon} flex-shrink-0`} />
+        <span className="text-[11px] text-cyan-300 font-medium truncate flex-1">
+          {toolCall.toolName}
+        </span>
+        {!toolResult && (
+          <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
         )}
-        <span className={`text-xs font-mono flex-shrink-0 ${isSuccess ? 'text-green-500' : 'text-amber-500'}`}>
-          {isSuccess ? 'ok' : 'err'}
-        </span>
-        <span className="text-xs text-slate-400 flex-1 font-mono truncate">
-          {getPreview(entry.content)}
-        </span>
       </button>
+      
       {isExpanded && (
-        <div className="px-2 py-2 bg-slate-900 text-xs text-slate-400 border-t border-slate-700 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
-          {entry.content}
+        <div className="border-t border-slate-700/50 bg-slate-900/60">
+          {/* Arguments section */}
+          <div className="px-3 py-2.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">
+              <span>Arguments</span>
+            </div>
+            {hasArgs ? (
+              <div className="space-y-1 max-h-[120px] overflow-y-auto scrollbar-thin">
+                {Object.entries(toolCall.toolArgs!).map(([key, value]) => (
+                  <div key={key} className="text-[11px] font-mono">
+                    <span className="text-slate-500">{key}:</span>{' '}
+                    <span className="text-slate-300">
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[11px] text-slate-600 italic">No arguments</span>
+            )}
+          </div>
+          
+          {/* Result section */}
+          {toolResult && (
+            <div className={`px-3 py-2.5 border-t border-slate-700/50 ${isSuccess ? 'bg-emerald-950/20' : 'bg-rose-950/20'}`}>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider mb-1.5 ${isSuccess ? 'text-emerald-500' : 'text-rose-400'}`}>
+                <span>{isSuccess ? 'Success' : 'Error'}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap max-h-[150px] overflow-y-auto scrollbar-thin leading-relaxed">
+                {toolResult.content}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -114,24 +144,28 @@ function ToolResultEntry({ entry }: { entry: AIConversationEntry }) {
 function PromptEntry({ entry }: { entry: AIConversationEntry }) {
   const [isExpanded, setIsExpanded] = useState(false);
   
+  // Truncate for preview
+  const preview = entry.content.length > 60 ? entry.content.slice(0, 60) + '...' : entry.content;
+  
   return (
-    <div className="border border-purple-800/50 rounded overflow-hidden">
+    <div className="rounded-lg border border-violet-500/20 overflow-hidden bg-violet-950/20 shadow-[inset_0_1px_0_0_rgba(139,92,246,0.1)]">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-2 py-1.5 bg-purple-950/30 hover:bg-purple-900/30 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-violet-900/20 transition-colors text-left group"
       >
-        {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+        <div className={`flex-shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}>
+          <ChevronRight className="w-3 h-3 text-slate-500 group-hover:text-slate-400" />
+        </div>
+        <Sparkles className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
+        <span className="text-[11px] text-violet-300 font-medium">System Prompt</span>
+        {!isExpanded && (
+          <span className="text-[10px] text-slate-500 truncate flex-1 ml-1">
+            {preview}
+          </span>
         )}
-        <span className="text-xs text-purple-400 font-mono flex-shrink-0">prompt</span>
-        <span className="text-xs text-slate-400 flex-1 font-mono whitespace-pre-wrap break-words">
-          {entry.content}
-        </span>
       </button>
       {isExpanded && (
-        <div className="px-2 py-2 bg-slate-900 text-xs text-slate-400 border-t border-slate-700 whitespace-pre-wrap font-mono max-h-[500px] overflow-y-auto">
+        <div className="px-3 py-2.5 border-t border-violet-500/10 bg-slate-900/40 text-[11px] text-slate-400 whitespace-pre-wrap font-mono max-h-[300px] overflow-y-auto scrollbar-thin leading-relaxed">
           {entry.content}
         </div>
       )}
@@ -139,42 +173,137 @@ function PromptEntry({ entry }: { entry: AIConversationEntry }) {
   );
 }
 
-function ConversationEntry({ entry }: { entry: AIConversationEntry }) {
-  const [isToolExpanded, setIsToolExpanded] = useState(false);
+// Group entries to pair tool_call with tool_result
+interface GroupedEntry {
+  type: 'single' | 'tool_pair';
+  entry?: AIConversationEntry;
+  toolCall?: AIConversationEntry;
+  toolResult?: AIConversationEntry;
+}
+
+function groupEntries(entries: AIConversationEntry[]): GroupedEntry[] {
+  const grouped: GroupedEntry[] = [];
+  let i = 0;
   
+  while (i < entries.length) {
+    const current = entries[i];
+    
+    if (current.type === 'tool_call') {
+      const next = entries[i + 1];
+      if (next && next.type === 'tool_result') {
+        grouped.push({
+          type: 'tool_pair',
+          toolCall: current,
+          toolResult: next,
+        });
+        i += 2;
+      } else {
+        grouped.push({
+          type: 'tool_pair',
+          toolCall: current,
+        });
+        i += 1;
+      }
+    } else if (current.type === 'tool_result') {
+      grouped.push({
+        type: 'single',
+        entry: current,
+      });
+      i += 1;
+    } else {
+      grouped.push({
+        type: 'single',
+        entry: current,
+      });
+      i += 1;
+    }
+  }
+  
+  return grouped;
+}
+
+function SingleEntry({ entry }: { entry: AIConversationEntry }) {
   switch (entry.type) {
     case 'prompt':
       return <PromptEntry entry={entry} />;
     
     case 'thinking':
       return (
-        <div className="text-xs text-slate-500 italic py-1.5 border-l-2 border-purple-700/50 pl-2 font-mono whitespace-pre-wrap break-words">
-          {entry.content}
+        <div className="flex gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700/30">
+          <div className="w-0.5 bg-gradient-to-b from-violet-500 to-violet-700 rounded-full flex-shrink-0" />
+          <p className="text-[11px] text-slate-400 italic leading-relaxed">
+            {entry.content}
+          </p>
         </div>
       );
     
-    case 'tool_call':
-      return (
-        <ToolCallEntry 
-          entry={entry} 
-          isExpanded={isToolExpanded} 
-          onToggle={() => setIsToolExpanded(!isToolExpanded)} 
-        />
-      );
-    
     case 'tool_result':
-      return <ToolResultEntry entry={entry} />;
+      return (
+        <div className="rounded-lg border border-slate-700/30 bg-slate-800/40 px-3 py-2">
+          <p className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap max-h-[150px] overflow-y-auto">
+            {entry.content}
+          </p>
+        </div>
+      );
     
     case 'message':
       return (
-        <div className="bg-blue-950/30 border border-blue-800/50 rounded px-2 py-1.5 text-xs text-blue-300 font-mono">
-          {entry.content}
+        <div className="rounded-lg border border-sky-500/20 bg-sky-950/30 px-3 py-2 shadow-[inset_0_1px_0_0_rgba(14,165,233,0.1)]">
+          <div className="flex items-center gap-1.5 mb-1">
+            <MessageSquare className="w-3 h-3 text-sky-400" />
+            <span className="text-[10px] text-sky-400 uppercase tracking-wider">Response</span>
+          </div>
+          <p className="text-[11px] text-sky-200 leading-relaxed">
+            {entry.content}
+          </p>
         </div>
       );
     
     default:
       return null;
   }
+}
+
+function GroupedConversationEntry({ grouped }: { grouped: GroupedEntry }) {
+  if (grouped.type === 'tool_pair' && grouped.toolCall) {
+    return (
+      <ToolInvocationEntry 
+        toolCall={grouped.toolCall} 
+        toolResult={grouped.toolResult} 
+      />
+    );
+  }
+  
+  if (grouped.entry) {
+    return <SingleEntry entry={grouped.entry} />;
+  }
+  
+  return null;
+}
+
+// Resource bar component with fixed-width values
+function ResourceBar({ player }: { player: RoNPlayer }) {
+  const resources = [
+    { key: 'food', icon: '🌾', value: player.resources.food, color: 'text-green-400' },
+    { key: 'wood', icon: '🪵', value: player.resources.wood, color: 'text-amber-500' },
+    { key: 'metal', icon: '⛏️', value: player.resources.metal, color: 'text-slate-300' },
+    { key: 'gold', icon: '💰', value: player.resources.gold, color: 'text-yellow-400' },
+  ];
+  
+  const popColor = player.population >= player.populationCap ? 'text-rose-400' : 'text-sky-400';
+  
+  return (
+    <div className="flex items-center gap-0.5 text-[10px] tabular-nums font-mono bg-slate-900/60 rounded px-1.5 py-0.5">
+      {resources.map((r) => (
+        <span key={r.key} className={`${r.color} whitespace-pre`} title={r.key}>
+          {r.icon}{formatResource(r.value, 4)}
+        </span>
+      ))}
+      <span className={`${popColor} whitespace-pre ml-0.5`} title="Population">
+        👥{String(player.population).padStart(2, '\u2007')}/{player.populationCap}
+      </span>
+    </div>
+  );
 }
 
 function PlayerConversation({ conversation, player, isExpanded, onToggle }: { 
@@ -185,81 +314,99 @@ function PlayerConversation({ conversation, player, isExpanded, onToggle }: {
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  // Auto-scroll to bottom on new entries
   useEffect(() => {
     if (scrollRef.current && isExpanded) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [conversation.entries.length, isExpanded]);
   
-  const recentEntries = conversation.entries.slice(-30); // Show last 30 entries
-  
-  // Format resource value compactly
-  const formatRes = (val: number) => val >= 1000 ? `${(val / 1000).toFixed(1)}k` : Math.floor(val).toString();
+  const recentEntries = conversation.entries.slice(-30);
+  const groupedEntries = groupEntries(recentEntries);
   
   return (
     <div className={`flex flex-col min-h-0 ${isExpanded ? 'flex-1' : 'flex-shrink-0'}`}>
-      {/* Header - name and resources inline */}
+      {/* Player Header */}
       <button
         onClick={onToggle}
-        className="flex items-center gap-2 px-2 py-1.5 bg-slate-800 border-b border-slate-700 hover:bg-slate-700/50 transition-colors flex-shrink-0"
+        className="flex items-center gap-2.5 px-3 py-2.5 bg-gradient-to-r from-slate-800 to-slate-800/80 border-b border-slate-700/50 hover:from-slate-750 hover:to-slate-800/90 transition-all flex-shrink-0 group"
       >
-        {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-slate-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
-        )}
+        {/* Expand/Collapse */}
+        <div className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
+          <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-400" />
+        </div>
+        
+        {/* Player indicator */}
         <div 
-          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: conversation.color }}
+          className="w-3 h-3 rounded-full flex-shrink-0 ring-2 ring-offset-1 ring-offset-slate-800"
+          style={{ 
+            backgroundColor: conversation.color,
+            boxShadow: `0 0 8px ${conversation.color}40`,
+            ringColor: `${conversation.color}60`,
+          }}
         />
-        <span className="text-sm font-medium text-slate-300 font-mono flex-shrink-0">
-          {conversation.playerName}
-        </span>
-        {/* Resources inline */}
-        {player && (
-          <div className="flex items-center gap-1 text-[10px] font-mono flex-shrink-0">
-            <span className="text-green-400" title="Food">🌾{formatRes(player.resources.food)}</span>
-            <span className="text-amber-600" title="Wood">🪵{formatRes(player.resources.wood)}</span>
-            <span className="text-slate-400" title="Metal">⛏️{formatRes(player.resources.metal)}</span>
-            <span className="text-yellow-400" title="Gold">💰{formatRes(player.resources.gold)}</span>
-            <span className={player.population >= player.populationCap ? 'text-red-400' : 'text-blue-400'} title="Population">
-              👥{player.population}/{player.populationCap}
-            </span>
-          </div>
-        )}
+        
+        {/* Player name */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Cpu className="w-3.5 h-3.5 text-slate-500" />
+          <span className="text-sm font-semibold text-slate-200">
+            {conversation.playerName}
+          </span>
+        </div>
+        
+        {/* Resources */}
+        {player && <ResourceBar player={player} />}
+        
         <div className="flex-1" />
-        {conversation.isThinking && (
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse flex-shrink-0" />
-        )}
-        <span className="text-xs text-slate-500 font-mono flex-shrink-0">
-          {conversation.entries.length}
-        </span>
+        
+        {/* Status indicators */}
+        <div className="flex items-center gap-2">
+          {conversation.isThinking && (
+            <div className="flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-400 animate-pulse" />
+              <span className="text-[10px] text-amber-400 font-medium">Active</span>
+            </div>
+          )}
+          <span className="text-[10px] text-slate-500 bg-slate-900/60 px-1.5 py-0.5 rounded">
+            {conversation.entries.length}
+          </span>
+        </div>
       </button>
       
-      {/* Entries - only show when expanded, takes remaining space */}
+      {/* Conversation entries */}
       {isExpanded && (
         <div 
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 min-h-0"
+          className="flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-0 bg-gradient-to-b from-slate-900/50 to-slate-900/80 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent"
         >
-          {recentEntries.length === 0 ? (
-            <p className="text-slate-600 text-xs text-center py-4 font-mono">
-              waiting...
-            </p>
+          {groupedEntries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Cpu className="w-8 h-8 text-slate-700 mb-2" />
+              <p className="text-slate-600 text-xs">
+                Waiting for AI activity...
+              </p>
+            </div>
           ) : (
-            recentEntries.map((entry) => (
-              <ConversationEntry key={entry.id} entry={entry} />
+            groupedEntries.map((grouped, idx) => (
+              <GroupedConversationEntry 
+                key={grouped.toolCall?.id ?? grouped.entry?.id ?? idx} 
+                grouped={grouped} 
+              />
             ))
           )}
+          
+          {/* Thinking indicator */}
           {conversation.isThinking && (
-            <div className="flex items-center gap-2 text-xs text-yellow-500 py-1 font-mono">
-              <div className="flex gap-0.5">
-                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-950/20 border border-amber-500/20 rounded-lg">
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <div 
+                    key={i}
+                    className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce"
+                    style={{ animationDelay: `${i * 150}ms` }}
+                  />
+                ))}
               </div>
-              <span>thinking</span>
+              <span className="text-[11px] text-amber-300 font-medium">Processing...</span>
             </div>
           )}
         </div>
@@ -274,21 +421,18 @@ export function AIAgentsSidebar({ conversations, players, onClear, onWidthChange
   const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(new Set());
   const sidebarRef = useRef<HTMLDivElement>(null);
   
-  // Get AI players' conversations (filter out human players)
   const aiConversations = conversations.filter(c => 
     c.playerName.toLowerCase().includes('ai') || 
     c.playerName.toLowerCase().includes('red') || 
     c.playerName.toLowerCase().includes('green')
   );
   
-  // Initialize expanded state for new AI players (expand first one by default)
   useEffect(() => {
     if (aiConversations.length > 0 && expandedPlayers.size === 0) {
       setExpandedPlayers(new Set([aiConversations[0].playerId]));
     }
   }, [aiConversations.length]);
   
-  // Map player ID to player data for quick lookup
   const playerMap = new Map(players.map(p => [p.id, p]));
   
   const toggleExpanded = useCallback((playerId: string) => {
@@ -331,25 +475,36 @@ export function AIAgentsSidebar({ conversations, players, onClear, onWidthChange
     };
   }, [isResizing, onWidthChange]);
   
+  // Empty state
   if (aiConversations.length === 0) {
-    // Show placeholder when no AI conversations yet
     return (
       <div 
         ref={sidebarRef}
-        className="bg-slate-900 border-l border-slate-700 flex flex-col h-full relative"
+        className="bg-gradient-to-b from-slate-900 to-slate-950 border-l border-slate-700/50 flex flex-col h-full relative"
         style={{ width }}
       >
         {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
-          className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 transition-colors"
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-sky-500/50 active:bg-sky-500 transition-colors z-10"
         />
-        <div className="px-3 py-1.5 border-b border-slate-700 bg-slate-800 flex items-center justify-between">
-          <h2 className="text-xs font-medium text-slate-400 font-mono">AI Agents</h2>
+        
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-sky-400" />
+            <h2 className="text-sm font-semibold text-slate-200">AI Agents</h2>
+          </div>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-slate-600 text-[10px] text-center px-4 font-mono">
-            AI history appears here when enabled
+        
+        {/* Empty state */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mb-4">
+            <Cpu className="w-8 h-8 text-slate-600" />
+          </div>
+          <p className="text-slate-500 text-sm text-center mb-1">No AI Activity</p>
+          <p className="text-slate-600 text-xs text-center">
+            AI conversation history will appear here when agents are active
           </p>
         </div>
       </div>
@@ -359,28 +514,36 @@ export function AIAgentsSidebar({ conversations, players, onClear, onWidthChange
   return (
     <div 
       ref={sidebarRef}
-      className="bg-slate-900 border-l border-slate-700 flex flex-col h-full overflow-hidden relative"
+      className="bg-gradient-to-b from-slate-900 to-slate-950 border-l border-slate-700/50 flex flex-col h-full overflow-hidden relative"
       style={{ width }}
     >
       {/* Resize handle */}
       <div
         onMouseDown={handleMouseDown}
-        className={`absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize transition-colors ${isResizing ? 'bg-blue-500' : 'hover:bg-blue-500/50'}`}
+        className={`absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize transition-colors z-10 ${
+          isResizing ? 'bg-sky-500' : 'hover:bg-sky-500/50'
+        }`}
       />
       
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-slate-700 bg-slate-800 flex items-center justify-between flex-shrink-0">
-        <h2 className="text-xs font-medium text-slate-400 font-mono">AI Agents</h2>
+      <div className="px-4 py-3 border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Cpu className="w-4 h-4 text-sky-400" />
+          <h2 className="text-sm font-semibold text-slate-200">AI Agents</h2>
+          <span className="text-[10px] text-slate-500 bg-slate-900/60 px-1.5 py-0.5 rounded">
+            {aiConversations.length}
+          </span>
+        </div>
         <button
           onClick={onClear}
-          className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors font-mono"
+          className="text-[10px] text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 px-2 py-1 rounded transition-colors"
         >
-          clear
+          Clear
         </button>
       </div>
       
-      {/* Conversations - expanded ones take available space, collapsed ones shrink */}
-      <div className="flex-1 flex flex-col min-h-0 divide-y divide-slate-700 overflow-hidden">
+      {/* Conversations */}
+      <div className="flex-1 flex flex-col min-h-0 divide-y divide-slate-700/30 overflow-hidden">
         {aiConversations.map((conv) => (
           <PlayerConversation 
             key={conv.playerId} 
