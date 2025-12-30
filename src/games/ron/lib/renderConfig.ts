@@ -211,12 +211,12 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     fort: { row: 1, col: 3 },
     // Fortress - Row 1, Col 3 is walled compound (was 3,0 Pantheon)
     fortress: { row: 1, col: 3 },
-    // Stockade - Row 4, Col 0 is basic fortification (was 0,1 Parthenon)
-    stockade: { row: 4, col: 0 },
-    // Woodcutters camp - Row 4, Col 0 is rustic workshop (was 3,0 Pantheon)
+    // Stockade - Row 2, Col 1 is watchtower (defensive like tower)
+    stockade: { row: 2, col: 1 },
+    // Woodcutters camp - Row 4, Col 0 is rustic workshop
     woodcutters_camp: { row: 4, col: 0 },
-    // Castle - Row 0, Col 0 is large palace
-    castle: { row: 0, col: 0 },
+    // Castle - Row 3, Col 0 is Pantheon rotunda (imposing fortress-like)
+    castle: { row: 3, col: 0 },
   },
   medieval: {
     // City - Row 1, Col 0 is walled courtyard/garden
@@ -243,14 +243,14 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     stable: { row: 1, col: 2 },
     // Dock - Row 5, Col 0 is waterfront building
     dock: { row: 5, col: 0 },
-    // Mine - Row 4, Col 3 is mining complex with hoist (was 4,2 forge)
+    // Mine - Row 4, Col 3 is mining complex with hoist
     mine: { row: 4, col: 3 },
-    // Smelter - Row 0, Col 2 is windmill + forge
-    smelter: { row: 0, col: 2 },
+    // Smelter - Row 4, Col 2 is forge with bellows (correct for metalworking)
+    smelter: { row: 4, col: 2 },
     // Granary - Row 4, Col 1 is large barn
     granary: { row: 4, col: 1 },
-    // Lumber mill - Row 3, Col 3 is barn/workshop (was 0,3 watchtower)
-    lumber_mill: { row: 3, col: 3 },
+    // Lumber mill - Row 0, Col 3 is large windmill (wind-powered sawmill)
+    lumber_mill: { row: 0, col: 3 },
     // Tower - Row 0, Col 1 is stone keep
     tower: { row: 0, col: 1 },
     // Fort - Row 5, Col 1 is stone fortress
@@ -261,8 +261,8 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     stockade: { row: 3, col: 1 },
     // Castle - Row 0, Col 0 is gray stone castle
     castle: { row: 0, col: 0 },
-    // Siege factory - Row 4, Col 2 is forge (was 3,4 barn)
-    siege_factory: { row: 4, col: 2 },
+    // Siege factory - Row 3, Col 3 is barn/workshop (for wooden siege equipment)
+    siege_factory: { row: 3, col: 3 },
   },
   enlightenment: {
     // City - Row 0, Col 0 is Georgian mansion
@@ -293,69 +293,69 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     lumber_mill: { row: 2, col: 2 },
     // Factory - Row 0, Col 2 is early factory with waterwheel
     factory: { row: 0, col: 2 },
-    // Fort - Row 1, Col 3 is compound (was 5,1 bridge!)
+    // Fort - Row 1, Col 3 is compound
     fort: { row: 1, col: 3 },
-    // Tower - Row 1, Col 3 is compound (was 2,1 water tower)
-    tower: { row: 1, col: 3 },
-    // Fortress - Row 1, Col 3 is compound (or use medieval fallback)
+    // Tower - Row 2, Col 1 is water tower (actual tower structure)
+    tower: { row: 2, col: 1 },
+    // Fortress - Row 1, Col 3 is compound
     fortress: { row: 1, col: 3 },
-    // Stockade - Row 1, Col 3 is compound (was 0,1 townhouse)
+    // Stockade - Row 1, Col 3 is compound
     stockade: { row: 1, col: 3 },
-    // Bunker - Row 4, Col 2 is industrial building (was 4,0 shop)
+    // Bunker - Row 4, Col 2 is industrial building
     bunker: { row: 4, col: 2 },
-    // Castle - Row 5, Col 2 is grand capitol (was 0,0 same as city_center)
-    castle: { row: 5, col: 2 },
+    // Castle - Row 0, Col 0 is Georgian mansion (grand defensive structure)
+    castle: { row: 0, col: 0 },
   },
   industrial: {
-    // City - Row 5, Col 2 is grand city hall with clock tower
+    // City - Row 5, Col 2 is capitol dome
     city_center: { row: 5, col: 2 },
-    // Market - Row 3, Col 4 is storefront shop
+    // Market - Row 3, Col 4 is brick commercial
     market: { row: 3, col: 4 },
-    // Library - Row 3, Col 2 is grand Victorian mansion with turret - distinctive!
+    // Library - Row 3, Col 2 is grand Victorian mansion with pool
     library: { row: 3, col: 2 },
-    // University - Row 2, Col 0 is large Victorian school
+    // University - Row 2, Col 0 is gothic university/cathedral
     university: { row: 2, col: 0 },
     // Temple - Row 1, Col 4 is church with steeple
     temple: { row: 1, col: 4 },
-    // Senate - Row 5, Col 3 is classical columns building
+    // Senate - Row 5, Col 3 is columned government
     senate: { row: 5, col: 3 },
-    // Barracks - Row 5, Col 1 is large hangar/military depot
+    // Barracks - Row 5, Col 1 is train station/depot
     barracks: { row: 5, col: 1 },
-    // Stable - Row 5, Col 1 is transport depot (was 3,1 with bleeding)
-    stable: { row: 5, col: 1 },
-    // Dock - Row 5, Col 0 is train station
+    // Stable - Row 3, Col 3 is farmhouse with fencing (cavalry appropriate)
+    stable: { row: 3, col: 3 },
+    // Dock - Row 5, Col 0 is zeppelin hangar
     dock: { row: 5, col: 0 },
-    // Mine - Row 4, Col 2 is mining complex
+    // Mine - Row 4, Col 2 is factory with smokestack
     mine: { row: 4, col: 2 },
-    // Smelter - Row 4, Col 3 is steel facility
-    smelter: { row: 4, col: 3 },
-    // Granary - Row 4, Col 0 is warehouse
+    // Smelter - Row 2, Col 2 is large factory with 3 tall smokestacks
+    smelter: { row: 2, col: 2 },
+    // Granary - Row 4, Col 0 is Victorian commercial/apartment
     granary: { row: 4, col: 0 },
-    // Lumber mill - Row 0, Col 2 is red brick industrial building
+    // Lumber mill - Row 0, Col 2 is factory with smokestacks
     lumber_mill: { row: 0, col: 2 },
-    // Factory - Row 0, Col 1 is large factory - PERFECT!
-    factory: { row: 0, col: 1 },
-    // Oil well - Row 2, Col 4 is oil derrick - PERFECT!
-    oil_well: { row: 2, col: 4 },
-    // Refinery - Row 4, Col 4 is industrial refinery
+    // Factory - Row 0, Col 2 is red brick factory with smokestacks
+    factory: { row: 0, col: 2 },
+    // Oil well - Row 4, Col 3 is oil derrick
+    oil_well: { row: 4, col: 3 },
+    // Refinery - Row 4, Col 4 is refinery complex
     refinery: { row: 4, col: 4 },
-    // Siege factory - Row 4, Col 1 is factory
+    // Siege factory - Row 4, Col 1 is warehouse/depot
     siege_factory: { row: 4, col: 1 },
-    // Bunker - Row 0, Col 3 is gray brick fortified building (was 4,0 warehouse)
+    // Bunker - Row 0, Col 3 is Victorian commercial (fortified look)
     bunker: { row: 0, col: 3 },
-    // Fort - Row 0, Col 3 is gray brick building (fortified look)
+    // Fort - Row 0, Col 3 is Victorian commercial
     fort: { row: 0, col: 3 },
-    // Fortress - Row 0, Col 3 is gray brick building
+    // Fortress - Row 0, Col 3 is Victorian commercial
     fortress: { row: 0, col: 3 },
-    // Castle - Row 0, Col 3 is gray brick institutional building (was 0,0 brownstones)
+    // Castle - Row 0, Col 3 is Victorian commercial
     castle: { row: 0, col: 3 },
-    // Stockade - Row 0, Col 3 is gray institutional (was 0,1 factory - wrong!)
+    // Stockade - Row 0, Col 3 is Victorian commercial
     stockade: { row: 0, col: 3 },
-    // Tower - Row 0, Col 3 is gray institutional (was 2,1 water tower - wrong!)
+    // Tower - Row 0, Col 3 is Victorian commercial
     tower: { row: 0, col: 3 },
-    // Woodcutters camp - Row 4, Col 0 is warehouse (was 3,0 tree - wrong!)
+    // Woodcutters camp - Row 4, Col 0 is Victorian commercial
     woodcutters_camp: { row: 4, col: 0 },
-    // Auto plant - Row 4, Col 2 is industrial manufacturing facility
+    // Auto plant - Row 4, Col 2 is factory with smokestack
     auto_plant: { row: 4, col: 2 },
   },
   modern: {
@@ -513,55 +513,68 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
     library: -0.5,      // Crop lower for Classical library
     market: -0.5,       // Crop lower - asset above bleeding through
     dock: -0.3,         // Additional shift for dock
-    lumber_mill: 0.9,   // Shift DOWN - was 0.4 tiles too high (fixed from 0.5)
+    lumber_mill: 0.9,   // Shift DOWN - was 0.4 tiles too high
     barracks: -0.3,     // Crop lower
     stable: -0.3,       // Crop lower
     tower: -0.2,        // Shift up 0.2
+    senate: -0.4,       // Shift UP for tall Greek temple
+    granary: -0.4,      // Shift UP for warehouse grounding
+    woodcutters_camp: -0.3, // Shift UP for workshop grounding
   },
   medieval: {
     market: -0.2,       // Additional shift for market
     city_center: -0.5,  // Crop lower down
-    small_city: -0.5,   // Same as city_center (was missing)
-    large_city: -0.5,   // Same as city_center (was missing)
+    small_city: -0.5,   // Same as city_center
+    large_city: -0.5,   // Same as city_center
     fort: 0.6,          // Shift DOWN 0.6 tiles
-    fortress: 0.6,      // Same as fort for consistency (was missing)
-    temple: -0.3,       // Shift UP for tall cathedral (was missing)
-    tower: -0.2,        // Shift UP for tall keep (was missing)
-    mine: -0.2,         // Shift UP for hoist tower (was missing)
+    fortress: 0.6,      // Same as fort for consistency
+    temple: -0.3,       // Shift UP for tall cathedral
+    tower: -0.2,        // Shift UP for tall keep
+    mine: -0.2,         // Shift UP for hoist tower
+    smelter: 0.3,       // Shift DOWN - forge at (4,2) is lower profile
+    lumber_mill: -0.4,  // Shift UP - large windmill at (0,3) is tall
+    siege_factory: 0.2, // Shift DOWN - barn at (3,3) is ground-level
   },
   enlightenment: {
     market: 0.2,        // Shift DOWN (well-cropped, just needs position adjustment)
     fort: 0.6,          // Same as medieval fort (uses medieval sprite)
-    senate: -0.4,       // Shift UP for tall dome (was missing)
-    fortress: 0.4,      // Shift DOWN - modest building (was missing)
-    stockade: -0.2,     // Shift UP to match tower/barracks (was missing)
-    bunker: -0.15,      // Shift UP for smokestacks (was missing)
-    siege_factory: 0.3, // Shift DOWN - warehouse is shorter (was missing)
-    lumber_mill: -0.2,  // Shift UP for watermill (was missing)
-    temple: 0.1,        // Shift DOWN slightly (was missing)
-    small_city: -0.2,   // Shift UP for domed capitol (was missing)
+    senate: -0.4,       // Shift UP for tall dome
+    fortress: 0.4,      // Shift DOWN - modest building
+    stockade: -0.2,     // Shift UP to match tower/barracks
+    bunker: -0.15,      // Shift UP for smokestacks
+    siege_factory: 0.3, // Shift DOWN - warehouse is shorter
+    lumber_mill: -0.2,  // Shift UP for watermill
+    temple: 0.1,        // Shift DOWN slightly
+    small_city: -0.2,   // Shift UP for domed capitol
+    tower: -0.3,        // Shift UP - water tower at (2,1) is tall
+    castle: -0.3,       // Shift UP - Georgian mansion needs grounding
   },
   industrial: {
-    market: -1.0,       // Much lower cropping needed - still seeing blue base
+    market: -1.0,       // Much lower cropping needed
     library: -0.8,      // Crop way lower at top and bottom
-    stable: -0.5,       // Crop lower at top and bottom
+    stable: -0.1,       // Farmhouse at (3,3) is ground-level
     fort: 0.6,          // Shift DOWN 0.6 tiles
     siege_factory: -0.3, // Crop 0.3 tiles lower
-    lumber_mill: -0.2,  // Shift UP for tall smokestacks (was missing)
-    temple: -0.2,       // Shift UP for church steeple (was missing)
-    bunker: -0.15,      // Bring closer to fort (was missing)
+    lumber_mill: -0.2,  // Shift UP for tall smokestacks
+    temple: -0.2,       // Shift UP for church steeple
+    bunker: -0.15,      // Bring closer to fort
+    oil_well: 0.6,      // Shift DOWN - derrick at (4,3) is grounded
+    smelter: -0.2,      // Shift UP - large factory at (2,2) has tall smokestacks
   },
   modern: {
     market: -0.8,       // Needs grey base + lower cropping
     city_center: -1.0,  // Full tile shift up - bottom cropped too tight
     small_city: -1.0,   // Full tile shift up - bottom cropped too tight
     large_city: -1.0,   // Full tile shift up - bottom cropped too tight
-    major_city: -0.5,   // Reduced - capitol dome is low-rise (was -1.0)
-    temple: -0.4,       // Match library offset (was missing)
-    dock: 1.1,          // Shift DOWN - warehouse sprite doesn't need -1.8 (was missing)
-    fort: 0.7,          // Shift DOWN - same sprite as tower (was missing)
-    fortress: 0.7,      // Shift DOWN - same sprite as tower (was missing)
-    castle: 0.7,        // Shift DOWN - same sprite as tower (was missing)
+    major_city: -0.5,   // Reduced - capitol dome is low-rise
+    temple: -0.4,       // Match library offset
+    dock: 1.1,          // Shift DOWN - warehouse sprite doesn't need -1.8
+    fort: 0.7,          // Shift DOWN - police compound
+    fortress: 0.7,      // Shift DOWN - police compound
+    castle: 0.7,        // Shift DOWN - police compound
+    stockade: 0.7,      // Shift DOWN - same police compound sprite
+    tower: 0.7,         // Shift DOWN - same police compound sprite
+    bunker: -0.2,       // Shift UP slightly
   },
 };
 
@@ -588,16 +601,16 @@ export const CONSTRUCTION_SPRITE_MAP: Partial<Record<RoNBuildingType, { row: num
   refinery: { row: 4, col: 4 },       // Large industrial complex
   
   // Knowledge buildings (2x2) - use institutional construction
-  library: { row: 5, col: 3 },        // Columned building framing
+  library: { row: 2, col: 0 },        // Columns/institutional under construction
   university: { row: 2, col: 0 },     // Columns/institutional
   temple: { row: 3, col: 2 },         // Curved/domed framing
   senate: { row: 5, col: 2 },         // Government building framing
   
   // Military buildings (2x2) - use walled/fortress construction
-  barracks: { row: 0, col: 0 },       // Foundation pit with scaffolding
+  barracks: { row: 1, col: 4 },       // House framing with walls
   stable: { row: 1, col: 4 },         // House framing with walls
   siege_factory: { row: 2, col: 2 },  // Steel framework
-  dock: { row: 4, col: 1 },           // Circular base/harbor
+  dock: { row: 1, col: 2 },           // Flat foundation with equipment
   auto_plant: { row: 4, col: 3 },     // Industrial construction
   factory: { row: 4, col: 3 },        // Industrial construction
   airbase: { row: 5, col: 0 },        // Airport/runway construction
@@ -631,26 +644,26 @@ export const CONSTRUCTION_SIZE_DEFAULTS = {
 // These are ADDITIONAL offsets for buildings under construction (scaffolding sprites)
 // Positive = shift down, Negative = shift up (crop from top)
 export const CONSTRUCTION_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>> = {
-  // City buildings - align with final building position
-  city_center: -0.5,
-  small_city: -0.5,
-  large_city: -0.5,
-  major_city: -0.5,
+  // City buildings - reduced to prevent floating, construction should be at base
+  city_center: -0.2,
+  small_city: -0.2,
+  large_city: -0.2,
+  major_city: -0.2,
   
   // Economic buildings
-  lumber_mill: 0.3,     // Shift down 0.3 tiles
+  lumber_mill: 0.1,     // Reduced - was sinking into ground
   smelter: 0.1,         // Slight shift for construction
   market: 0.0,          // Will use cropTop instead
   granary: 0.2,         // Shift down slightly
   mine: 0.0,            // Neutral
-  oil_well: 0.5,        // Shift down - derrick is tall
+  oil_well: 0.2,        // Reduced - was sinking into ground
   refinery: 0.3,        // Shift down
   woodcutters_camp: 0.2, // Shift down
   
   // Knowledge buildings
-  library: -0.3,        // Shift up for columned building
+  library: 0.0,         // Neutral - new sprite at (2,0) has base at bottom
   university: -0.2,     // Shift up
-  temple: -0.2,         // Shift up for domed building
+  temple: 0.0,          // Neutral - base is at bottom of sprite
   senate: -0.3,         // Shift up
   
   // Military buildings
@@ -658,14 +671,14 @@ export const CONSTRUCTION_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, numb
   stable: 0.0,          // Neutral
   auto_plant: -0.3,     // Shift up 0.3 tiles
   factory: 0.0,         // Neutral
-  dock: 0.3,            // Shift down for harbor
+  dock: 0.0,            // Neutral - new sprite at (1,2) has base at bottom
   airbase: -0.5,        // Shift up for airport
   
   // Defensive buildings
   tower: 0.0,           // Neutral
-  fort: -0.3,           // Shift up
-  fortress: -0.3,       // Shift up
-  castle: -0.5,         // Shift up for large castle
+  fort: -0.1,           // Reduced from -0.3
+  fortress: -0.1,       // Reduced from -0.3
+  castle: -0.2,         // Reduced from -0.5
   bunker: 0.2,          // Shift down
 };
 
@@ -691,12 +704,16 @@ export const AGE_BUILDING_CROP: Partial<Record<Age, Partial<Record<RoNBuildingTy
     barracks: { cropTop: 0.05 },        // Minor bleeding at top
     tower: { cropTop: 0.05 },           // Minor bleeding at top
     market: { cropTop: 0.10 },          // Bleeding from above
+    senate: { cropTop: 0.05 },          // Minor bleeding from garden fountain above
+    stable: { cropTop: 0.08 },          // Bleeding from stadium above
+    granary: { cropTop: 0.05 },         // Minor bleeding from industrial row
   },
   medieval: {
     market: { cropTop: 0.12 },          // Bleeding from above
     university: { cropTop: 0.10 },      // Bleeding from above
     barracks: { cropTop: 0.05 },        // Minor bleeding
     granary: { cropTop: 0.05 },         // Minor bleeding
+    siege_factory: { cropTop: 0.08 },   // Bleeding from stadium above at (2,3)
   },
   enlightenment: {
     university: { cropTop: 0.05 },      // Minor bleeding at top
@@ -705,24 +722,30 @@ export const AGE_BUILDING_CROP: Partial<Record<Age, Partial<Record<RoNBuildingTy
     granary: { cropTop: 0.05 },         // Minor bleeding at top
     lumber_mill: { cropTop: 0.08 },     // Bleeding at top
     woodcutters_camp: { cropTop: 0.10 }, // Bleeding at top
+    tower: { cropTop: 0.05 },           // Minor bleeding from row 1 above
   },
   industrial: {
-    market: { cropTop: 0.30, cropBottom: 0.1 },  // Severe bleeding (increased from 0.25)
-    library: { cropTop: 0.15, cropBottom: 0.15 }, // Bleeding at top and bottom
-    university: { cropTop: 0.15, cropBottom: 0.15 }, // Bleeding at top and bottom
-    oil_well: { cropTop: 0.25, cropBottom: 0.2 }, // Increased for severe bleeding
-    stable: { cropTop: 0.25, cropBottom: 0.05 },  // Severe bleeding at top
-    mine: { cropTop: 0.15, cropBottom: 0.10 },    // Bleeding at top and bottom
-    siege_factory: { cropTop: 0.15 },             // Bleeding at top
-    tower: { cropTop: 0.10 },                     // Bleeding at top
-    woodcutters_camp: { cropTop: 0.25 },          // Severe bleeding at top
-    temple: { cropTop: 0.08 },                    // Minor bleeding at top
-    fortress: { cropTop: 0.15 },                  // Bleeding at top
-    granary: { cropTop: 0.08 },                   // Minor bleeding at top
+    market: { cropTop: 0.10, cropBottom: 0.05 },  // Reduced for new sheet
+    library: { cropTop: 0.10, cropBottom: 0.10 }, // Reduced for new sheet
+    university: { cropTop: 0.10, cropBottom: 0.10 }, // Reduced for new sheet
+    oil_well: { cropTop: 0.08, cropBottom: 0.05 }, // Reduced - derrick at (4,3) is cleaner
+    stable: { cropTop: 0.08 },           // Farmhouse at (3,3) - minor bleeding
+    mine: { cropTop: 0.10, cropBottom: 0.08 },    // Reduced for new sheet
+    siege_factory: { cropTop: 0.10 },             // Bleeding at top
+    tower: { cropTop: 0.08 },                     // Reduced for new sheet
+    woodcutters_camp: { cropTop: 0.10 },          // Reduced for new sheet
+    temple: { cropTop: 0.05 },                    // Minor bleeding at top
+    fortress: { cropTop: 0.10 },                  // Reduced for new sheet
+    granary: { cropTop: 0.05 },                   // Minor bleeding at top
+    smelter: { cropTop: 0.10 },                   // Large factory at (2,2) - bleeding from tennis
   },
   modern: {
     university: { cropTop: 0.05 },      // Minor bleeding at top
-    market: { cropTop: 0.10 },          // Minor bleeding at top and bottom
+    market: { cropTop: 0.10 },          // Minor bleeding at top
+    dock: { cropTop: 0.05 },            // Warehouse at (4,1) - bleeding from row 3
+    granary: { cropTop: 0.05 },         // Same warehouse sprite as dock
+    siege_factory: { cropTop: 0.05 },   // Same warehouse sprite
+    smelter: { cropTop: 0.05 },         // Industrial complex at (4,3) - minor bleeding
   },
 };
 

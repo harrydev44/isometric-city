@@ -183,6 +183,236 @@ function drawCitizenUnit(
   ctx.fill();
   
   ctx.restore();
+  
+  // Draw work activity effects for gathering workers (carts, dust, particles)
+  if (isWorking && unit.task) {
+    drawWorkActivityEffects(ctx, centerX, centerY, unit, tick, scale);
+  }
+}
+
+/**
+ * Draw activity effects around working citizens (carts, dust, particles)
+ * Makes resource gathering look lively with visible activity
+ */
+function drawWorkActivityEffects(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  unit: Unit,
+  tick: number,
+  scale: number
+): void {
+  const animPhase = (tick * 0.08 + getUnitIdHash(unit.id) * 0.5) % (Math.PI * 2);
+  const hash = getUnitIdHash(unit.id);
+  
+  switch (unit.task) {
+    case 'gather_food': {
+      // Farm activity: wheat stalks swaying, small harvest basket
+      // Draw a small basket/crate with crops
+      const basketOffset = ((hash % 4) - 2) * 3 * scale;
+      const basketX = centerX + basketOffset;
+      const basketY = centerY + 4 * scale;
+      
+      // Small wooden basket
+      ctx.fillStyle = '#8b5a2b';
+      ctx.beginPath();
+      ctx.moveTo(basketX - 3 * scale, basketY);
+      ctx.lineTo(basketX + 3 * scale, basketY);
+      ctx.lineTo(basketX + 2.5 * scale, basketY + 2.5 * scale);
+      ctx.lineTo(basketX - 2.5 * scale, basketY + 2.5 * scale);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Crops in basket (yellow/green)
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.ellipse(basketX, basketY - 0.5 * scale, 2 * scale, 1 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Dust particles when working
+      if (hash % 3 === 0) {
+        drawDustParticles(ctx, centerX, centerY, tick, scale, 'rgba(139, 69, 19, 0.3)');
+      }
+      break;
+    }
+    
+    case 'gather_wood': {
+      // Forest activity: sawdust, wood chips, small log pile
+      // Draw a small log pile
+      const pileOffset = ((hash % 5) - 2.5) * 4 * scale;
+      const pileX = centerX + pileOffset;
+      const pileY = centerY + 5 * scale;
+      
+      // Logs (brown cylinders)
+      ctx.fillStyle = '#5c4033';
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.ellipse(
+          pileX + (i - 0.5) * 2.5 * scale,
+          pileY,
+          2 * scale, 1 * scale,
+          0, 0, Math.PI * 2
+        );
+        ctx.fill();
+      }
+      
+      // Wood chips flying (when working)
+      const chipPhase = animPhase * 2;
+      ctx.fillStyle = '#d4a574';
+      for (let i = 0; i < 3; i++) {
+        const chipAngle = chipPhase + i * 2.1;
+        const chipDist = 4 + Math.sin(chipAngle) * 3;
+        const chipX = centerX + Math.cos(chipAngle * 0.5 + hash) * chipDist * scale;
+        const chipY = centerY - 6 * scale + Math.sin(chipAngle) * 4 * scale;
+        const chipSize = 0.5 + Math.random() * 0.5;
+        ctx.fillRect(chipX, chipY, chipSize * scale, chipSize * 0.5 * scale);
+      }
+      
+      // Sawdust particles
+      drawDustParticles(ctx, centerX, centerY - 4 * scale, tick, scale, 'rgba(139, 90, 43, 0.4)');
+      break;
+    }
+    
+    case 'gather_metal': {
+      // Mine activity: ore cart, sparks, dust
+      // Draw a small mine cart with ore
+      const cartOffset = ((hash % 4) - 2) * 5 * scale;
+      const cartX = centerX + cartOffset + Math.sin(animPhase * 0.5) * 1 * scale;
+      const cartY = centerY + 6 * scale;
+      
+      // Cart body (grey metal)
+      ctx.fillStyle = '#4a5568';
+      ctx.beginPath();
+      ctx.moveTo(cartX - 3 * scale, cartY - 2 * scale);
+      ctx.lineTo(cartX + 3 * scale, cartY - 2 * scale);
+      ctx.lineTo(cartX + 2.5 * scale, cartY + 1 * scale);
+      ctx.lineTo(cartX - 2.5 * scale, cartY + 1 * scale);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Ore in cart (dark grey/silver chunks)
+      ctx.fillStyle = '#6b7280';
+      ctx.beginPath();
+      ctx.arc(cartX - 1 * scale, cartY - 2.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.arc(cartX + 1 * scale, cartY - 2.2 * scale, 1 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Cart wheels
+      ctx.fillStyle = '#2d3748';
+      ctx.beginPath();
+      ctx.arc(cartX - 2 * scale, cartY + 1.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.arc(cartX + 2 * scale, cartY + 1.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Pickaxe sparks (occasional)
+      if (Math.sin(animPhase * 3) > 0.7) {
+        ctx.fillStyle = 'rgba(255, 200, 50, 0.8)';
+        for (let i = 0; i < 2; i++) {
+          const sparkX = centerX + 3 * scale + Math.random() * 4 * scale;
+          const sparkY = centerY - 8 * scale + Math.random() * 3 * scale;
+          ctx.beginPath();
+          ctx.arc(sparkX, sparkY, 0.5 * scale, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      
+      // Dust particles
+      drawDustParticles(ctx, centerX, centerY, tick, scale, 'rgba(100, 100, 100, 0.4)');
+      break;
+    }
+    
+    case 'gather_gold': {
+      // Market activity: coin pouches, small crate
+      const pouchOffset = ((hash % 4) - 2) * 3 * scale;
+      const pouchX = centerX + pouchOffset;
+      const pouchY = centerY + 4 * scale;
+      
+      // Money pouch
+      ctx.fillStyle = '#8b5a2b';
+      ctx.beginPath();
+      ctx.arc(pouchX, pouchY, 2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Coins spilling out
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(pouchX + 1.5 * scale, pouchY - 1 * scale, 0.8 * scale, 0, Math.PI * 2);
+      ctx.arc(pouchX + 2.5 * scale, pouchY, 0.7 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    
+    case 'gather_oil': {
+      // Oil activity: oil barrel, dark drips
+      const barrelOffset = ((hash % 4) - 2) * 4 * scale;
+      const barrelX = centerX + barrelOffset;
+      const barrelY = centerY + 5 * scale;
+      
+      // Oil barrel
+      ctx.fillStyle = '#1f2937';
+      ctx.beginPath();
+      ctx.ellipse(barrelX, barrelY, 2.5 * scale, 1.5 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#374151';
+      ctx.beginPath();
+      ctx.ellipse(barrelX, barrelY - 1.5 * scale, 2.5 * scale, 1 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Oil drips
+      ctx.fillStyle = 'rgba(31, 41, 55, 0.6)';
+      for (let i = 0; i < 2; i++) {
+        const dripPhase = animPhase + i * 1.5;
+        const dripY = barrelY + 2 * scale + (Math.sin(dripPhase) * 0.5 + 0.5) * 3 * scale;
+        ctx.beginPath();
+        ctx.ellipse(barrelX + (i - 0.5) * 2 * scale, dripY, 0.5 * scale, 0.8 * scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    
+    case 'gather_knowledge': {
+      // Library activity: books, scrolls
+      const bookOffset = ((hash % 4) - 2) * 3 * scale;
+      const bookX = centerX + bookOffset;
+      const bookY = centerY + 3 * scale;
+      
+      // Stack of books
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(bookX - 2 * scale, bookY, 4 * scale, 1 * scale);
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(bookX - 1.8 * scale, bookY - 1 * scale, 3.6 * scale, 1 * scale);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(bookX - 1.6 * scale, bookY - 2 * scale, 3.2 * scale, 1 * scale);
+      break;
+    }
+  }
+}
+
+/**
+ * Draw dust/particle effects for working
+ */
+function drawDustParticles(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  tick: number,
+  scale: number,
+  color: string
+): void {
+  const animPhase = (tick * 0.1) % (Math.PI * 2);
+  
+  ctx.fillStyle = color;
+  for (let i = 0; i < 4; i++) {
+    const angle = animPhase + i * Math.PI * 0.5;
+    const dist = 3 + Math.sin(angle * 2) * 2;
+    const size = 0.8 + Math.sin(angle * 1.5) * 0.4;
+    const px = centerX + Math.cos(angle) * dist * scale;
+    const py = centerY + 2 * scale + Math.sin(angle * 0.5) * 2 * scale;
+    
+    ctx.beginPath();
+    ctx.arc(px, py, size * scale, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 /**

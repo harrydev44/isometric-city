@@ -195,6 +195,61 @@ function isAdjacentToOil(
 // Type for pre-computed city centers (matches TerritorySource from simulation.ts)
 type CityCenter = { x: number; y: number; ownerId: string; radius: number };
 
+// Resource gathering buildings that require minimum spacing of 3 tiles from each other
+const RESOURCE_GATHERING_BUILDINGS: RoNBuildingType[] = [
+  'farm', 'woodcutters_camp', 'lumber_mill', 'mine', 'smelter',
+  'oil_well', 'oil_platform', 'refinery', 'granary', 'market'
+];
+
+// Minimum distance required between resource gathering buildings (in tiles)
+const RESOURCE_BUILDING_MIN_DISTANCE = 3;
+
+/**
+ * Check if placing a resource building would be too close to another resource building.
+ * Returns true if placement is TOO CLOSE (invalid), false if OK.
+ */
+function isResourceBuildingTooClose(
+  buildingType: RoNBuildingType,
+  gridX: number,
+  gridY: number,
+  grid: import('../types/game').RoNTile[][],
+  gridSize: number
+): boolean {
+  // Only check for resource gathering buildings
+  if (!RESOURCE_GATHERING_BUILDINGS.includes(buildingType)) {
+    return false; // Not a resource building, no distance check needed
+  }
+  
+  // Search in a square around the placement position
+  const searchRadius = RESOURCE_BUILDING_MIN_DISTANCE;
+  for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+    for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+      if (dx === 0 && dy === 0) continue; // Skip the placement tile itself
+      
+      const checkX = gridX + dx;
+      const checkY = gridY + dy;
+      
+      if (checkX < 0 || checkX >= gridSize || checkY < 0 || checkY >= gridSize) continue;
+      
+      const tile = grid[checkY]?.[checkX];
+      if (!tile?.building) continue;
+      
+      const existingBuildingType = tile.building.type as RoNBuildingType;
+      
+      // Check if the existing building is also a resource gathering building
+      if (RESOURCE_GATHERING_BUILDINGS.includes(existingBuildingType)) {
+        // Calculate actual distance (Euclidean)
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < RESOURCE_BUILDING_MIN_DISTANCE) {
+          return true; // Too close!
+        }
+      }
+    }
+  }
+  
+  return false; // No nearby resource buildings - placement is OK
+}
+
 /**
  * Check if a building placement is valid at the given position.
  * Returns true if valid, false if invalid.
@@ -272,6 +327,11 @@ function isBuildingPlacementValid(
   if (buildingType === 'dock') {
     const buildingSize = BUILDING_STATS[buildingType]?.size || { width: 1, height: 1 };
     return isAdjacentToWater(grid, gridX, gridY, buildingSize.width, buildingSize.height);
+  }
+
+  // Check minimum distance between resource gathering buildings (3 tiles)
+  if (isResourceBuildingTooClose(buildingType, gridX, gridY, grid, gridSize)) {
+    return false; // Too close to another resource building
   }
 
   // Other buildings - add more validation as needed

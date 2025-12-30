@@ -826,6 +826,43 @@ export function executeBuildBuilding(
     }
   }
 
+  // Check minimum distance between resource gathering buildings (3 tiles)
+  const RESOURCE_GATHERING_BUILDINGS: RoNBuildingType[] = [
+    'farm', 'woodcutters_camp', 'lumber_mill', 'mine', 'smelter',
+    'oil_well', 'oil_platform', 'refinery', 'granary', 'market'
+  ];
+  const RESOURCE_BUILDING_MIN_DISTANCE = 3;
+  
+  if (RESOURCE_GATHERING_BUILDINGS.includes(bType)) {
+    // Search for other resource buildings within minimum distance
+    for (let dy = -RESOURCE_BUILDING_MIN_DISTANCE; dy <= RESOURCE_BUILDING_MIN_DISTANCE; dy++) {
+      for (let dx = -RESOURCE_BUILDING_MIN_DISTANCE; dx <= RESOURCE_BUILDING_MIN_DISTANCE; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        
+        const checkX = x + dx;
+        const checkY = y + dy;
+        if (checkX < 0 || checkX >= state.gridSize || checkY < 0 || checkY >= state.gridSize) continue;
+        
+        const checkTile = state.grid[checkY]?.[checkX];
+        if (!checkTile?.building) continue;
+        
+        const existingBuildingType = checkTile.building.type as RoNBuildingType;
+        if (RESOURCE_GATHERING_BUILDINGS.includes(existingBuildingType)) {
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < RESOURCE_BUILDING_MIN_DISTANCE) {
+            return { 
+              newState: state, 
+              result: { 
+                success: false, 
+                message: `${bType} at (${x},${y}) is too close to ${existingBuildingType} at (${checkX},${checkY})! Resource buildings must be at least 3 tiles apart.` 
+              } 
+            };
+          }
+        }
+      }
+    }
+  }
+
   // Deduct resources
   const newResources = { ...player.resources };
   for (const [resource, amount] of Object.entries(stats.cost)) {

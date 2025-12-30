@@ -439,6 +439,8 @@ ECONOMY BUILDINGS:
 - library ${BUILDING_COSTS.library} → knowledge (REQUIRED for age advancement!)
 - oil_well (Industrial age) → oil
 
+RESOURCE BUILDING SPACING: Resource gathering buildings (farms, woodcutters_camp, lumber_mill, mine, smelter, market, granary, oil_well, refinery) must be placed at least 3 tiles apart from each other! Placements too close will FAIL.
+
 MILITARY BUILDINGS:
 - barracks ${BUILDING_COSTS.barracks} → infantry, ranged
 - stable ${BUILDING_COSTS.stable} → cavalry (fast, powerful attackers)
@@ -570,36 +572,67 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
     const barracksCount = gameState.grid.flat().filter((t: RoNTile) => t.building?.type === 'barracks' && t.building?.ownerId === aiPlayerId).length;
     const militaryCount = gameState.units.filter((u: Unit) => u.ownerId === aiPlayerId && u.type !== 'citizen').length;
     
-    // Calculate threat level - find enemy military near our city
-    const myCity = gameState.grid.flat().find((t: RoNTile) => 
-      t.building?.ownerId === aiPlayerId && t.building?.type === 'city_center'
+    // Calculate threats to ALL our cities (not just city_center)
+    const cityTypes = ['city_center', 'small_city', 'large_city', 'major_city'];
+    const myCities = gameState.grid.flat().filter((t: RoNTile) =>
+      t.building?.ownerId === aiPlayerId && cityTypes.includes(t.building?.type || '')
     );
-    const myCityX = myCity?.x || 50;
-    const myCityY = myCity?.y || 50;
     
-    const enemyMilitaryNearby = gameState.units.filter((u: Unit) => {
+    // Find enemy military units
+    const enemyMilitary = gameState.units.filter((u: Unit) => {
       if (u.ownerId === aiPlayerId) return false;
       if (u.type === 'citizen') return false;
-      const dist = Math.sqrt((u.x - myCityX) ** 2 + (u.y - myCityY) ** 2);
-      return dist < 25; // Within 25 tiles of our city
+      return true;
     });
     
-    let threatLevel = 'NONE';
-    let threatInfo = '';
-    if (enemyMilitaryNearby.length > 0) {
-      const nearestEnemy = enemyMilitaryNearby.reduce((nearest: Unit, u: Unit) => {
-        const dist = Math.sqrt((u.x - myCityX) ** 2 + (u.y - myCityY) ** 2);
-        const nearestDist = Math.sqrt((nearest.x - myCityX) ** 2 + (nearest.y - myCityY) ** 2);
-        return dist < nearestDist ? u : nearest;
+    // Check threats to each city
+    interface CityThreat {
+      cityX: number;
+      cityY: number;
+      cityType: string;
+      enemyCount: number;
+      nearestEnemy: { x: number; y: number; type: string; dist: number } | null;
+    }
+    
+    const cityThreats: CityThreat[] = [];
+    for (const cityTile of myCities) {
+      const cx = cityTile.x;
+      const cy = cityTile.y;
+      const nearbyEnemies = enemyMilitary.filter((u: Unit) => {
+        const dist = Math.sqrt((u.x - cx) ** 2 + (u.y - cy) ** 2);
+        return dist < 20; // Within 20 tiles of this city
       });
-      const nearestDist = Math.sqrt((nearestEnemy.x - myCityX) ** 2 + (nearestEnemy.y - myCityY) ** 2);
       
-      if (nearestDist < 10) threatLevel = 'CRITICAL';
-      else if (nearestDist < 15) threatLevel = 'HIGH';
-      else if (nearestDist < 20) threatLevel = 'MEDIUM';
-      else threatLevel = 'LOW';
+      if (nearbyEnemies.length > 0) {
+        const nearest = nearbyEnemies.reduce((best: Unit, u: Unit) => {
+          const distU = Math.sqrt((u.x - cx) ** 2 + (u.y - cy) ** 2);
+          const distBest = Math.sqrt((best.x - cx) ** 2 + (best.y - cy) ** 2);
+          return distU < distBest ? u : best;
+        });
+        const nearestDist = Math.sqrt((nearest.x - cx) ** 2 + (nearest.y - cy) ** 2);
+        
+        cityThreats.push({
+          cityX: cx,
+          cityY: cy,
+          cityType: cityTile.building?.type || 'city',
+          enemyCount: nearbyEnemies.length,
+          nearestEnemy: { x: Math.round(nearest.x), y: Math.round(nearest.y), type: nearest.type, dist: Math.round(nearestDist) },
+        });
+      }
+    }
+    
+    let threatInfo = '';
+    if (cityThreats.length > 0) {
+      // Sort by most urgent (closest enemy)
+      cityThreats.sort((a, b) => (a.nearestEnemy?.dist || 99) - (b.nearestEnemy?.dist || 99));
+      const mostUrgent = cityThreats[0];
+      const threatLevel = mostUrgent.nearestEnemy!.dist < 8 ? 'CRITICAL' : mostUrgent.nearestEnemy!.dist < 12 ? 'HIGH' : 'MEDIUM';
       
-      threatInfo = `\n🚨 THREAT ${threatLevel}! ${enemyMilitaryNearby.length} enemy military within 25 tiles! Nearest at (${Math.round(nearestEnemy.x)},${Math.round(nearestEnemy.y)}). DEFEND!`;
+      const threatLines = cityThreats.map(t => 
+        `${t.cityType}@(${t.cityX},${t.cityY}): ${t.enemyCount} enemies, nearest ${t.nearestEnemy?.type}@(${t.nearestEnemy?.x},${t.nearestEnemy?.y}) ${t.nearestEnemy?.dist} tiles away`
+      );
+      
+      threatInfo = `\n\n🚨 ${threatLevel} THREAT - YOUR CITIES UNDER ATTACK!\n${threatLines.join('\n')}\nSend military units to defend! Use send_units with your military unit IDs to the threatened city coordinates.`;
     }
     
     // Find enemy cities from ALL enemies (including other AIs) - prioritize city_center
