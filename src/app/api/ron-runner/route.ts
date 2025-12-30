@@ -139,9 +139,10 @@ async function processAITurn(playerId: string): Promise<{ success: boolean; acti
       aiTurnCount++;
 
       const actions = result.actions || [];
+      const currentTick = gameState?.tick ?? 0;
       for (const action of actions) {
         recentActions.push({
-          tick: gameState.tick,
+          tick: currentTick,
           playerId,
           type: action.type,
           args: action.data || {},

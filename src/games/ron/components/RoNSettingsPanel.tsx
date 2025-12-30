@@ -15,6 +15,7 @@ import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP } from '../lib/renderConfig';
 import { loadSpriteImage, getCachedImage } from '@/components/game/shared';
 import { useRoN } from '../context/RoNContext';
 import { RoNBuildingType, BUILDING_STATS } from '../types/buildings';
+import { getGraphicsQuality, setGraphicsQuality, QUALITY_PRESETS } from '../lib/enhancedGraphics';
 
 interface RoNSettingsPanelProps {
   onClose: () => void;
@@ -50,6 +51,19 @@ export function RoNSettingsPanel({ onClose }: RoNSettingsPanelProps) {
   const [importError, setImportError] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
+  // Graphics quality state - determine initial from current settings
+  const [graphicsQuality, setGraphicsQualityState] = useState<'low' | 'medium' | 'high'>(() => {
+    const current = getGraphicsQuality();
+    if (current.terrainDetailLevel === 'high' && current.enableWaveReflections) return 'high';
+    if (current.terrainDetailLevel === 'medium' || current.enableWaterAnimation) return 'medium';
+    return 'low';
+  });
+  
+  const handleGraphicsQualityChange = (quality: 'low' | 'medium' | 'high') => {
+    setGraphicsQualityState(quality);
+    setGraphicsQuality(quality);
+  };
   
   // Load all age sprite sheets (when sprites or buildings tab is active)
   useEffect(() => {
@@ -270,6 +284,32 @@ export function RoNSettingsPanel({ onClose }: RoNSettingsPanelProps) {
         <div className="space-y-6">
           {activeTab === 'settings' && (
             <>
+              {/* Graphics Quality */}
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3">Graphics Quality</div>
+                <p className="text-muted-foreground text-xs mb-2">Adjust visual fidelity for performance</p>
+                <div className="flex gap-2">
+                  {(['low', 'medium', 'high'] as const).map(quality => (
+                    <Button
+                      key={quality}
+                      variant={graphicsQuality === quality ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 capitalize"
+                      onClick={() => handleGraphicsQualityChange(quality)}
+                    >
+                      {quality}
+                    </Button>
+                  ))}
+                </div>
+                <div className="mt-2 text-[10px] text-muted-foreground">
+                  {graphicsQuality === 'low' && 'Minimal effects for best performance on mobile'}
+                  {graphicsQuality === 'medium' && 'Balanced visuals and performance'}
+                  {graphicsQuality === 'high' && 'Full visual fidelity with all effects'}
+                </div>
+              </div>
+              
+              <Separator />
+              
               {/* Game Info */}
               <div>
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3">Game Information</div>

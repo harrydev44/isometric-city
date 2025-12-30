@@ -8,23 +8,33 @@
 import { Unit, UnitTask, UNIT_STATS } from '../types/units';
 import { TILE_WIDTH, TILE_HEIGHT, gridToScreen } from '@/components/game/shared';
 
-// Skin tone colors (similar to IsoCity)
-const SKIN_TONES = ['#f5d0c5', '#e8beac', '#d4a574', '#c68642', '#8d5524', '#5c3317'];
+// Skin tone colors - realistic, diverse range
+const SKIN_TONES = ['#e8c4a8', '#d4a882', '#c49468', '#a67850', '#7a5838', '#4a3425'];
 
-// Clothing colors for civilians
-const CIVILIAN_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+// Clothing colors for civilians - muted, realistic workwear
+const CIVILIAN_COLORS = ['#5a6a7a', '#6a7a5a', '#8a7a5a', '#7a6a6a', '#6a6a8a', '#7a8a7a'];
 
-// Hair colors
-const HAIR_COLORS = ['#2c1810', '#4a3728', '#8b4513', '#d4a574', '#f5deb3', '#1a1a1a'];
+// Hair colors - natural tones
+const HAIR_COLORS = ['#1a1510', '#3a2a18', '#5a4030', '#8a6040', '#c8a060', '#1a1a18'];
 
-// Tool colors for different tasks
+// Tool colors for different tasks - realistic metal/wood
 const TOOL_COLORS: Record<string, string> = {
-  gather_wood: '#8b4513',   // Brown axe
-  gather_metal: '#6b7280',  // Grey pickaxe
-  gather_food: '#f59e0b',   // Golden scythe
-  gather_gold: '#fbbf24',   // Gold pan
-  gather_oil: '#1f2937',    // Dark oil tool
-  build: '#a16207',         // Hammer
+  gather_wood: '#6a4a2a',   // Aged wood axe handle
+  gather_metal: '#5a5a5a',  // Steel pickaxe
+  gather_food: '#8a7a3a',   // Bronze scythe
+  gather_gold: '#b8a050',   // Gold pan
+  gather_oil: '#2a2a2a',    // Dark oil tool
+  build: '#7a5a30',         // Wooden hammer
+};
+
+// Material colors for realistic rendering
+const MATERIALS = {
+  steel: { base: '#6a6a6a', highlight: '#9a9a9a', shadow: '#3a3a3a' },
+  bronze: { base: '#8a6a3a', highlight: '#ba9a5a', shadow: '#5a4020' },
+  leather: { base: '#5a4030', highlight: '#7a6050', shadow: '#3a2a20' },
+  wood: { base: '#6a5030', highlight: '#8a7050', shadow: '#4a3020' },
+  cloth: { base: '#7a7a7a', highlight: '#9a9a9a', shadow: '#5a5a5a' },
+  gold: { base: '#c8a840', highlight: '#e8d060', shadow: '#a88030' },
 };
 
 /**
@@ -334,7 +344,7 @@ function drawGenericInfantry(ctx: CanvasRenderingContext2D, cx: number, cy: numb
   ctx.fill();
 
   // Head
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - bodyHeight * 0.7 - headRadius * 0.5, headRadius, 0, Math.PI * 2);
   ctx.fill();
@@ -369,7 +379,7 @@ function drawMilitia(ctx: CanvasRenderingContext2D, cx: number, cy: number, colo
   ctx.fill();
 
   // Head
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 8 * s, 2.5 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -661,7 +671,7 @@ function drawMusketeer(ctx: CanvasRenderingContext2D, cx: number, cy: number, co
   ctx.fill();
 
   // Head with wide-brimmed hat
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 9 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -721,7 +731,7 @@ function drawRifleman(ctx: CanvasRenderingContext2D, cx: number, cy: number, col
   ctx.fillRect(cx + 0.5 * s, cy - 0.5 * s, 1.5 * s, 2 * s);
 
   // Head with peaked cap/brodie helmet
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 9 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -797,7 +807,7 @@ function drawAssaultInfantry(ctx: CanvasRenderingContext2D, cx: number, cy: numb
   ctx.fillRect(cx + 1 * s, cy - 4 * s, 1.2 * s, 2 * s);
 
   // Head with modern helmet + NVG mount
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 9 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -886,7 +896,7 @@ function drawGenericRanged(ctx: CanvasRenderingContext2D, cx: number, cy: number
   ctx.fill();
 
   // Head
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 9 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -947,7 +957,7 @@ function drawArcher(ctx: CanvasRenderingContext2D, cx: number, cy: number, color
   ctx.fill();
 
   // Head with hood
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 8 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -1028,7 +1038,7 @@ function drawCrossbowman(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   }
 
   // Head with simple cap
-  ctx.fillStyle = '#e8d4b8';
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx, cy - 8 * s, 2 * s, 0, Math.PI * 2);
   ctx.fill();
@@ -1226,7 +1236,7 @@ function drawCavalryUnit(
     ctx.fill();
     
     // Rider head
-    ctx.fillStyle = '#e8beac';
+    ctx.fillStyle = '#c49468';
     ctx.beginPath();
     ctx.arc(centerX, centerY - horseHeight * 1.1, horseHeight * 0.18, 0, Math.PI * 2);
     ctx.fill();
@@ -1506,18 +1516,18 @@ function drawFishingBoat(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   ctx.ellipse(cx + w * 0.1, cy + bob - h * 0.35, 3 * s, 4 * s, 0, 0, Math.PI * 2);
   ctx.fill();
   
-  // Fisherman head
-  ctx.fillStyle = '#f5d0c5';
+  // Fisherman head - use realistic skin tone
+  ctx.fillStyle = '#d4a882';
   ctx.beginPath();
   ctx.arc(cx + w * 0.1, cy + bob - h * 0.55, 2.5 * s, 0, Math.PI * 2);
   ctx.fill();
   
-  // Hat
-  ctx.fillStyle = '#d4a574';
+  // Hat - weathered straw
+  ctx.fillStyle = '#b8a070';
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.1, cy + bob - h * 0.6, 3.5 * s, 1.5 * s, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#c49464';
+  ctx.fillStyle = '#a89060';
   ctx.beginPath();
   ctx.arc(cx + w * 0.1, cy + bob - h * 0.65, 2 * s, 0, Math.PI * 2);
   ctx.fill();
