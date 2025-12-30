@@ -1264,10 +1264,17 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       // Draw sky background
       drawSkyBackground(ctx, canvas, 'day');
       
-      // Get sprite sheet for current player's age
+      // Get sprite sheet for current player's age (default for terrain/roads)
       const playerAge = currentPlayer?.age || 'classical';
       const spritePack = AGE_SPRITE_PACKS[playerAge];
       const spriteSheet = getCachedImage(spritePack?.src || '', true);
+      
+      // Helper to get a player's age by ID (for per-player building rendering)
+      const getPlayerAge = (playerId: string | undefined): import('../types/ages').Age => {
+        if (!playerId) return playerAge;
+        const player = gameState.players.find((p: { id: string }) => p.id === playerId);
+        return player?.age || playerAge;
+      };
       
       // Calculate view bounds for culling
       const viewBounds = calculateViewBounds(canvas, {
@@ -1905,8 +1912,13 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           // Draw building sprite
           const buildingType = tile.building.type as RoNBuildingType;
           
+          // Get the building OWNER's age (not current player) for proper era-appropriate sprites
+          const buildingOwnerAge = getPlayerAge(tile.building.ownerId);
+          const buildingSpritePack = AGE_SPRITE_PACKS[buildingOwnerAge];
+          const buildingSpriteSheet = getCachedImage(buildingSpritePack?.src || '', true);
+          
           // Draw grey base for Industrial and Modern era buildings (except farms, roads, etc.)
-          const needsGreyBase = (playerAge === 'industrial' || playerAge === 'modern') && 
+          const needsGreyBase = (buildingOwnerAge === 'industrial' || buildingOwnerAge === 'modern') && 
             buildingType !== 'farm' && 
             buildingType !== 'road' && 
             buildingType !== 'dock' &&
@@ -1981,7 +1993,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           // Special handling for Modern city centers - use random high-rise from dense sheet
           const isCityCenter = buildingType === 'city_center' || buildingType === 'small_city' || 
                                buildingType === 'large_city' || buildingType === 'major_city';
-          if (isCityCenter && playerAge === 'modern') {
+          if (isCityCenter && buildingOwnerAge === 'modern') {
             const denseSprite = getCachedImage(ISOCITY_DENSE_PATH, true);
             if (denseSprite) {
               const denseCols = 5;
@@ -2078,7 +2090,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
                 industrial: { row: 1, col: 0 },
                 modern: { row: 3, col: 4 },
               };
-              const farmConfig = farmPositions[playerAge] || { row: 0, col: 1 };
+              const farmConfig = farmPositions[buildingOwnerAge] || { row: 0, col: 1 };
               
               // Apply cropping to avoid asset above bleeding through
               const cropTop = (farmConfig.cropTop || 0) * farmTileHeight;
@@ -2127,7 +2139,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           // Modern age has native airport sprite at (5,0), use IsoCity for other ages
           if (buildingType === 'airbase') {
             // Check if we have age-specific sprite (Modern has native airport)
-            const ageAirbasePos = getAgeSpritePosition('airbase', playerAge);
+            const ageAirbasePos = getAgeSpritePosition('airbase', buildingOwnerAge);
             
             if (ageAirbasePos && spriteSheet) {
               // Use age-specific sprite (Modern age has proper airport)
@@ -2187,7 +2199,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           // These ages have water towers instead of defensive towers, and poor fort sprites
           const needsMedievalFallback = 
             (buildingType === 'tower' || buildingType === 'fort' || buildingType === 'fortress') && 
-            (playerAge === 'modern' || playerAge === 'industrial' || playerAge === 'enlightenment');
+            (buildingOwnerAge === 'modern' || buildingOwnerAge === 'industrial' || buildingOwnerAge === 'enlightenment');
           
           if (needsMedievalFallback) {
             const medievalSheet = getCachedImage(MEDIEVAL_SHEET_PATH, true);
@@ -2231,7 +2243,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               // Scale like other buildings (with age-specific scale)
               const buildingBaseScale = BUILDING_SCALES[buildingType] || 1;
-              const ageScale = AGE_BUILDING_SCALES[playerAge]?.[buildingType] || 1;
+              const ageScale = AGE_BUILDING_SCALES[buildingOwnerAge]?.[buildingType] || 1;
               const baseScale = buildingBaseScale * ageScale * 1.0;
               const sizeScale = isMultiTile ? Math.max(buildingSize.width, buildingSize.height) : 1;
               const scaleMultiplier = baseScale * sizeScale;
@@ -2251,7 +2263,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               // Apply building-specific vertical offset (base + age-specific)
               const baseVertOffset = BUILDING_VERTICAL_OFFSETS[buildingType] ?? 0;
-              const ageVertOffset = AGE_VERTICAL_OFFSETS[playerAge]?.[buildingType] ?? 0;
+              const ageVertOffset = AGE_VERTICAL_OFFSETS[buildingOwnerAge]?.[buildingType] ?? 0;
               const vertOffset = baseVertOffset + ageVertOffset;
               verticalPush += vertOffset * TILE_HEIGHT;
 
@@ -2285,9 +2297,9 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
             }
           }
           
-          if (spriteSheet) {
+          if (buildingSpriteSheet) {
             // Use age-specific sprite position for better era-appropriate visuals
-            const spritePos = getAgeSpritePosition(buildingType, playerAge);
+            const spritePos = getAgeSpritePosition(buildingType, buildingOwnerAge);
 
             if (spritePos) {
               const tileWidth = spriteSheet.width / spritePack.cols;
@@ -2317,7 +2329,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               // Scale based on building size (with age-specific scale)
               const buildingBaseScale = BUILDING_SCALES[buildingType] || 1;
-              const ageScale = AGE_BUILDING_SCALES[playerAge]?.[buildingType] || 1;
+              const ageScale = AGE_BUILDING_SCALES[buildingOwnerAge]?.[buildingType] || 1;
               const baseScale = buildingBaseScale * ageScale * spritePack.globalScale;
               const sizeScale = isMultiTile ? Math.max(buildingSize.width, buildingSize.height) : 1;
               const scaleMultiplier = baseScale * sizeScale;
@@ -2337,7 +2349,7 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
               
               // Apply building-specific vertical offset (base + age-specific)
               const baseVertOffset = BUILDING_VERTICAL_OFFSETS[buildingType] ?? 0;
-              const ageVertOffset = AGE_VERTICAL_OFFSETS[playerAge]?.[buildingType] ?? 0;
+              const ageVertOffset = AGE_VERTICAL_OFFSETS[buildingOwnerAge]?.[buildingType] ?? 0;
               const vertOffset = baseVertOffset + ageVertOffset;
               verticalPush += vertOffset * TILE_HEIGHT;
 

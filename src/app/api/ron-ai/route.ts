@@ -135,9 +135,12 @@ const BUILDING_COSTS = {
   woodcutters_camp: formatCost(BUILDING_STATS.woodcutters_camp.cost),
   mine: formatCost(BUILDING_STATS.mine.cost),
   barracks: formatCost(BUILDING_STATS.barracks.cost),
+  stable: formatCost(BUILDING_STATS.stable.cost),
   market: formatCost(BUILDING_STATS.market.cost),
   library: formatCost(BUILDING_STATS.library.cost),
   smelter: formatCost(BUILDING_STATS.smelter.cost),
+  granary: formatCost(BUILDING_STATS.granary.cost),
+  lumber_mill: formatCost(BUILDING_STATS.lumber_mill.cost),
   small_city: formatCost(BUILDING_STATS.small_city.cost),
   oil_well: formatCost(BUILDING_STATS.oil_well.cost),
   refinery: formatCost(BUILDING_STATS.refinery.cost),
@@ -377,42 +380,60 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
       additionalProperties: false,
     },
   },
-  // {
-  //   type: 'function',
-  //   name: 'send_message',
-  //   description: 'Send a taunting message to the opponent. Be creative and aggressive!',
-  //   strict: true,
-  //   parameters: {
-  //     type: 'object',
-  //     properties: {
-  //       message: { type: 'string', description: 'The message to send' },
-  //     },
-  //     required: ['message'],
-  //     additionalProperties: false,
-  //   },
-  // },
+  {
+    type: 'function',
+    name: 'advance_age',
+    description: 'Advance to the next age! Ages unlock better units & buildings. Classical→Medieval→Gunpowder→Enlightenment→Industrial→Modern. Requires library + resources (check nextAgeRequirements in game state).',
+    strict: true,
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [] as string[],
+      additionalProperties: false,
+    },
+  },
 ];
 
-// System prompt uses dynamic costs from actual game data
-const SYSTEM_PROMPT = `You are an AI player in Rise of Nations. Build a thriving civilization with a strong economy before military conquest.
+// System prompt - let the SMART AI make its own strategic decisions!
+const SYSTEM_PROMPT = `You are a strategic AI in Rise of Nations. Build, expand, advance through ages, and conquer.
 
-GAME MECHANICS:
-- Buildings: farm ${BUILDING_COSTS.farm}, woodcutters_camp ${BUILDING_COSTS.woodcutters_camp}, mine ${BUILDING_COSTS.mine}, market ${BUILDING_COSTS.market}, barracks ${BUILDING_COSTS.barracks}, library ${BUILDING_COSTS.library}, smelter ${BUILDING_COSTS.smelter}, small_city ${BUILDING_COSTS.small_city}
-- Units: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (strength scales with age)
-- Population cap increases with cities: small_city (+20 pop), large_city (+35 pop)
-- Workers gather resources when assigned: farm→food, woodcutters_camp→wood, mine→metal, market→gold
+ECONOMY BUILDINGS:
+- farm ${BUILDING_COSTS.farm} → food (upgrade: granary +storage)
+- woodcutters_camp ${BUILDING_COSTS.woodcutters_camp} → wood (upgrade: lumber_mill +efficiency)
+- mine ${BUILDING_COSTS.mine} → metal (upgrade: smelter +efficiency)
+- market ${BUILDING_COSTS.market} → gold (critical for cities & age advancement)
+- library ${BUILDING_COSTS.library} → knowledge (REQUIRED for age advancement!)
+- oil_well (Industrial age) → oil
 
-WORKER MANAGEMENT (CRITICAL):
-- Use assign_worker to assign idle workers AND to REASSIGN working workers!
-- If you need any resource and have excess of another resource, you can reassign a small number of workers or train more.
+MILITARY BUILDINGS:
+- barracks ${BUILDING_COSTS.barracks} → infantry, ranged
+- stable ${BUILDING_COSTS.stable} → cavalry (fast, powerful attackers)
+- dock (if water) → naval units
+- siege_factory → siege weapons
 
-PRIORITIES:
-1. Economy first: train citizens, build farms/woodcutters/mines, assign all workers
-2. Expand: build small_city when at pop cap (requires 400w+200g+100m)
-3. Military: only attack with 8+ units, never attack early with just 2-3 units. Train units to defend yourself too.
-4. Mid/Late game: destroy enemy city_centers to win
+CITIES:
+- small_city ${BUILDING_COSTS.small_city} → +20 pop cap
+- large_city → +35 pop cap
 
-A strong economy (15+ workers, 3+ cities) beats a rushed attack. Be patient. Build big.`;
+AGES (use advance_age tool!):
+Classical → Medieval → Gunpowder → Enlightenment → Industrial → Modern
+Each age: stronger units, new buildings! Check nextAgeRequirements in game state.
+
+UNITS:
+- citizen ${UNIT_COSTS.citizen} @ city
+- infantry ${UNIT_COSTS.infantry} @ barracks
+- ranged @ barracks (archers/gunners)
+- cavalry @ stable (fast & deadly)
+- siege @ siege_factory
+
+TIPS:
+- Build a library early for knowledge → age advancement
+- Use granary/lumber_mill/smelter to upgrade production
+- Stable + cavalry is a powerful combo
+- Assign workers with assign_worker (works on ANY citizen, idle or not)
+- Rebalance workers when you need different resources
+
+Think strategically. Adapt. Dominate.`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';

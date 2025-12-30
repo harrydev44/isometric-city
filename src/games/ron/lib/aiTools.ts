@@ -154,8 +154,22 @@ export interface CondensedGameState {
     farmCount: number;
     woodcutterCount: number;
     mineCount: number;
+    marketCount: number;
+    libraryCount: number;
+    stableCount: number;
     barracksCount: number;
   };
+  // Age advancement info
+  nextAgeRequirements: Record<string, number> | null; // null if at max age
+  canAdvanceAge: boolean;
+  // Enemy player info (for strategic assessment)
+  enemyPlayers: Array<{
+    id: string;
+    name: string;
+    age: string;
+    population: number;
+    isDefeated: boolean;
+  }>;
 }
 
 /**
@@ -619,11 +633,15 @@ export function generateCondensedGameState(
       
       // Count buildings
       let farmCount = 0, woodcutterCount = 0, mineCount = 0, barracksCount = 0;
+      let marketCount = 0, libraryCount = 0, stableCount = 0;
       for (const b of myBuildings) {
-        if (b.type === 'farm') farmCount++;
-        else if (b.type === 'woodcutters_camp') woodcutterCount++;
-        else if (b.type === 'mine') mineCount++;
+        if (b.type === 'farm' || b.type === 'granary') farmCount++;
+        else if (b.type === 'woodcutters_camp' || b.type === 'lumber_mill') woodcutterCount++;
+        else if (b.type === 'mine' || b.type === 'smelter') mineCount++;
         else if (b.type === 'barracks') barracksCount++;
+        else if (b.type === 'market') marketCount++;
+        else if (b.type === 'library' || b.type === 'university') libraryCount++;
+        else if (b.type === 'stable') stableCount++;
       }
       
       const isPopCapped = aiPlayer.population >= aiPlayer.populationCap;
@@ -645,9 +663,41 @@ export function generateCondensedGameState(
         farmCount,
         woodcutterCount,
         mineCount,
+        marketCount,
+        libraryCount,
+        stableCount,
         barracksCount,
       };
     })(),
+    // Age advancement info
+    nextAgeRequirements: (() => {
+      const currentAgeIndex = AGE_ORDER.indexOf(aiPlayer.age);
+      if (currentAgeIndex >= AGE_ORDER.length - 1) return null; // At max age
+      const nextAge = AGE_ORDER[currentAgeIndex + 1];
+      const req = AGE_REQUIREMENTS[nextAge];
+      return req ? (req as unknown as Record<string, number>) : null;
+    })(),
+    canAdvanceAge: (() => {
+      const currentAgeIndex = AGE_ORDER.indexOf(aiPlayer.age);
+      if (currentAgeIndex >= AGE_ORDER.length - 1) return false;
+      const nextAge = AGE_ORDER[currentAgeIndex + 1];
+      const requirements = AGE_REQUIREMENTS[nextAge];
+      if (!requirements) return false;
+      for (const [resource, amount] of Object.entries(requirements)) {
+        if (aiPlayer.resources[resource as ResourceType] < amount) return false;
+      }
+      return true;
+    })(),
+    // Enemy player info
+    enemyPlayers: state.players
+      .filter(p => p.id !== aiPlayerId)
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        age: p.age,
+        population: p.population,
+        isDefeated: p.isDefeated || false,
+      })),
   };
 }
 

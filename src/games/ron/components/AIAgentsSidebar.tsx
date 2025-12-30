@@ -9,6 +9,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AIPlayerConversation, AIConversationEntry } from '../hooks/useAgenticAI';
 import { ChevronRight } from 'lucide-react';
 import { RoNPlayer } from '../types/game';
+import { AGE_INFO, AGE_ORDER } from '../types/ages';
 
 interface AIAgentsSidebarProps {
   conversations: AIPlayerConversation[];
@@ -286,8 +287,24 @@ function ResourceBar({ player }: { player: RoNPlayer }) {
   
   const popColor = player.population >= player.populationCap ? 'text-rose-400' : 'text-sky-400';
   
+  // Age info
+  const ageInfo = AGE_INFO[player.age];
+  const ageIndex = AGE_ORDER.indexOf(player.age);
+  const ageAbbrev = ageInfo?.name?.slice(0, 3) || player.age.slice(0, 3);
+  
   return (
     <div className="flex items-center gap-0.5 text-[10px] tabular-nums font-mono bg-slate-900/60 rounded px-1.5 py-0.5">
+      {/* Age badge */}
+      <span 
+        className="px-1 rounded text-[9px] font-semibold mr-1"
+        style={{ 
+          backgroundColor: ageInfo?.color ? `${ageInfo.color}33` : 'rgba(100,116,139,0.2)',
+          color: ageInfo?.color || '#94a3b8',
+        }}
+        title={`Age: ${ageInfo?.name || player.age} (${ageIndex + 1}/${AGE_ORDER.length})`}
+      >
+        {ageAbbrev}
+      </span>
       {resources.map((r) => (
         <span key={r.key} className={`${r.color} whitespace-pre`} title={r.key}>
           {r.icon}{formatResource(r.value, 4)}
