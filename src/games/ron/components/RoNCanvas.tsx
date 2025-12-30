@@ -51,19 +51,28 @@ function findBuildingOrigin(
   gridY: number,
   grid: import('../types/game').RoNTile[][]
 ): { originX: number; originY: number; buildingType: string } | null {
+  // Floor the coordinates to get tile indices
+  const tileX = Math.floor(gridX);
+  const tileY = Math.floor(gridY);
+  
+  // Early return for out-of-bounds
+  if (tileX < 0 || tileY < 0 || tileY >= grid.length || tileX >= (grid[0]?.length || 0)) {
+    return null;
+  }
+  
   const maxSize = 4; // Maximum building size to check
 
   // Check if this tile itself has a building
-  const tile = grid[gridY]?.[gridX];
+  const tile = grid[tileY]?.[tileX];
   if (tile?.building && tile.building.type !== 'empty' && tile.building.type !== 'grass' && tile.building.type !== 'water') {
-    return { originX: gridX, originY: gridY, buildingType: tile.building.type };
+    return { originX: tileX, originY: tileY, buildingType: tile.building.type };
   }
 
   // Search backwards to find if this tile is part of a larger building
   for (let dy = 0; dy < maxSize; dy++) {
     for (let dx = 0; dx < maxSize; dx++) {
-      const originX = gridX - dx;
-      const originY = gridY - dy;
+      const originX = tileX - dx;
+      const originY = tileY - dy;
 
       if (originX < 0 || originY < 0) continue;
 
@@ -79,8 +88,8 @@ function findBuildingOrigin(
       const { width, height } = stats.size;
 
       // Check if the clicked position falls within this building's footprint
-      if (gridX >= originX && gridX < originX + width &&
-          gridY >= originY && gridY < originY + height) {
+      if (tileX >= originX && tileX < originX + width &&
+          tileY >= originY && tileY < originY + height) {
         return { originX, originY, buildingType };
       }
     }
@@ -788,6 +797,8 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
       if (state.selectedUnitIds.length > 0) {
         const gameState = latestStateRef.current;
         
+        console.log('[RIGHT-CLICK] Clicked at grid position:', { gridX, gridY });
+        
         // Use findBuildingOrigin to handle multi-tile buildings (clicking any part of 2x2, 3x3, etc.)
         const buildingOrigin = findBuildingOrigin(gridX, gridY, gameState.grid);
         
@@ -809,8 +820,16 @@ export function RoNCanvas({ navigationTarget, onNavigationComplete, onViewportCh
           // Check if it's an enemy building - attack
           // Use building.ownerId since tile.ownerId might not be set for non-origin tiles
           const buildingOwnerId = originTile?.building?.ownerId || originTile?.ownerId;
-          if (buildingOwnerId && buildingOwnerId !== gameState.currentPlayerId) {
-            console.log('[RIGHT-CLICK] Attacking building at', buildingOrigin.originX, buildingOrigin.originY);
+          const isEnemy = buildingOwnerId && buildingOwnerId !== gameState.currentPlayerId;
+          console.log('[RIGHT-CLICK] Building owner check:', {
+            buildingOwnerId,
+            currentPlayerId: gameState.currentPlayerId,
+            isEnemy,
+            clickedGridPos: { gridX, gridY },
+            foundOrigin: { x: buildingOrigin.originX, y: buildingOrigin.originY },
+          });
+          if (isEnemy) {
+            console.log('[RIGHT-CLICK] Attacking ENEMY building at', buildingOrigin.originX, buildingOrigin.originY);
             attackTarget({ x: buildingOrigin.originX, y: buildingOrigin.originY });
           } 
           // Check if it's our own economic building - assign gather task (only for civilians!)

@@ -15,11 +15,11 @@ import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS, UNIT_
 import { Unit, UnitType, UnitTask, UNIT_STATS } from '../types/units';
 
 // Simulation constants
-const CONSTRUCTION_SPEED = 1; // Progress per tick (slower construction)
-const PRODUCTION_SPEED = 0.5; // Unit production progress per tick (3x slower)
+const CONSTRUCTION_SPEED = 0.5; // Progress per tick (slow construction)
+const PRODUCTION_SPEED = 0.3; // Unit production progress per tick (hard economy)
 const UNIT_MOVE_SPEED = 0.1; // Movement per tick (in tiles)
 const ATTACK_COOLDOWN = 10; // Ticks between attacks
-const RESOURCE_GATHER_RATE = 0.15; // Base gathering per tick per worker (3x slower)
+const RESOURCE_GATHER_RATE = 0.06; // Base gathering per tick per worker (hard economy)
 
 // Border/Territory constants
 const CITY_CENTER_RADIUS = 24; // Base territory radius from city centers (3x larger for warring states style)
@@ -452,16 +452,16 @@ function updatePlayers(state: RoNGameState): RoNGameState {
             break;
           // City centers provide passive gold income (taxation)
           case 'city_center':
-            rates.gold += 0.3; // Passive gold from taxes
-            break;
-          case 'small_city':
+            rates.gold += 0.1; // Passive gold from taxes (reduced)
+          break;
+        case 'small_city':
+            rates.gold += 0.2;
+          break;
+        case 'large_city':
+            rates.gold += 0.35;
+          break;
+        case 'major_city':
             rates.gold += 0.5;
-            break;
-          case 'large_city':
-            rates.gold += 0.8;
-            break;
-          case 'major_city':
-            rates.gold += 1.2;
             break;
         }
       });

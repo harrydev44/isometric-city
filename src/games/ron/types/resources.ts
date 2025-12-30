@@ -32,22 +32,22 @@ export interface ResourceRates {
 }
 
 export const INITIAL_RESOURCES: Resources = {
-  food: 300,   // Slightly more food to get started
-  wood: 150,   // Reduced wood
+  food: 150,   // Just enough for 1-2 citizens
+  wood: 100,   // Minimal starting wood
   metal: 0,
-  gold: 100,   // Reduced gold
+  gold: 50,    // Very limited gold
   knowledge: 0,
   oil: 0,
 };
 
-// Resource gathering rates per worker per tick (slower economy)
+// Resource gathering rates per worker per tick (hard economy)
 export const BASE_GATHER_RATES: Record<ResourceType, number> = {
-  food: 0.15,      // Was 0.5 - 3x slower
-  wood: 0.12,      // Was 0.4 - 3x slower
-  metal: 0.10,     // Was 0.3 - 3x slower
-  gold: 0.06,      // Was 0.2 - 3x slower
-  knowledge: 0.05, // Was 0.15 - 3x slower
-  oil: 0.08,       // Was 0.25 - 3x slower
+  food: 0.08,      // 6x slower than original
+  wood: 0.06,      // 6x slower than original
+  metal: 0.05,     // 6x slower than original
+  gold: 0.03,      // 6x slower than original
+  knowledge: 0.025,// 6x slower than original
+  oil: 0.04,       // 6x slower than original
 };
 
 // Storage limits - set high enough to allow all age advancements
