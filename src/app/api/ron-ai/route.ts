@@ -259,9 +259,10 @@ COSTS: farm 50w, woodcutter 30w, mine 80w+50g, barracks 100w, market 60w+30g, sm
 TRAIN: citizen 60f, militia 40f+20w
 
 ECONOMY PRIORITY:
-1. Build farms FIRST and assign workers to them
-2. Train citizens to grow population
-3. Then wood (for buildings), then metal (for military)
+1. Build farm + woodcutters_camp FIRST
+2. Train 2-3 citizens
+3. BUILD BARRACKS EARLY (at pop 4-5)! Start militia production!
+4. Attack once you have 3+ militia!
 
 RULES:
 - Pop capped? Save for small_city (need 200g+100m+400w)
@@ -394,11 +395,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
       console.log(`[TARGETING] ${aiPlayer.name} targeting ${enemyCityPos.ownerName}'s ${enemyCityPos.type} at (${enemyCityPos.x}, ${enemyCityPos.y})`);
     }
     
+    // Add strategic hints based on current state
+    let strategicHint = '';
+    if (barracksCount === 0 && aiPlayer.population >= 4 && aiPlayer.resources.wood >= 100) {
+      strategicHint = '\n🚨 BUILD BARRACKS NOW! You have 4+ pop and 100+ wood!';
+    } else if (barracksCount > 0 && militaryCount === 0 && aiPlayer.resources.food >= 40 && aiPlayer.resources.wood >= 20) {
+      strategicHint = '\n🚨 TRAIN MILITIA NOW! You have barracks and resources!';
+    } else if (militaryCount >= 3) {
+      strategicHint = '\n⚔️ ATTACK NOW! Send your militia to enemy cities!';
+    }
+    
     // Simple state summary - let the AI reason about what to do from system prompt
     const turnPrompt = `Turn ${gameState.tick}. You are ${aiPlayer.name}.
 Resources: ${Math.round(aiPlayer.resources.food)}F / ${Math.round(aiPlayer.resources.wood)}W / ${Math.round(aiPlayer.resources.metal)}M / ${Math.round(aiPlayer.resources.gold)}G
 Population: ${aiPlayer.population}/${aiPlayer.populationCap}${popCapped ? ' (CAPPED)' : ''}
-Military: ${militaryCount} units | Barracks: ${barracksCount}
+Military: ${militaryCount} units | Barracks: ${barracksCount}${strategicHint}
 ${enemyCityPos ? `Enemy city spotted at (${enemyCityPos.x},${enemyCityPos.y})` : 'No enemy cities visible'}
 Age: ${aiPlayer.age}
 
@@ -546,7 +557,7 @@ ${(() => {
 ## WHAT YOU CAN DO RIGHT NOW:
 ${(() => {
   const popCapped = p.population >= p.populationCap;
-  const canTrainCitizen = !popCapped && p.resources.food >= 50;
+  const canTrainCitizen = !popCapped && p.resources.food >= 60; // Citizen costs 60 food
   const canTrainMilitia = !popCapped && p.resources.food >= 40 && p.resources.wood >= 20;
   const canBuildFarm = p.resources.wood >= 50;
   const canBuildWoodcutter = p.resources.wood >= 30;
@@ -582,7 +593,7 @@ ${(() => {
     if (canTrainMilitia && barracks.length > 0) {
       result += `  ✅ Can train militia at: ${barracks.map(b => `(${b.x},${b.y})`).join(', ')}\n`;
     }
-    if (!canTrainCitizen) result += `  ❌ Cannot train citizen (need 50 food, have ${Math.round(p.resources.food)})\n`;
+    if (!canTrainCitizen) result += `  ❌ Cannot train citizen (need 60 food, have ${Math.round(p.resources.food)})\n`;
     if (!canTrainMilitia && barracks.length > 0) result += `  ❌ Cannot train militia (need 40f+20w)\n`;
   }
   

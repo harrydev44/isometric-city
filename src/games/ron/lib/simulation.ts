@@ -19,7 +19,7 @@ const CONSTRUCTION_SPEED = 0.5; // Progress per tick (slow construction)
 const PRODUCTION_SPEED = 0.5; // Unit production progress per tick (balanced)
 const UNIT_MOVE_SPEED = 0.1; // Movement per tick (in tiles)
 const ATTACK_COOLDOWN = 10; // Ticks between attacks
-const RESOURCE_GATHER_RATE = 0.10; // Base gathering per tick per worker (balanced economy)
+const RESOURCE_GATHER_RATE = 0.20; // Base gathering per tick per worker (balanced economy)
 
 // Border/Territory constants
 const CITY_CENTER_RADIUS = 24; // Base territory radius from city centers (3x larger for warring states style)
@@ -42,7 +42,6 @@ const FORT_TYPES: RoNBuildingType[] = ['tower', 'stockade', 'fort', 'fortress', 
  */
 type TerritorySource = { x: number; y: number; ownerId: string; radius: number };
 let cachedTerritorySources: TerritorySource[] = [];
-let territoryCacheVersion = -1;
 
 // Short unit ID counter - produces IDs like "u1", "u2", etc.
 let unitIdCounter = 0;
