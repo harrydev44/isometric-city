@@ -6,6 +6,7 @@ import { Age } from './ages';
 import { Resources, ResourceRates, OIL_DEPOSIT_CHANCE } from './resources';
 import { RoNBuilding, RoNBuildingType } from './buildings';
 import { Unit, UnitType } from './units';
+import { DEFAULT_RON_GRAPHICS_QUALITY, RoNGraphicsQuality } from './graphics';
 
 export type RoNPlayerType = 'human' | 'ai';
 
@@ -80,6 +81,11 @@ export interface RoNGameState {
   // Camera
   cameraOffset: { x: number; y: number };
   zoom: number;
+
+  // Graphics
+  graphics: {
+    quality: RoNGraphicsQuality;
+  };
   
   // Game result
   gameOver: boolean;
@@ -732,6 +738,9 @@ export function createInitialRoNGameState(
     activePanel: 'none',
     cameraOffset: { x: 0, y: 0 },
     zoom: 1,
+    graphics: {
+      quality: DEFAULT_RON_GRAPHICS_QUALITY,
+    },
     gameOver: false,
     winnerId: null,
     builtWonders: [],

@@ -7,6 +7,7 @@
 
 import { Unit, UnitTask, UNIT_STATS } from '../types/units';
 import { TILE_WIDTH, TILE_HEIGHT, gridToScreen } from '@/components/game/shared';
+import { colord } from 'colord';
 
 // Skin tone colors (similar to IsoCity)
 const SKIN_TONES = ['#f5d0c5', '#e8beac', '#d4a574', '#c68642', '#8d5524', '#5c3317'];
@@ -26,6 +27,16 @@ const TOOL_COLORS: Record<string, string> = {
   gather_oil: '#1f2937',    // Dark oil tool
   build: '#a16207',         // Hammer
 };
+
+function toMutedTeamColor(color: string): { base: string; dark: string; light: string } {
+  const c = colord(color).desaturate(0.35);
+  const base = c.darken(0.08).toHex();
+  return {
+    base,
+    dark: c.darken(0.28).toHex(),
+    light: c.lighten(0.18).toHex(),
+  };
+}
 
 /**
  * Get a numeric hash from a unit ID for animation and appearance
@@ -72,8 +83,8 @@ function drawCitizenUnit(
   playerColor: string
 ): void {
   const appearance = getUnitAppearance(unit.id);
-  // Use player color for clothing instead of random color
-  const clothingColor = playerColor;
+  // Use a muted team color for clothing (more realistic, less neon).
+  const clothingColor = toMutedTeamColor(playerColor).base;
   // Canvas is already scaled by zoom, so just use a fixed scale
   // Increased by 50% for better visibility
   const scale = 0.75;
@@ -208,28 +219,30 @@ function drawMilitaryUnit(
   const scale = baseScale;
   const animPhase = (tick * 0.1 + getUnitIdHash(unit.id)) % (Math.PI * 2);
 
-  // Darken color for shadows
-  const darkerColor = shadeColor(color, -30);
-  const lighterColor = shadeColor(color, 30);
+  // Muted palette for more believable materials.
+  const team = toMutedTeamColor(color);
+  const teamColor = team.base;
+  const darkerColor = team.dark;
+  const lighterColor = team.light;
   
   if (stats.category === 'cavalry') {
     // Draw horse/mount with rider
-    drawCavalryUnit(ctx, centerX, centerY, unit, color, darkerColor, lighterColor, scale, animPhase);
+    drawCavalryUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, lighterColor, scale, animPhase);
   } else if (stats.category === 'siege') {
     // Draw siege weapon (catapult, cannon, etc.)
-    drawSiegeUnit(ctx, centerX, centerY, unit, color, darkerColor, scale, animPhase);
+    drawSiegeUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, scale, animPhase);
   } else if (stats.category === 'ranged') {
     // Draw ranged soldier with bow/gun
-    drawRangedUnit(ctx, centerX, centerY, unit, color, darkerColor, scale, animPhase);
+    drawRangedUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, scale, animPhase);
   } else if (stats.category === 'naval') {
     // Draw ship/boat
-    drawNavalUnit(ctx, centerX, centerY, unit, color, darkerColor, lighterColor, scale, animPhase);
+    drawNavalUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, lighterColor, scale, animPhase);
   } else if (stats.category === 'air') {
     // Draw aircraft
-    drawAirUnit(ctx, centerX, centerY, unit, color, darkerColor, lighterColor, scale, animPhase);
+    drawAirUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, lighterColor, scale, animPhase);
   } else {
     // Infantry - draw soldier with weapon and shield
-    drawInfantryUnit(ctx, centerX, centerY, unit, color, darkerColor, scale, animPhase);
+    drawInfantryUnit(ctx, centerX, centerY, unit, teamColor, darkerColor, scale, animPhase);
   }
 }
 

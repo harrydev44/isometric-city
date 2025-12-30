@@ -272,9 +272,12 @@ export function AIAgentsSidebar({ conversations, players, onClear, onWidthChange
   // Initialize expanded state for new AI players (expand first one by default)
   useEffect(() => {
     if (aiConversations.length > 0 && expandedPlayers.size === 0) {
-      setExpandedPlayers(new Set([aiConversations[0].playerId]));
+      const raf = requestAnimationFrame(() => {
+        setExpandedPlayers(new Set([aiConversations[0].playerId]));
+      });
+      return () => cancelAnimationFrame(raf);
     }
-  }, [aiConversations.length]);
+  }, [aiConversations, expandedPlayers.size]);
   
   // Map player ID to player data for quick lookup
   const playerMap = new Map(players.map(p => [p.id, p]));

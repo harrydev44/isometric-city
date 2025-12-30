@@ -16,6 +16,7 @@ import {
   createInitialRoNGameState,
   AIDifficulty,
 } from '../types';
+import { DEFAULT_RON_GRAPHICS_QUALITY, RoNGraphicsQuality } from '../types/graphics';
 import { Age, AGE_ORDER, AGE_REQUIREMENTS } from '../types/ages';
 import { Resources, ResourceType, BASE_GATHER_RATES } from '../types/resources';
 import { RoNBuilding, RoNBuildingType, BUILDING_STATS, ECONOMIC_BUILDINGS } from '../types/buildings';
@@ -25,6 +26,24 @@ import { useAgenticAI, AgenticAIMessage, AgenticAIConfig } from '../hooks/useAge
 
 // Storage keys for RoN (separate from IsoCity)
 const RON_STORAGE_KEY = 'ron-game-state';
+
+function normalizeRoNGameState(raw: unknown): RoNGameState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Partial<RoNGameState> & { graphics?: { quality?: unknown } };
+
+  // Minimal structural validation (existing behavior relies on these checks).
+  if (!s.grid || !s.gridSize || !s.players) return null;
+
+  const allowed: RoNGraphicsQuality[] = ['ultra', 'high', 'balanced', 'low'];
+  const q = allowed.includes(s.graphics?.quality as RoNGraphicsQuality)
+    ? (s.graphics!.quality as RoNGraphicsQuality)
+    : DEFAULT_RON_GRAPHICS_QUALITY;
+
+  return {
+    ...(s as RoNGameState),
+    graphics: { quality: q },
+  };
+}
 
 /**
  * Load RoN game state from localStorage
@@ -52,13 +71,9 @@ function loadRoNGameState(): RoNGameState | null {
       }
 
       const parsed = JSON.parse(jsonString);
-      
-      // Validate basic structure
-      if (parsed && parsed.grid && parsed.gridSize && parsed.players) {
-        return parsed as RoNGameState;
-      } else {
-        localStorage.removeItem(RON_STORAGE_KEY);
-      }
+      const normalized = normalizeRoNGameState(parsed);
+      if (normalized) return normalized;
+      localStorage.removeItem(RON_STORAGE_KEY);
     }
   } catch (e) {
     console.error('Failed to load RoN game state:', e);
@@ -173,6 +188,7 @@ interface RoNContextValue {
   setTool: (tool: RoNTool) => void;
   setSpeed: (speed: 0 | 1 | 2 | 3) => void;
   setActivePanel: (panel: RoNGameState['activePanel']) => void;
+  setGraphicsQuality: (quality: RoNGraphicsQuality) => void;
   
   // Unit actions
   selectUnits: (unitIds: string[]) => void;
@@ -482,6 +498,16 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   
   const setActivePanel = useCallback((panel: RoNGameState['activePanel']) => {
     setState(prev => ({ ...prev, activePanel: panel }));
+  }, []);
+
+  const setGraphicsQuality = useCallback((quality: RoNGraphicsQuality) => {
+    setState(prev => ({
+      ...prev,
+      graphics: {
+        ...(prev.graphics ?? { quality: DEFAULT_RON_GRAPHICS_QUALITY }),
+        quality,
+      },
+    }));
   }, []);
   
   // Unit selection
@@ -1063,10 +1089,10 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
   const loadState = useCallback((stateString: string): boolean => {
     try {
       const parsed = JSON.parse(stateString);
-      // Validate basic structure
-      if (parsed && parsed.grid && parsed.gridSize && parsed.players) {
-        setState(parsed as RoNGameState);
-        latestStateRef.current = parsed as RoNGameState;
+      const normalized = normalizeRoNGameState(parsed);
+      if (normalized) {
+        setState(normalized);
+        latestStateRef.current = normalized;
         return true;
       }
       return false;
@@ -1101,6 +1127,7 @@ export function RoNProvider({ children }: { children: React.ReactNode }) {
     setTool,
     setSpeed,
     setActivePanel,
+    setGraphicsQuality,
     selectUnits,
     selectUnitsInArea,
     moveSelectedUnits,

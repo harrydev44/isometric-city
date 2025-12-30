@@ -31,12 +31,16 @@ export function AIMessagePanel({
   useEffect(() => {
     const latestUnread = messages.find(m => !m.isRead);
     if (latestUnread) {
-      setShowLatest(latestUnread);
+      // Avoid synchronous setState in effects (lint rule); defer to next frame.
+      const raf = requestAnimationFrame(() => setShowLatest(latestUnread));
       const timer = setTimeout(() => {
         setShowLatest(null);
         onMarkRead(latestUnread.id);
       }, 5000);
-      return () => clearTimeout(timer);
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+      };
     }
   }, [messages, onMarkRead]);
 

@@ -133,15 +133,16 @@ async function processAITurn(playerId: string): Promise<{ success: boolean; acti
     const duration = Date.now() - startTime;
 
     // The ron-ai API returns newState (not updatedState)
-    if (result.newState) {
-      gameState = result.newState;
+    const nextState = (result.newState ?? null) as RoNGameState | null;
+    if (nextState) {
+      gameState = nextState;
       aiResponseIds.set(playerId, result.responseId || null);
       aiTurnCount++;
 
       const actions = result.actions || [];
       for (const action of actions) {
         recentActions.push({
-          tick: gameState.tick,
+          tick: nextState.tick,
           playerId,
           type: action.type,
           args: action.data || {},

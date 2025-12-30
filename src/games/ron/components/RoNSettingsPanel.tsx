@@ -15,6 +15,7 @@ import { AGE_SPRITE_PACKS, BUILDING_SPRITE_MAP } from '../lib/renderConfig';
 import { loadSpriteImage, getCachedImage } from '@/components/game/shared';
 import { useRoN } from '../context/RoNContext';
 import { RoNBuildingType, BUILDING_STATS } from '../types/buildings';
+import { RON_GRAPHICS_QUALITY_LABELS, RoNGraphicsQuality } from '../types/graphics';
 
 interface RoNSettingsPanelProps {
   onClose: () => void;
@@ -38,7 +39,7 @@ const BUILDING_CATEGORIES: Record<string, RoNBuildingType[]> = {
 };
 
 export function RoNSettingsPanel({ onClose }: RoNSettingsPanelProps) {
-  const { state, exportState, loadState, resetGame } = useRoN();
+  const { state, exportState, loadState, resetGame, setGraphicsQuality } = useRoN();
   const [activeTab, setActiveTab] = useState<'settings' | 'sprites' | 'buildings'>('settings');
   const [loadedAges, setLoadedAges] = useState<Set<Age>>(new Set());
   const canvasRefs = useRef<Map<Age, HTMLCanvasElement>>(new Map());
@@ -292,6 +293,32 @@ export function RoNSettingsPanel({ onClose }: RoNSettingsPanelProps) {
                     <span>Auto-Save</span>
                     <span className="text-green-400">Enabled</span>
                   </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Graphics */}
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3">Graphics</div>
+                <p className="text-muted-foreground text-xs mb-2">
+                  Terrain/water fidelity and animation detail. Higher settings are heavier on CPU/GPU.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {(['ultra', 'high', 'balanced', 'low'] as const satisfies readonly RoNGraphicsQuality[]).map(q => {
+                    const active = (state.graphics?.quality ?? 'high') === q;
+                    return (
+                      <Button
+                        key={q}
+                        variant={active ? 'default' : 'outline'}
+                        className="w-full justify-center"
+                        onClick={() => setGraphicsQuality(q)}
+                      >
+                        {RON_GRAPHICS_QUALITY_LABELS[q]}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
               
