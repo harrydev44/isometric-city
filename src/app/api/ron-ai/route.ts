@@ -40,6 +40,8 @@ const BUILDING_COSTS = {
   mine: formatCost(BUILDING_STATS.mine.cost),
   barracks: formatCost(BUILDING_STATS.barracks.cost),
   market: formatCost(BUILDING_STATS.market.cost),
+  library: formatCost(BUILDING_STATS.library.cost),
+  smelter: formatCost(BUILDING_STATS.smelter.cost),
   small_city: formatCost(BUILDING_STATS.small_city.cost),
 };
 
@@ -290,7 +292,7 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
 // System prompt uses dynamic costs from actual game data
 const SYSTEM_PROMPT = `You are playing a RTS game called Rise of Nations. You are playing against many other extremely skilled players who want to destroy your cities.
 
-COSTS: farm ${BUILDING_COSTS.farm}, woodcutter ${BUILDING_COSTS.woodcutter}, mine ${BUILDING_COSTS.mine}, barracks ${BUILDING_COSTS.barracks}, market ${BUILDING_COSTS.market}, small_city ${BUILDING_COSTS.small_city}
+COSTS: farm ${BUILDING_COSTS.farm}, woodcutter ${BUILDING_COSTS.woodcutter}, mine ${BUILDING_COSTS.mine}, market ${BUILDING_COSTS.market}, barracks ${BUILDING_COSTS.barracks}, library ${BUILDING_COSTS.library}, smelter ${BUILDING_COSTS.smelter}, small_city ${BUILDING_COSTS.small_city}
 TRAIN: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (scales with age - same unit, stronger each age)
 
 CITY DEVELOPMENT (PRIORITY!):
@@ -677,8 +679,10 @@ ${(() => {
   if (canBuildFarm) result += `  ✅ farm (50w)\n`;
   if (canBuildWoodcutter) result += `  ✅ woodcutters_camp (30w)\n`;
   if (canBuildMine) result += `  ✅ mine (80w+50g)\n`;
-  if (canBuildMarket) result += `  ✅ market (60w+30g)\n`;
-  if (canBuildBarracks) result += `  ✅ barracks (100w)\n`;
+  if (canBuildMarket) result += `  ✅ market (120w) - for gold income\n`;
+  if (canBuildBarracks) result += `  ✅ barracks (100w+50g)\n`;
+  if (canBuildLibrary) result += `  ✅ library (100w+80g) - for knowledge/age advancement\n`;
+  if (canBuildSmelter) result += `  ✅ smelter (120w+80g+50m) - boosts metal gathering\n`;
   
   // Industrial Age+ Oil buildings
   const isIndustrialPlus = ['industrial', 'modern'].includes(p.age);
