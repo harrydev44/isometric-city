@@ -284,14 +284,14 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
   {
     type: 'function',
     name: 'assign_worker',
-    description: 'Assign a worker to gather a resource. Call for EACH idle worker! Also use to reassign workers between resources.',
+    description: 'Assign OR REASSIGN any worker to gather a resource. Works on BOTH idle and working citizens! If you need wood but have excess food, call this to MOVE food workers to wood. Example: assign_worker("player-1-citizen-2", "wood") moves that citizen from food to wood.',
     strict: true,
     parameters: {
       type: 'object',
       properties: {
         unit_id: { 
           type: 'string', 
-          description: 'Worker ID (e.g., "citizen-0"). See game state for idle workers and their IDs.' 
+          description: 'Worker ID from game state (e.g., "player-1-citizen-0", "u57"). Can be idle OR already working!' 
         },
         resource_type: { 
           type: 'string', 
@@ -402,11 +402,16 @@ GAME MECHANICS:
 - Population cap increases with cities: small_city (+20 pop), large_city (+35 pop)
 - Workers gather resources when assigned: farm→food, woodcutters_camp→wood, mine→metal, market→gold
 
+WORKER MANAGEMENT (CRITICAL):
+- Use assign_worker to assign idle workers AND to REASSIGN working workers!
+- If you need any resource and have excess of another resource, you can reassign a small number of workers or train more.
+
 PRIORITIES:
 1. Economy first: train citizens, build farms/woodcutters/mines, assign all workers
-2. Expand: build small_city when at pop cap to grow further
-3. Military: only attack with 8+ units, never attack early with just 2-3 units
-4. Late game: destroy enemy city_centers to win
+2. Expand: build small_city when at pop cap (requires 400w+200g+100m)
+3. REBALANCE workers based on what you need - move workers from excess resources!
+4. Military: only attack with 8+ units, never attack early with just 2-3 units
+5. Late game: destroy enemy city_centers to win
 
 A strong economy (15+ workers, 3+ cities) beats a rushed attack. Be patient. Build big.`;
 
