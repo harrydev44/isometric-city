@@ -34,11 +34,6 @@ function formatCost(cost: Partial<Record<string, number>>): string {
   return parts.join('+') || 'free';
 }
 
-// Helper to check if player can afford a building
-function canAfford(resources: Record<string, number>, cost: Partial<Record<string, number>>): boolean {
-  return Object.entries(cost).every(([key, value]) => (resources[key] || 0) >= (value || 0));
-}
-
 // Format condensed game state into a readable string for the AI
 function formatGameStateForAI(condensed: CondensedGameState): string {
   const p = condensed.myPlayer;
@@ -407,7 +402,7 @@ GAME MECHANICS:
 - You can only build within your territory (around your cities)
 - Workers gather resources when assigned to buildings: farm→food, woodcutters_camp→wood, mine→metal, market→gold
 
-Each turn: take actions based on the state provided. Be concise. If unsure, continue building cities with all resource buildings within them, workers assigned to them, militaries, and expanding your territory.`;
+Each turn: take actions based on the state provided. Be concise. Build cities with all resource buildings within them, workers assigned to them, militaries, and expanding your territory.`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -490,7 +485,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<AIRespons
     const popCapped = aiPlayer.population >= aiPlayer.populationCap;
     const barracksCount = gameState.grid.flat().filter((t: RoNTile) => t.building?.type === 'barracks' && t.building?.ownerId === aiPlayerId).length;
     const militaryCount = gameState.units.filter((u: Unit) => u.ownerId === aiPlayerId && u.type !== 'citizen').length;
-    const canAffordCity = aiPlayer.resources.wood >= 400 && aiPlayer.resources.metal >= 100 && aiPlayer.resources.gold >= 200;
     
     // Calculate threat level - find enemy military near our city
     const myCity = gameState.grid.flat().find((t: RoNTile) => 
