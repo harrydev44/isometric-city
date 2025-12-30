@@ -307,35 +307,16 @@ const AI_TOOLS: OpenAI.Responses.Tool[] = [
 ];
 
 // System prompt uses dynamic costs from actual game data
-const SYSTEM_PROMPT = `You are playing a RTS game called Rise of Nations. You are playing against many other extremely skilled players who want to destroy your cities.
+const SYSTEM_PROMPT = `You are an AI player in Rise of Nations, a real-time strategy game. Win by destroying enemy city_centers.
 
-COSTS: farm ${BUILDING_COSTS.farm}, woodcutters_camp ${BUILDING_COSTS.woodcutters_camp}, mine ${BUILDING_COSTS.mine}, market ${BUILDING_COSTS.market}, barracks ${BUILDING_COSTS.barracks}, library ${BUILDING_COSTS.library}, smelter ${BUILDING_COSTS.smelter}, small_city ${BUILDING_COSTS.small_city}
-TRAIN: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (scales with age - same unit, stronger each age)
+GAME MECHANICS:
+- Buildings: farm ${BUILDING_COSTS.farm}, woodcutters_camp ${BUILDING_COSTS.woodcutters_camp}, mine ${BUILDING_COSTS.mine}, market ${BUILDING_COSTS.market}, barracks ${BUILDING_COSTS.barracks}, library ${BUILDING_COSTS.library}, smelter ${BUILDING_COSTS.smelter}, small_city ${BUILDING_COSTS.small_city}
+- Units: citizen ${UNIT_COSTS.citizen}, infantry ${UNIT_COSTS.infantry} (strength scales with age)
+- Population cap increases with cities (small_city adds population)
+- You can only build within your territory (around your cities)
+- Workers gather resources when assigned to buildings: farm→food, woodcutters_camp→wood, mine→metal, market→gold
 
-CITY DEVELOPMENT (PRIORITY!):
-1. BUILD CITIES when you can afford small_city (${BUILDING_COSTS.small_city}) - more cities = more population cap + territory!
-2. Each city should have a FULL SET of buildings NEARBY (within 5-8 tiles): farm, woodcutters_camp, mine, market, library, barracks, smelter
-3. BUILD COMPACT CITIES! Place buildings CLOSE to your city center - use the FIRST suggested location (closest to city)
-4. When expanding, build new small_city in a different area, then build that city's infrastructure around it
-
-⚠️ WHEN POPULATION CAPPED: STOP building other buildings! SAVE ALL RESOURCES for small_city!
-- Don't build farms/woodcutters/barracks when pop-capped - you're wasting wood needed for city!
-- Only exception: build market if you need more gold income to afford city
-
-ECONOMY PRIORITY:
-1. Build farm + woodcutters_camp near each city
-2. Build mine near metal, market for gold, library for knowledge
-3. BUILD military facilities at each city
-4. Make sure each city is well rounded and laid out with farms, mines, woodcutting facilities, markets, libraries, etc.
-
-MILITARY (CRITICAL!):
-- BALANCE: Make sure you have some of your population as military
-- BUILD barracks units if enemy has more military! Each barracks trains 1 unit at a time.
-- Have 10+ military? Start attacking enemy buildings!
-- DEFENSE: If Threat Level is HIGH/CRITICAL, send military to intercept enemies!
-
-TURN ORDER: get_game_state → assign_worker for each idle citizen → build small_city if affordable → build economy buildings → build barracks → train citizens/infantry → attack
-EXPAND with cities! ATTACK enemies! DEFEND when threatened!`;
+Each turn: get_game_state to see situation, then take actions. Be concise.`;
 
 interface AIAction {
   type: 'build' | 'unit_task' | 'train' | 'resource_update';
@@ -596,22 +577,21 @@ Start by calling get_game_state to see full details, then take actions.`;
             console.log('[AI DEBUG] tilesNearMetal:', condensed.tilesNearMetal?.map(t => `(${t.x},${t.y})`).join(', ') || 'EMPTY');
             const p = condensed.myPlayer;
             
-            // Format a readable game state
-            const stateStr = `## YOUR RESOURCES:
-Food: ${Math.round(p.resources.food)} (rate: ${p.resourceRates.food.toFixed(1)}/s)
-Wood: ${Math.round(p.resources.wood)} (rate: ${p.resourceRates.wood.toFixed(1)}/s)${p.resourceRates.wood === 0 ? ' ⚠️ ZERO!' : ''}
-Metal: ${Math.round(p.resources.metal)} (rate: ${p.resourceRates.metal.toFixed(1)}/s)
-Gold: ${Math.round(p.resources.gold)} (rate: ${(p.resourceRates.gold || 0).toFixed(1)}/s)
-Knowledge: ${Math.round(p.resources.knowledge || 0)} (rate: ${(p.resourceRates.knowledge || 0).toFixed(1)}/s) ${(p.resources.knowledge || 0) > 0 ? '📚' : '- need library!'}
-Oil: ${Math.round(p.resources.oil || 0)} (rate: ${(p.resourceRates.oil || 0).toFixed(1)}/s) ${(p.resources.oil || 0) > 0 ? '🛢️' : '- need oil_well (industrial age)!'}
+            // Format a readable game state - facts only, no directives
+            const stateStr = `## RESOURCES:
+Food: ${Math.round(p.resources.food)} (+${p.resourceRates.food.toFixed(1)}/s)
+Wood: ${Math.round(p.resources.wood)} (+${p.resourceRates.wood.toFixed(1)}/s)
+Metal: ${Math.round(p.resources.metal)} (+${p.resourceRates.metal.toFixed(1)}/s)
+Gold: ${Math.round(p.resources.gold)} (+${(p.resourceRates.gold || 0).toFixed(1)}/s)
+Knowledge: ${Math.round(p.resources.knowledge || 0)} (+${(p.resourceRates.knowledge || 0).toFixed(1)}/s)
+Oil: ${Math.round(p.resources.oil || 0)} (+${(p.resourceRates.oil || 0).toFixed(1)}/s)
 
-## POPULATION: ${p.population}/${p.populationCap}${p.population >= p.populationCap ? ' ⚠️ CAPPED!' : ''}
+## POPULATION: ${p.population}/${p.populationCap} | Age: ${p.age}
 
 ## YOUR BUILDINGS:
 ${condensed.myBuildings.map(b => `- ${b.type} at (${b.x},${b.y})`).join('\n') || '(none)'}
 
-## YOUR UNITS:
-- Citizens: ${condensed.myUnits.filter(u => u.type === 'citizen').length} total
+## YOUR WORKERS:
 ${(() => {
   const citizens = condensed.myUnits.filter(u => u.type === 'citizen');
   const byTask: Record<string, string[]> = {};
@@ -621,15 +601,19 @@ ${(() => {
     byTask[task].push(c.id);
   }
   const lines: string[] = [];
-  if (byTask['gather_food']?.length) lines.push(`  🍖 Food: ${byTask['gather_food'].length} workers (${byTask['gather_food'].slice(0,3).join(', ')}${byTask['gather_food'].length > 3 ? '...' : ''})`);
-  if (byTask['gather_wood']?.length) lines.push(`  🪵 Wood: ${byTask['gather_wood'].length} workers (${byTask['gather_wood'].slice(0,3).join(', ')}${byTask['gather_wood'].length > 3 ? '...' : ''})`);
-  if (byTask['gather_metal']?.length) lines.push(`  ⛏️ Metal: ${byTask['gather_metal'].length} workers (${byTask['gather_metal'].slice(0,3).join(', ')}${byTask['gather_metal'].length > 3 ? '...' : ''})`);
-  if (byTask['gather_gold']?.length) lines.push(`  💰 Gold: ${byTask['gather_gold'].length} workers (${byTask['gather_gold'].slice(0,3).join(', ')}${byTask['gather_gold'].length > 3 ? '...' : ''})`);
-  if (byTask['gather_knowledge']?.length) lines.push(`  📚 Knowledge: ${byTask['gather_knowledge'].length} workers`);
-  if (byTask['idle']?.length) lines.push(`  ⏸️ IDLE: ${byTask['idle'].length} workers (${byTask['idle'].join(', ')})`);
-  return lines.length > 0 ? lines.join('\n') : '  (no workers)';
+  // Show IDLE first - these need assignment!
+  if (byTask['idle']?.length) lines.push(`IDLE (need assignment!): ${byTask['idle'].join(', ')}`);
+  if (byTask['gather_food']?.length) lines.push(`Food: ${byTask['gather_food'].join(', ')}`);
+  if (byTask['gather_wood']?.length) lines.push(`Wood: ${byTask['gather_wood'].join(', ')}`);
+  if (byTask['gather_metal']?.length) lines.push(`Metal: ${byTask['gather_metal'].join(', ')}`);
+  if (byTask['gather_gold']?.length) lines.push(`Gold: ${byTask['gather_gold'].join(', ')}`);
+  if (byTask['gather_knowledge']?.length) lines.push(`Knowledge: ${byTask['gather_knowledge'].join(', ')}`);
+  if (byTask['gather_oil']?.length) lines.push(`Oil: ${byTask['gather_oil'].join(', ')}`);
+  return lines.length > 0 ? lines.join('\n') : '(no workers)';
 })()}
-- Military: ${condensed.myUnits.filter(u => u.type !== 'citizen').map(u => `${u.type}[${u.id}]`).join(', ') || 'none'}
+
+## YOUR MILITARY:
+${condensed.myUnits.filter(u => u.type !== 'citizen').map(u => `${u.id}`).join(', ') || 'none'}
 
 ## YOUR TERRITORY (x: ${condensed.territoryBounds.minX}-${condensed.territoryBounds.maxX}, y: ${condensed.territoryBounds.minY}-${condensed.territoryBounds.maxY}):
 ⚠️ You can ONLY build within these coordinates! Building outside will FAIL.
@@ -781,69 +765,26 @@ ${(() => {
   return result;
 })()}
 
-## 📊 STRATEGIC ASSESSMENT:
+## MILITARY STATUS:
 ${(() => {
   const sa = condensed.strategicAssessment;
-  // Provide factual strategic info - let AI reason about what to do
   const lines = [];
-  
-  // Military comparison
-  lines.push(`Military Strength: You ${sa.myMilitaryStrength} vs Enemy ${sa.enemyMilitaryStrength} (${sa.strengthAdvantage})`);
-  lines.push(`Your Forces: ${sa.myWorkerCount} workers, ${sa.myMilitaryCount} military`);
-  lines.push(`Enemy Forces: ${sa.enemyMilitaryCount} military (nearest ${sa.nearestEnemyDistance} tiles away)`);
-  lines.push(`Threat Level: ${sa.threatLevel}`);
-  
-  // CRITICAL: Warn about barracks shortage when weaker
-  if (sa.strengthAdvantage === 'WEAKER' && sa.barracksCount < 3) {
-    lines.push(`⚠️ BARRACKS SHORTAGE! You have ${sa.barracksCount} barracks but enemy is stronger. BUILD MORE BARRACKS to produce infantry faster!`);
-  }
-  
-  // Economy summary
-  const marketCount = condensed.myBuildings.filter(b => b.type === 'market').length;
-  lines.push(`Economy: ${sa.farmCount} farms, ${sa.woodcutterCount} woodcutters, ${sa.mineCount} mines, ${marketCount} markets, ${sa.barracksCount} barracks`);
-  
-  // Population status
-  if (sa.isPopCapped) {
-    lines.push(`Population: CAPPED at ${p.population}/${p.populationCap}`);
-    if (sa.canAffordSmallCity) {
-      lines.push(`🚨 BUILD small_city NOW! You can afford 400w/100m/200g!`);
-    } else {
-      const woodNeeded = Math.max(0, 400 - p.resources.wood);
-      const metalNeeded = Math.max(0, 100 - p.resources.metal);
-      const goldNeeded = Math.max(0, 200 - p.resources.gold);
-      const needs = [];
-      if (woodNeeded > 0) needs.push(`${Math.round(woodNeeded)}w`);
-      if (metalNeeded > 0) needs.push(`${Math.round(metalNeeded)}m`);
-      if (goldNeeded > 0) needs.push(`${Math.round(goldNeeded)}g`);
-      lines.push(`small_city: need ${needs.join(' + ')} more`);
-    }
-  }
-  
-  // Industrial Age oil info
-  const isIndustrialPlus = ['industrial', 'modern'].includes(p.age);
-  if (isIndustrialPlus) {
-    const oilWells = condensed.myBuildings.filter(b => b.type === 'oil_well').length;
-    const refineries = condensed.myBuildings.filter(b => b.type === 'refinery').length;
-    lines.push(`Oil Economy: ${oilWells} oil wells, ${refineries} refineries, ${p.resourceRates.oil.toFixed(1)}/s oil rate`);
-  }
-  
-  // Enemy targets - show all enemy cities (multiple AI opponents)
-  const enemyCities = condensed.enemyBuildings.filter(b => 
-    ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)
-  );
-  if (enemyCities.length > 0) {
-    // Sort: city_centers first
-    enemyCities.sort((a, b) => (a.type === 'city_center' ? -1 : 1) - (b.type === 'city_center' ? -1 : 1));
-    const targets = enemyCities.slice(0, 5).map(c => 
-      `${c.type}@(${c.x},${c.y})${c.type === 'city_center' ? '!' : ''}`
-    ).join(', ');
-    lines.push(`Enemy Targets: ${targets}${enemyCities.length > 5 ? ` (+${enemyCities.length - 5} more)` : ''}`);
-  }
+  lines.push(`Your military: ${sa.myMilitaryCount} units (strength ${sa.myMilitaryStrength})`);
+  lines.push(`Enemy military: ${sa.enemyMilitaryCount} units (strength ${sa.enemyMilitaryStrength}), nearest ${sa.nearestEnemyDistance} tiles away`);
   
   // Military unit IDs for send_units command
   const militaryUnits = condensed.myUnits.filter(u => u.type !== 'citizen');
   if (militaryUnits.length > 0) {
-    lines.push(`Your Military IDs: ${militaryUnits.slice(0, 10).map(u => u.id).join(', ')}${militaryUnits.length > 10 ? ` (+${militaryUnits.length - 10} more)` : ''}`);
+    lines.push(`Your unit IDs: ${militaryUnits.slice(0, 10).map(u => u.id).join(', ')}${militaryUnits.length > 10 ? ` (+${militaryUnits.length - 10} more)` : ''}`);
+  }
+  
+  // Enemy cities as potential targets
+  const enemyCities = condensed.enemyBuildings.filter(b => 
+    ['city_center', 'small_city', 'large_city', 'major_city'].includes(b.type)
+  );
+  if (enemyCities.length > 0) {
+    const targets = enemyCities.slice(0, 5).map(c => `${c.type}@(${c.x},${c.y})`).join(', ');
+    lines.push(`Enemy cities: ${targets}${enemyCities.length > 5 ? ` (+${enemyCities.length - 5} more)` : ''}`);
   }
   
   return lines.join('\n');
@@ -890,8 +831,7 @@ ${(() => {
   return warnings.length > 0 ? `Note: ${warnings.join(', ')}` : '';
 })()}
 
-## IDLE WORKERS: ${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u.task)).length}
-${condensed.myUnits.filter(u => u.type === 'citizen' && (u.task === 'idle' || !u.task)).length > 5 ? 'Note: Many idle workers! Build more farms/woodcutters/mines to employ them.' : ''}`;
+`;
 
             result = { success: true, message: stateStr };
             // Detailed logging

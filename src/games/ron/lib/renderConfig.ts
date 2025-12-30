@@ -349,6 +349,12 @@ export const AGE_BUILDING_OVERRIDES: Record<Age, Partial<Record<RoNBuildingType,
     fortress: { row: 0, col: 3 },
     // Castle - Row 0, Col 3 is gray brick institutional building (was 0,0 brownstones)
     castle: { row: 0, col: 3 },
+    // Stockade - Row 0, Col 3 is gray institutional (was 0,1 factory - wrong!)
+    stockade: { row: 0, col: 3 },
+    // Tower - Row 0, Col 3 is gray institutional (was 2,1 water tower - wrong!)
+    tower: { row: 0, col: 3 },
+    // Woodcutters camp - Row 4, Col 0 is warehouse (was 3,0 tree - wrong!)
+    woodcutters_camp: { row: 4, col: 0 },
     // Auto plant - Row 4, Col 2 is industrial manufacturing facility
     auto_plant: { row: 4, col: 2 },
   },
@@ -501,12 +507,13 @@ export const BUILDING_VERTICAL_OFFSETS: Partial<Record<RoNBuildingType, number>>
 
 // Age-specific vertical offset adjustments (added to base offset)
 // Use this for buildings that need different offsets in different eras
+// Updated December 2025 based on comprehensive offset audit
 export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildingType, number>>>> = {
   classical: {
     library: -0.5,      // Crop lower for Classical library
     market: -0.5,       // Crop lower - asset above bleeding through
     dock: -0.3,         // Additional shift for dock
-    lumber_mill: 0.5,   // Shift DOWN 0.5 tiles (user requested)
+    lumber_mill: 0.9,   // Shift DOWN - was 0.4 tiles too high (fixed from 0.5)
     barracks: -0.3,     // Crop lower
     stable: -0.3,       // Crop lower
     tower: -0.2,        // Shift up 0.2
@@ -514,11 +521,25 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
   medieval: {
     market: -0.2,       // Additional shift for market
     city_center: -0.5,  // Crop lower down
+    small_city: -0.5,   // Same as city_center (was missing)
+    large_city: -0.5,   // Same as city_center (was missing)
     fort: 0.6,          // Shift DOWN 0.6 tiles
+    fortress: 0.6,      // Same as fort for consistency (was missing)
+    temple: -0.3,       // Shift UP for tall cathedral (was missing)
+    tower: -0.2,        // Shift UP for tall keep (was missing)
+    mine: -0.2,         // Shift UP for hoist tower (was missing)
   },
   enlightenment: {
     market: 0.2,        // Shift DOWN (well-cropped, just needs position adjustment)
     fort: 0.6,          // Same as medieval fort (uses medieval sprite)
+    senate: -0.4,       // Shift UP for tall dome (was missing)
+    fortress: 0.4,      // Shift DOWN - modest building (was missing)
+    stockade: -0.2,     // Shift UP to match tower/barracks (was missing)
+    bunker: -0.15,      // Shift UP for smokestacks (was missing)
+    siege_factory: 0.3, // Shift DOWN - warehouse is shorter (was missing)
+    lumber_mill: -0.2,  // Shift UP for watermill (was missing)
+    temple: 0.1,        // Shift DOWN slightly (was missing)
+    small_city: -0.2,   // Shift UP for domed capitol (was missing)
   },
   industrial: {
     market: -1.0,       // Much lower cropping needed - still seeing blue base
@@ -526,13 +547,21 @@ export const AGE_VERTICAL_OFFSETS: Partial<Record<Age, Partial<Record<RoNBuildin
     stable: -0.5,       // Crop lower at top and bottom
     fort: 0.6,          // Shift DOWN 0.6 tiles
     siege_factory: -0.3, // Crop 0.3 tiles lower
+    lumber_mill: -0.2,  // Shift UP for tall smokestacks (was missing)
+    temple: -0.2,       // Shift UP for church steeple (was missing)
+    bunker: -0.15,      // Bring closer to fort (was missing)
   },
   modern: {
     market: -0.8,       // Needs grey base + lower cropping
     city_center: -1.0,  // Full tile shift up - bottom cropped too tight
     small_city: -1.0,   // Full tile shift up - bottom cropped too tight
     large_city: -1.0,   // Full tile shift up - bottom cropped too tight
-    major_city: -1.0,   // Full tile shift up - bottom cropped too tight
+    major_city: -0.5,   // Reduced - capitol dome is low-rise (was -1.0)
+    temple: -0.4,       // Match library offset (was missing)
+    dock: 1.1,          // Shift DOWN - warehouse sprite doesn't need -1.8 (was missing)
+    fort: 0.7,          // Shift DOWN - same sprite as tower (was missing)
+    fortress: 0.7,      // Shift DOWN - same sprite as tower (was missing)
+    castle: 0.7,        // Shift DOWN - same sprite as tower (was missing)
   },
 };
 
