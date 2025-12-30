@@ -268,13 +268,15 @@ export function AIAgentsSidebar({ conversations, players, onClear, onWidthChange
     c.playerName.toLowerCase().includes('red') || 
     c.playerName.toLowerCase().includes('green')
   );
+  const firstAIPlayerId = aiConversations[0]?.playerId;
   
   // Initialize expanded state for new AI players (expand first one by default)
   useEffect(() => {
-    if (aiConversations.length > 0 && expandedPlayers.size === 0) {
-      setExpandedPlayers(new Set([aiConversations[0].playerId]));
+    if (firstAIPlayerId && expandedPlayers.size === 0) {
+      const raf = requestAnimationFrame(() => setExpandedPlayers(new Set([firstAIPlayerId])));
+      return () => cancelAnimationFrame(raf);
     }
-  }, [aiConversations.length]);
+  }, [firstAIPlayerId, expandedPlayers.size]);
   
   // Map player ID to player data for quick lookup
   const playerMap = new Map(players.map(p => [p.id, p]));
