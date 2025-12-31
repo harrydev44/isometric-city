@@ -127,40 +127,40 @@ export const BUILDING_STATS: Record<RoNBuildingType, BuildingStats> = {
   road: { cost: { wood: 10 }, maxHealth: 100, buildTime: 5, minAge: 'classical', size: { width: 1, height: 1 } },
   
   // City centers - 3x3 buildings like IsoCity city hall (DOUBLED HOUSING!)
-  city_center: { 
-    cost: { wood: 200, gold: 100 }, 
-    maxHealth: 2000, 
+  city_center: {
+    cost: { wood: 200, gold: 100 },
+    maxHealth: 3000,  // +50% health
     buildTime: 50,
     minAge: 'classical',
     size: { width: 3, height: 3 },
-    providesHousing: 10,  // Reduced by 50%
+    providesHousing: 10,
     visionRange: 8,
   },
   small_city: {
-    cost: { wood: 200, gold: 100, metal: 50 }, 
-    maxHealth: 3000, 
-    buildTime: 75, 
-    minAge: 'classical', 
+    cost: { wood: 200, gold: 100, metal: 50 },
+    maxHealth: 4500,  // +50% health
+    buildTime: 75,
+    minAge: 'classical',
     size: { width: 3, height: 3 },
     providesHousing: 20,
     visionRange: 10,
   },
-  large_city: { 
-    cost: { wood: 600, gold: 400, metal: 200 }, 
-    maxHealth: 4000, 
-    buildTime: 100, 
-    minAge: 'medieval', 
+  large_city: {
+    cost: { wood: 600, gold: 400, metal: 200 },
+    maxHealth: 6000,  // +50% health
+    buildTime: 100,
+    minAge: 'medieval',
     size: { width: 3, height: 3 },
-    providesHousing: 35,  // Reduced by 50%
+    providesHousing: 35,
     visionRange: 12,
   },
-  major_city: { 
-    cost: { wood: 1000, gold: 800, metal: 400 }, 
-    maxHealth: 5000, 
-    buildTime: 125, 
-    minAge: 'enlightenment', 
+  major_city: {
+    cost: { wood: 1000, gold: 800, metal: 400 },
+    maxHealth: 7500,  // +50% health
+    buildTime: 125,
+    minAge: 'enlightenment',
     size: { width: 3, height: 3 },
-    providesHousing: 50,  // Reduced by 50%
+    providesHousing: 50,
     visionRange: 15,
   },
   

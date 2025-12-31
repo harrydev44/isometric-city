@@ -50,10 +50,11 @@ function ToolInvocationEntry({
   
   // Detect success from result
   const isSuccess = toolResult ? (
-    toolResult.content.includes('success') || toolResult.content.includes('Success') || 
+    toolResult.content.includes('success') || toolResult.content.includes('Success') ||
     toolResult.content.includes('Built') || toolResult.content.includes('Queued') ||
     toolResult.content.includes('Assigned') || toolResult.content.includes('Reassigned') ||
     toolResult.content.includes('Sent') || toolResult.content.includes('Trained') ||
+    toolResult.content.includes('Killed') || toolResult.content.includes('Advanced') ||
     toolResult.content.startsWith('##') || toolResult.content.includes('## ')
   ) : undefined;
   

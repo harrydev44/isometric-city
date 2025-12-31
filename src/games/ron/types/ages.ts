@@ -45,14 +45,13 @@ export const GAME_TICKS_PER_MINUTE = 200;
 export const TARGET_GAME_DURATION_MINUTES = 40;
 export const TARGET_GAME_TICKS = GAME_TICKS_PER_MINUTE * TARGET_GAME_DURATION_MINUTES;
 
-// Population cap bonus per age (DOUBLED for bigger armies!)
-// Classical starts at base pop cap, each subsequent age adds this bonus
+// Population cap bonus per age - now fixed (pop cap comes only from buildings)
 export const AGE_POPULATION_BONUS: Record<Age, number> = {
-  classical: 0,      // Base starting cap (from buildings)
-  medieval: 50,      // +50 (doubled)
-  enlightenment: 100, // +100 (doubled)
-  industrial: 150,    // +150 (doubled)
-  modern: 200,       // +200 (doubled)
+  classical: 0,
+  medieval: 0,
+  enlightenment: 0,
+  industrial: 0,
+  modern: 0,
 };
 
 // Age display information
