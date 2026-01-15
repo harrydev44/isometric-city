@@ -469,6 +469,96 @@ export type Firework = {
   sourceTileY: number;
 };
 
+// Weather system types - comprehensive atmospheric simulation
+export type WeatherType =
+  | 'clear'          // Clear skies, minimal clouds
+  | 'partly_cloudy'  // Some clouds, mostly sunny
+  | 'cloudy'         // Overcast, gray skies
+  | 'overcast'       // Heavy cloud cover, dark
+  | 'light_rain'     // Light rain, drizzle
+  | 'rain'           // Moderate rain
+  | 'heavy_rain'     // Heavy downpour
+  | 'thunderstorm'   // Storm with lightning and heavy rain
+  | 'fog'            // Dense fog, low visibility
+  | 'light_snow'     // Light snowfall
+  | 'snow'           // Moderate snow
+  | 'heavy_snow';    // Blizzard conditions
+
+export type WeatherState = {
+  // Current weather type
+  current: WeatherType;
+  // Target weather (for transitions)
+  target: WeatherType;
+  // Transition progress (0-1)
+  transitionProgress: number;
+  // Time until next weather change
+  changeTimer: number;
+  // Weather intensity (0-1, affects precipitation density, wind, etc.)
+  intensity: number;
+  // Target intensity
+  targetIntensity: number;
+};
+
+// Precipitation particle types
+export type PrecipitationType = 'rain' | 'snow';
+
+export type RainParticle = {
+  x: number;
+  y: number;
+  vx: number; // Wind drift
+  vy: number; // Fall speed
+  length: number; // Raindrop streak length
+  opacity: number;
+  age: number;
+};
+
+export type SnowParticle = {
+  x: number;
+  y: number;
+  vx: number; // Wind drift
+  vy: number; // Fall speed
+  size: number; // Snowflake size
+  opacity: number;
+  rotation: number; // Snowflake rotation
+  rotationSpeed: number;
+  age: number;
+};
+
+export type Precipitation = {
+  rainParticles: RainParticle[];
+  snowParticles: SnowParticle[];
+  spawnTimer: number;
+};
+
+// Lightning strike for thunderstorms
+export type LightningStrike = {
+  id: number;
+  x: number; // Screen X position
+  y: number; // Screen Y position (top of screen)
+  segments: { x: number; y: number }[]; // Lightning bolt segments
+  age: number;
+  maxAge: number;
+  branches: { segments: { x: number; y: number }[]; age: number }[]; // Branch lightning
+  flashIntensity: number; // Screen flash intensity (0-1)
+};
+
+// Fog overlay for atmospheric effects
+export type FogLayer = {
+  patches: FogPatch[];
+  density: number; // 0-1, how thick the fog is
+  targetDensity: number;
+};
+
+export type FogPatch = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  opacity: number;
+  age: number;
+};
+
 // Cloud types for atmospheric effects - distinct meteorological cloud types
 export type CloudType =
   | 'cumulus'       // Fluffy fair-weather clouds

@@ -371,3 +371,155 @@ export const CLOUD_TYPE_CONFIG: Record<string, {
   cumulonimbus: { opacityMin: 0.3, opacityMax: 0.5, layerRestriction: 0,  speedMult: 0.7,  scaleMin: 1.2, scaleMax: 1.9, puffCountMin: 6, puffCountMax: 10, puffStretchX: [1, 1.2], puffStretchY: [1, 1.3] },  // Towering, low, dramatic
   altocumulus: { opacityMin: 0.15, opacityMax: 0.35, layerRestriction: 1,  speedMult: 1.1,  scaleMin: 0.6, scaleMax: 1.2, puffCountMin: 4, puffCountMax: 8,  puffStretchX: [1, 1.5], puffStretchY: [0.7, 1] },  // Patchy, mid-level
 };
+
+// =============================================================================
+// WEATHER SYSTEM CONFIGURATION - comprehensive atmospheric simulation
+// =============================================================================
+
+// Weather change timing
+export const WEATHER_MIN_DURATION = 180;              // Minimum weather duration (3 minutes)
+export const WEATHER_MAX_DURATION = 600;              // Maximum weather duration (10 minutes)
+export const WEATHER_TRANSITION_DURATION = 30;        // Transition time between weather types (30 seconds)
+
+// Weather probabilities by time of day (hour 0-23)
+// Higher values = more likely. Format: [clear, partly_cloudy, cloudy, overcast, light_rain, rain, heavy_rain, thunderstorm, fog, light_snow, snow, heavy_snow]
+export const WEATHER_WEIGHTS_BY_HOUR: Record<number, Record<string, number>> = {
+  // Night/Early morning (0-5): More fog, clear skies
+  0: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 5, light_snow: 1, snow: 0, heavy_snow: 0 },
+  1: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 5, light_snow: 1, snow: 0, heavy_snow: 0 },
+  2: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 5, light_snow: 1, snow: 0, heavy_snow: 0 },
+  3: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 6, light_snow: 1, snow: 0, heavy_snow: 0 },
+  4: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 6, light_snow: 1, snow: 0, heavy_snow: 0 },
+  5: { clear: 6, partly_cloudy: 5, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 5, light_snow: 1, snow: 0, heavy_snow: 0 },
+  // Morning (6-11): Fog burns off, mostly clear/partly cloudy
+  6: { clear: 7, partly_cloudy: 6, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 4, light_snow: 1, snow: 0, heavy_snow: 0 },
+  7: { clear: 8, partly_cloudy: 7, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 2, light_snow: 1, snow: 0, heavy_snow: 0 },
+  8: { clear: 9, partly_cloudy: 8, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 1, light_snow: 1, snow: 0, heavy_snow: 0 },
+  9: { clear: 9, partly_cloudy: 8, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  10: { clear: 9, partly_cloudy: 8, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  11: { clear: 9, partly_cloudy: 8, cloudy: 3, overcast: 1, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  // Midday/Afternoon (12-17): Peak convection, thunderstorm chance increases
+  12: { clear: 8, partly_cloudy: 8, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 1, thunderstorm: 1, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  13: { clear: 7, partly_cloudy: 8, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 1, thunderstorm: 2, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  14: { clear: 7, partly_cloudy: 7, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 2, thunderstorm: 3, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  15: { clear: 6, partly_cloudy: 7, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 2, thunderstorm: 3, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  16: { clear: 6, partly_cloudy: 7, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 2, thunderstorm: 2, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  17: { clear: 6, partly_cloudy: 7, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 1, thunderstorm: 2, fog: 0, light_snow: 1, snow: 0, heavy_snow: 0 },
+  // Evening (18-23): Weather calms, clouds remain
+  18: { clear: 6, partly_cloudy: 6, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 1, thunderstorm: 1, fog: 1, light_snow: 1, snow: 0, heavy_snow: 0 },
+  19: { clear: 6, partly_cloudy: 6, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 0, thunderstorm: 0, fog: 2, light_snow: 1, snow: 0, heavy_snow: 0 },
+  20: { clear: 6, partly_cloudy: 5, cloudy: 4, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 3, light_snow: 1, snow: 0, heavy_snow: 0 },
+  21: { clear: 6, partly_cloudy: 5, cloudy: 4, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 4, light_snow: 1, snow: 0, heavy_snow: 0 },
+  22: { clear: 6, partly_cloudy: 5, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 4, light_snow: 1, snow: 0, heavy_snow: 0 },
+  23: { clear: 6, partly_cloudy: 4, cloudy: 3, overcast: 2, light_rain: 2, rain: 1, heavy_rain: 0, thunderstorm: 0, fog: 5, light_snow: 1, snow: 0, heavy_snow: 0 },
+};
+
+// Default weights when hour not in map
+export const WEATHER_WEIGHTS_DEFAULT: Record<string, number> = {
+  clear: 7, partly_cloudy: 7, cloudy: 4, overcast: 2, light_rain: 2, rain: 2, heavy_rain: 1, thunderstorm: 1, fog: 1, light_snow: 1, snow: 0, heavy_snow: 0
+};
+
+// Cloud spawn modifiers by weather type (multiplier for cloud spawn rate and count)
+export const WEATHER_CLOUD_MODIFIERS: Record<string, { spawnRateMult: number; maxCountMult: number; opacityMult: number }> = {
+  clear:         { spawnRateMult: 0.3, maxCountMult: 0.4, opacityMult: 0.6 },   // Few clouds, light
+  partly_cloudy: { spawnRateMult: 0.7, maxCountMult: 0.7, opacityMult: 0.8 },   // Some clouds
+  cloudy:        { spawnRateMult: 1.2, maxCountMult: 1.2, opacityMult: 1.0 },   // Normal cloud cover
+  overcast:      { spawnRateMult: 1.8, maxCountMult: 1.6, opacityMult: 1.3 },   // Heavy clouds, darker
+  light_rain:    { spawnRateMult: 1.5, maxCountMult: 1.4, opacityMult: 1.2 },   // Rain clouds
+  rain:          { spawnRateMult: 1.7, maxCountMult: 1.5, opacityMult: 1.4 },   // More rain clouds
+  heavy_rain:    { spawnRateMult: 2.0, maxCountMult: 1.7, opacityMult: 1.5 },   // Storm clouds
+  thunderstorm:  { spawnRateMult: 2.2, maxCountMult: 1.8, opacityMult: 1.6 },   // Dark storm clouds
+  fog:           { spawnRateMult: 0.5, maxCountMult: 0.6, opacityMult: 0.9 },   // Low clouds/fog
+  light_snow:    { spawnRateMult: 1.2, maxCountMult: 1.2, opacityMult: 1.1 },   // Snow clouds
+  snow:          { spawnRateMult: 1.5, maxCountMult: 1.4, opacityMult: 1.3 },   // Heavy snow clouds
+  heavy_snow:    { spawnRateMult: 1.8, maxCountMult: 1.6, opacityMult: 1.4 },   // Blizzard clouds
+};
+
+// Precipitation constants
+export const RAIN_PARTICLE_SPEED_MIN = 400;           // Minimum rain fall speed (pixels/second)
+export const RAIN_PARTICLE_SPEED_MAX = 600;           // Maximum rain fall speed
+export const RAIN_PARTICLE_LENGTH_MIN = 8;            // Minimum raindrop streak length
+export const RAIN_PARTICLE_LENGTH_MAX = 16;           // Maximum raindrop streak length
+export const RAIN_WIND_DRIFT_MIN = -50;               // Wind drift range (horizontal)
+export const RAIN_WIND_DRIFT_MAX = 50;
+export const RAIN_SPAWN_RATE_LIGHT = 0.015;           // Spawn interval for light rain (seconds)
+export const RAIN_SPAWN_RATE_MODERATE = 0.008;        // Spawn interval for moderate rain
+export const RAIN_SPAWN_RATE_HEAVY = 0.004;           // Spawn interval for heavy rain
+export const RAIN_MAX_PARTICLES = 800;                // Maximum rain particles on screen
+export const RAIN_MAX_PARTICLES_MOBILE = 250;         // Mobile: fewer particles
+export const RAIN_OPACITY = 0.4;                      // Rain opacity
+
+export const SNOW_PARTICLE_SPEED_MIN = 40;            // Minimum snow fall speed (pixels/second)
+export const SNOW_PARTICLE_SPEED_MAX = 100;           // Maximum snow fall speed
+export const SNOW_PARTICLE_SIZE_MIN = 2;              // Minimum snowflake size
+export const SNOW_PARTICLE_SIZE_MAX = 5;              // Maximum snowflake size
+export const SNOW_WIND_DRIFT_MIN = -30;               // Wind drift range (horizontal)
+export const SNOW_WIND_DRIFT_MAX = 30;
+export const SNOW_SPAWN_RATE_LIGHT = 0.025;           // Spawn interval for light snow (seconds)
+export const SNOW_SPAWN_RATE_MODERATE = 0.015;        // Spawn interval for moderate snow
+export const SNOW_SPAWN_RATE_HEAVY = 0.008;           // Spawn interval for heavy snow
+export const SNOW_MAX_PARTICLES = 600;                // Maximum snow particles on screen
+export const SNOW_MAX_PARTICLES_MOBILE = 200;         // Mobile: fewer particles
+export const SNOW_OPACITY = 0.8;                      // Snow opacity
+export const SNOW_ROTATION_SPEED_MIN = -2;            // Snowflake rotation speed (radians/second)
+export const SNOW_ROTATION_SPEED_MAX = 2;
+
+// Lightning constants
+export const LIGHTNING_MIN_INTERVAL = 3;              // Minimum seconds between lightning strikes
+export const LIGHTNING_MAX_INTERVAL = 12;             // Maximum seconds between lightning strikes
+export const LIGHTNING_STRIKE_DURATION = 0.15;        // How long a lightning bolt lasts (seconds)
+export const LIGHTNING_FLASH_DURATION = 0.25;         // How long the screen flash lasts
+export const LIGHTNING_FLASH_INTENSITY = 0.3;         // Maximum flash intensity (0-1)
+export const LIGHTNING_BRANCH_CHANCE = 0.3;           // Chance of branching lightning
+export const LIGHTNING_MAX_BRANCHES = 3;              // Maximum branches per strike
+export const LIGHTNING_SEGMENT_LENGTH_MIN = 20;       // Minimum length of lightning segments
+export const LIGHTNING_SEGMENT_LENGTH_MAX = 60;       // Maximum length of lightning segments
+export const LIGHTNING_SEGMENTS_MIN = 8;              // Minimum segments per bolt
+export const LIGHTNING_SEGMENTS_MAX = 15;             // Maximum segments per bolt
+
+// Fog constants
+export const FOG_DENSITY_LIGHT = 0.2;                 // Light fog density
+export const FOG_DENSITY_MODERATE = 0.4;              // Moderate fog density
+export const FOG_DENSITY_HEAVY = 0.7;                 // Heavy fog density
+export const FOG_PATCH_SIZE_MIN = 80;                 // Minimum fog patch size
+export const FOG_PATCH_SIZE_MAX = 180;                // Maximum fog patch size
+export const FOG_PATCH_SPEED_MIN = 5;                 // Fog drift speed (pixels/second)
+export const FOG_PATCH_SPEED_MAX = 15;
+export const FOG_PATCH_OPACITY_MIN = 0.1;             // Minimum fog patch opacity
+export const FOG_PATCH_OPACITY_MAX = 0.35;            // Maximum fog patch opacity
+export const FOG_MAX_PATCHES = 40;                    // Maximum fog patches
+export const FOG_MAX_PATCHES_MOBILE = 15;             // Mobile: fewer fog patches
+export const FOG_SPAWN_INTERVAL = 0.5;                // Seconds between fog patch spawns
+export const FOG_PATCH_MAX_AGE = 30;                  // Fog patches fade after 30 seconds
+
+// Weather effects on game
+export const WEATHER_VISIBILITY_MODIFIERS: Record<string, number> = {
+  clear: 1.0,
+  partly_cloudy: 1.0,
+  cloudy: 0.95,
+  overcast: 0.9,
+  light_rain: 0.85,
+  rain: 0.75,
+  heavy_rain: 0.6,
+  thunderstorm: 0.5,
+  fog: 0.4,
+  light_snow: 0.8,
+  snow: 0.65,
+  heavy_snow: 0.5,
+};
+
+// Ambient lighting adjustments by weather (RGB multipliers)
+export const WEATHER_LIGHTING_TINT: Record<string, { r: number; g: number; b: number }> = {
+  clear:         { r: 1.0, g: 1.0, b: 1.0 },
+  partly_cloudy: { r: 0.98, g: 0.98, b: 0.98 },
+  cloudy:        { r: 0.92, g: 0.93, b: 0.95 },
+  overcast:      { r: 0.85, g: 0.87, b: 0.90 },
+  light_rain:    { r: 0.88, g: 0.90, b: 0.93 },
+  rain:          { r: 0.82, g: 0.85, b: 0.90 },
+  heavy_rain:    { r: 0.75, g: 0.78, b: 0.85 },
+  thunderstorm:  { r: 0.65, g: 0.68, b: 0.75 },
+  fog:           { r: 0.90, g: 0.92, b: 0.95 },
+  light_snow:    { r: 0.95, g: 0.96, b: 0.98 },
+  snow:          { r: 0.93, g: 0.95, b: 0.98 },
+  heavy_snow:    { r: 0.90, g: 0.93, b: 0.97 },
+};

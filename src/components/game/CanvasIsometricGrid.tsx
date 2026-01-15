@@ -33,6 +33,10 @@ import {
   Firework,
   Cloud,
   WorldRenderState,
+  WeatherState,
+  Precipitation,
+  LightningStrike,
+  FogLayer,
 } from '@/components/game/types';
 import {
   SKIP_SMALL_ELEMENTS_ZOOM_THRESHOLD,
@@ -241,6 +245,30 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const cloudsRef = useRef<Cloud[]>([]);
   const cloudIdRef = useRef(0);
   const cloudSpawnTimerRef = useRef(0);
+
+  // Weather system refs
+  const weatherStateRef = useRef<WeatherState>({
+    current: 'partly_cloudy',
+    target: 'partly_cloudy',
+    transitionProgress: 1,
+    changeTimer: 180,
+    intensity: 0.3,
+    targetIntensity: 0.3,
+  });
+  const precipitationRef = useRef<Precipitation>({
+    rainParticles: [],
+    snowParticles: [],
+    spawnTimer: 0,
+  });
+  const lightningStrikesRef = useRef<LightningStrike[]>([]);
+  const lightningIdRef = useRef(0);
+  const lightningSpawnTimerRef = useRef(5);
+  const fogLayerRef = useRef<FogLayer>({
+    patches: [],
+    density: 0,
+    targetDensity: 0,
+  });
+  const fogSpawnTimerRef = useRef(0);
 
   // Traffic light system timer (cumulative time for cycling through states)
   const trafficLightTimerRef = useRef(0);
@@ -451,6 +479,13 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     cloudsRef,
     cloudIdRef,
     cloudSpawnTimerRef,
+    weatherStateRef,
+    precipitationRef,
+    lightningStrikesRef,
+    lightningIdRef,
+    lightningSpawnTimerRef,
+    fogLayerRef,
+    fogSpawnTimerRef,
   };
 
   const effectsSystemState: EffectsSystemState = {
@@ -466,6 +501,13 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     drawSmog,
     updateClouds,
     drawClouds,
+    updateWeather,
+    updatePrecipitation,
+    drawPrecipitation,
+    updateLightning,
+    drawLightning,
+    updateFog,
+    drawFog,
   } = useEffectsSystems(effectsSystemRefs, effectsSystemState);
   
   // PERF: Sync worldStateRef from latestStateRef (real-time) instead of React state (throttled)
@@ -2433,6 +2475,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
         updateTrains(delta); // Update trains on rail network
         updateFireworks(delta, visualHour); // Update fireworks (nighttime only)
         updateSmog(delta); // Update factory smog particles
+        updateWeather(delta, visualHour); // Update weather state and transitions
+        updatePrecipitation(delta); // Update rain/snow particles
+        updateLightning(delta); // Update lightning strikes (thunderstorms only)
+        updateFog(delta); // Update fog patches
         updateClouds(delta, visualHour); // Update atmospheric clouds
         navLightFlashTimerRef.current += delta * 3; // Update nav light flash timer
         trafficLightTimerRef.current += delta; // Update traffic light cycle timer
@@ -2505,7 +2551,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
           drawHelicopters(airCtx); // Draw helicopters (skip when panning zoomed out on desktop)
           drawSeaplanes(airCtx); // Draw seaplanes (skip when panning zoomed out on desktop)
         }
+        drawFog(airCtx); // Draw fog patches (weather effect)
         drawClouds(airCtx, visualHour); // Draw atmospheric clouds (above helicopters)
+        drawPrecipitation(airCtx); // Draw rain/snow particles (above clouds)
+        drawLightning(airCtx); // Draw lightning strikes (thunderstorms only)
         drawAirplanes(airCtx); // Draw airplanes above clouds
         drawFireworks(airCtx); // Draw fireworks above everything (nighttime only)
       }

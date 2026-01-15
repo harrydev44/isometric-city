@@ -1,5 +1,22 @@
 import { useCallback } from 'react';
-import { Firework, FactorySmog, Cloud, CloudPuff, CloudType, WorldRenderState, TILE_WIDTH, TILE_HEIGHT } from './types';
+import {
+  Firework,
+  FactorySmog,
+  Cloud,
+  CloudPuff,
+  CloudType,
+  WorldRenderState,
+  TILE_WIDTH,
+  TILE_HEIGHT,
+  WeatherState,
+  WeatherType,
+  Precipitation,
+  RainParticle,
+  SnowParticle,
+  LightningStrike,
+  FogLayer,
+  FogPatch
+} from './types';
 import { BuildingType } from '@/types/game';
 import {
   FIREWORK_BUILDINGS,
@@ -56,6 +73,62 @@ import {
   CLOUD_TYPE_WEIGHTS_DEFAULT,
   CLOUD_TYPES_ORDERED,
   CLOUD_TYPE_CONFIG,
+  WEATHER_MIN_DURATION,
+  WEATHER_MAX_DURATION,
+  WEATHER_TRANSITION_DURATION,
+  WEATHER_WEIGHTS_BY_HOUR,
+  WEATHER_WEIGHTS_DEFAULT,
+  WEATHER_CLOUD_MODIFIERS,
+  RAIN_PARTICLE_SPEED_MIN,
+  RAIN_PARTICLE_SPEED_MAX,
+  RAIN_PARTICLE_LENGTH_MIN,
+  RAIN_PARTICLE_LENGTH_MAX,
+  RAIN_WIND_DRIFT_MIN,
+  RAIN_WIND_DRIFT_MAX,
+  RAIN_SPAWN_RATE_LIGHT,
+  RAIN_SPAWN_RATE_MODERATE,
+  RAIN_SPAWN_RATE_HEAVY,
+  RAIN_MAX_PARTICLES,
+  RAIN_MAX_PARTICLES_MOBILE,
+  RAIN_OPACITY,
+  SNOW_PARTICLE_SPEED_MIN,
+  SNOW_PARTICLE_SPEED_MAX,
+  SNOW_PARTICLE_SIZE_MIN,
+  SNOW_PARTICLE_SIZE_MAX,
+  SNOW_WIND_DRIFT_MIN,
+  SNOW_WIND_DRIFT_MAX,
+  SNOW_SPAWN_RATE_LIGHT,
+  SNOW_SPAWN_RATE_MODERATE,
+  SNOW_SPAWN_RATE_HEAVY,
+  SNOW_MAX_PARTICLES,
+  SNOW_MAX_PARTICLES_MOBILE,
+  SNOW_OPACITY,
+  SNOW_ROTATION_SPEED_MIN,
+  SNOW_ROTATION_SPEED_MAX,
+  LIGHTNING_MIN_INTERVAL,
+  LIGHTNING_MAX_INTERVAL,
+  LIGHTNING_STRIKE_DURATION,
+  LIGHTNING_FLASH_DURATION,
+  LIGHTNING_FLASH_INTENSITY,
+  LIGHTNING_BRANCH_CHANCE,
+  LIGHTNING_MAX_BRANCHES,
+  LIGHTNING_SEGMENT_LENGTH_MIN,
+  LIGHTNING_SEGMENT_LENGTH_MAX,
+  LIGHTNING_SEGMENTS_MIN,
+  LIGHTNING_SEGMENTS_MAX,
+  FOG_DENSITY_LIGHT,
+  FOG_DENSITY_MODERATE,
+  FOG_DENSITY_HEAVY,
+  FOG_PATCH_SIZE_MIN,
+  FOG_PATCH_SIZE_MAX,
+  FOG_PATCH_SPEED_MIN,
+  FOG_PATCH_SPEED_MAX,
+  FOG_PATCH_OPACITY_MIN,
+  FOG_PATCH_OPACITY_MAX,
+  FOG_MAX_PATCHES,
+  FOG_MAX_PATCHES_MOBILE,
+  FOG_SPAWN_INTERVAL,
+  FOG_PATCH_MAX_AGE,
 } from './constants';
 import { gridToScreen } from './utils';
 import { findFireworkBuildings, findSmogFactories } from './gridFinders';
@@ -72,6 +145,14 @@ export interface EffectsSystemRefs {
   cloudsRef: React.MutableRefObject<Cloud[]>;
   cloudIdRef: React.MutableRefObject<number>;
   cloudSpawnTimerRef: React.MutableRefObject<number>;
+  // Weather system refs
+  weatherStateRef: React.MutableRefObject<WeatherState>;
+  precipitationRef: React.MutableRefObject<Precipitation>;
+  lightningStrikesRef: React.MutableRefObject<LightningStrike[]>;
+  lightningIdRef: React.MutableRefObject<number>;
+  lightningSpawnTimerRef: React.MutableRefObject<number>;
+  fogLayerRef: React.MutableRefObject<FogLayer>;
+  fogSpawnTimerRef: React.MutableRefObject<number>;
 }
 
 export interface EffectsSystemState {
@@ -96,6 +177,13 @@ export function useEffectsSystems(
     cloudsRef,
     cloudIdRef,
     cloudSpawnTimerRef,
+    weatherStateRef,
+    precipitationRef,
+    lightningStrikesRef,
+    lightningIdRef,
+    lightningSpawnTimerRef,
+    fogLayerRef,
+    fogSpawnTimerRef,
   } = refs;
 
   const { worldStateRef, gridVersionRef, isMobile } = systemState;
@@ -837,20 +925,26 @@ export function useEffectsSystems(
   // Update clouds - spawn new ones and move existing
   const updateClouds = useCallback((delta: number, currentHour: number) => {
     const { canvasSize, zoom, offset, speed: gameSpeed } = worldStateRef.current;
-    
+
     // Don't update when game is paused
     if (gameSpeed === 0) {
       return;
     }
-    
+
     // Skip clouds when very zoomed out
     if (zoom < CLOUD_MIN_ZOOM) {
       cloudsRef.current = [];
       return;
     }
-    
-    const maxClouds = isMobile ? CLOUD_MAX_COUNT_MOBILE : CLOUD_MAX_COUNT;
-    const spawnInterval = isMobile ? CLOUD_SPAWN_INTERVAL_MOBILE : CLOUD_SPAWN_INTERVAL;
+
+    // Get weather modifiers
+    const weather = weatherStateRef.current.current;
+    const weatherMod = WEATHER_CLOUD_MODIFIERS[weather] ?? { spawnRateMult: 1, maxCountMult: 1, opacityMult: 1 };
+
+    const baseMaxClouds = isMobile ? CLOUD_MAX_COUNT_MOBILE : CLOUD_MAX_COUNT;
+    const maxClouds = Math.floor(baseMaxClouds * weatherMod.maxCountMult);
+    const baseSpawnInterval = isMobile ? CLOUD_SPAWN_INTERVAL_MOBILE : CLOUD_SPAWN_INTERVAL;
+    const spawnInterval = baseSpawnInterval / weatherMod.spawnRateMult;
     
     // Spawn new clouds (type varies by time of day). Sometimes spawn in pairs for natural cloud banks/groups.
     cloudSpawnTimerRef.current += delta;
@@ -895,7 +989,7 @@ export function useEffectsSystems(
       
       return true;
     });
-  }, [worldStateRef, cloudsRef, cloudSpawnTimerRef, isMobile, spawnCloud]);
+  }, [worldStateRef, cloudsRef, cloudSpawnTimerRef, weatherStateRef, isMobile, spawnCloud]);
 
   // Get gradient color stops for a cloud type and portion (for cumulonimbus base/top)
   const getCloudGradientStops = (cloudType: CloudType, portion: 'base' | 'top' | undefined, puffOpacity: number): [number, string][] => {
@@ -996,6 +1090,11 @@ export function useEffectsSystems(
     if (isNight) nightMult = CLOUD_NIGHT_OPACITY_MULT;
     else if (isDusk) nightMult = 1.0 - (1.0 - CLOUD_NIGHT_OPACITY_MULT) * ((currentHour - 18) / 2);
     else if (isDawn) nightMult = CLOUD_NIGHT_OPACITY_MULT + (1.0 - CLOUD_NIGHT_OPACITY_MULT) * ((currentHour - 6) / 2);
+
+    // Weather opacity modifier
+    const weather = weatherStateRef.current.current;
+    const weatherMod = WEATHER_CLOUD_MODIFIERS[weather] ?? { spawnRateMult: 1, maxCountMult: 1, opacityMult: 1 };
+    const weatherOpacityMult = weatherMod.opacityMult;
     
     ctx.save();
     ctx.scale(dpr * currentZoom, dpr * currentZoom);
@@ -1035,8 +1134,8 @@ export function useEffectsSystems(
     
     for (const cloud of sortedClouds) {
       if (cloud.x < viewLeft || cloud.x > viewRight || cloud.y < viewTop || cloud.y > viewBottom) continue;
-      
-      const finalOpacity = cloud.opacity * nightMult * zoomOpacity * coverageOpacity;
+
+      const finalOpacity = cloud.opacity * nightMult * zoomOpacity * coverageOpacity * weatherOpacityMult;
       
       // Draw each puff with type-specific colors and shape
       for (const puff of cloud.puffs) {
@@ -1078,9 +1177,517 @@ export function useEffectsSystems(
         }
       }
     }
-    
+
     ctx.restore();
-  }, [worldStateRef, cloudsRef]);
+  }, [worldStateRef, cloudsRef, weatherStateRef]);
+
+  // ============================================================================
+  // WEATHER SYSTEM - comprehensive atmospheric simulation
+  // ============================================================================
+
+  // Pick a new weather type based on time of day and current weather
+  const pickWeatherType = useCallback((currentHour: number, currentWeather: WeatherType): WeatherType => {
+    const hour = Math.floor(currentHour) % 24;
+    const weights = WEATHER_WEIGHTS_BY_HOUR[hour] ?? WEATHER_WEIGHTS_DEFAULT;
+
+    // Build weighted array
+    const options: WeatherType[] = [];
+    for (const [weatherType, weight] of Object.entries(weights)) {
+      for (let i = 0; i < weight; i++) {
+        options.push(weatherType as WeatherType);
+      }
+    }
+
+    if (options.length === 0) return 'clear';
+
+    // Pick a random weather type
+    let newWeather = options[Math.floor(Math.random() * options.length)];
+
+    // Avoid picking the same weather consecutively (80% of the time)
+    if (newWeather === currentWeather && Math.random() < 0.8 && options.length > 1) {
+      newWeather = options[Math.floor(Math.random() * options.length)];
+    }
+
+    return newWeather;
+  }, []);
+
+  // Update weather state - manages transitions and changes
+  const updateWeather = useCallback((delta: number, currentHour: number) => {
+    const { speed: gameSpeed } = worldStateRef.current;
+
+    if (gameSpeed === 0) return; // Don't update when paused
+
+    const weather = weatherStateRef.current;
+
+    // Update transition
+    if (weather.transitionProgress < 1) {
+      weather.transitionProgress = Math.min(1, weather.transitionProgress + delta / WEATHER_TRANSITION_DURATION);
+    }
+
+    // Update intensity transition
+    if (weather.intensity !== weather.targetIntensity) {
+      const intensityDelta = delta / (WEATHER_TRANSITION_DURATION * 0.5);
+      if (weather.intensity < weather.targetIntensity) {
+        weather.intensity = Math.min(weather.targetIntensity, weather.intensity + intensityDelta);
+      } else {
+        weather.intensity = Math.max(weather.targetIntensity, weather.intensity - intensityDelta);
+      }
+    }
+
+    // Update change timer
+    weather.changeTimer -= delta;
+
+    // Time for weather change?
+    if (weather.changeTimer <= 0 && weather.transitionProgress >= 1) {
+      const newWeather = pickWeatherType(currentHour, weather.current);
+      weather.target = newWeather;
+      weather.current = newWeather;
+      weather.transitionProgress = 0;
+      weather.changeTimer = WEATHER_MIN_DURATION + Math.random() * (WEATHER_MAX_DURATION - WEATHER_MIN_DURATION);
+
+      // Set target intensity based on weather type
+      const intensityMap: Record<WeatherType, number> = {
+        clear: 0, partly_cloudy: 0.2, cloudy: 0.4, overcast: 0.6,
+        light_rain: 0.4, rain: 0.7, heavy_rain: 0.9, thunderstorm: 1.0,
+        fog: 0.7, light_snow: 0.5, snow: 0.7, heavy_snow: 0.9
+      };
+      weather.targetIntensity = intensityMap[newWeather] ?? 0.5;
+    }
+  }, [worldStateRef, weatherStateRef, pickWeatherType]);
+
+  // Get current precipitation spawn rate based on weather
+  const getPrecipitationSpawnRate = useCallback((): { rain: number; snow: number } => {
+    const weather = weatherStateRef.current.current;
+    const intensity = weatherStateRef.current.intensity;
+
+    let rainRate = 0;
+    let snowRate = 0;
+
+    switch (weather) {
+      case 'light_rain':
+        rainRate = RAIN_SPAWN_RATE_LIGHT;
+        break;
+      case 'rain':
+        rainRate = RAIN_SPAWN_RATE_MODERATE;
+        break;
+      case 'heavy_rain':
+      case 'thunderstorm':
+        rainRate = RAIN_SPAWN_RATE_HEAVY;
+        break;
+      case 'light_snow':
+        snowRate = SNOW_SPAWN_RATE_LIGHT;
+        break;
+      case 'snow':
+        snowRate = SNOW_SPAWN_RATE_MODERATE;
+        break;
+      case 'heavy_snow':
+        snowRate = SNOW_SPAWN_RATE_HEAVY;
+        break;
+    }
+
+    // Adjust by intensity
+    return {
+      rain: rainRate * (0.5 + intensity * 0.5),
+      snow: snowRate * (0.5 + intensity * 0.5)
+    };
+  }, [weatherStateRef]);
+
+  // Update precipitation particles
+  const updatePrecipitation = useCallback((delta: number) => {
+    const { canvasSize, zoom, offset, speed: gameSpeed } = worldStateRef.current;
+
+    if (gameSpeed === 0) return;
+
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const viewWidth = canvasSize.width / (dpr * zoom);
+    const viewHeight = canvasSize.height / (dpr * zoom);
+    const viewLeft = -offset.x / zoom;
+    const viewTop = -offset.y / zoom;
+
+    const { rain: rainRate, snow: snowRate } = getPrecipitationSpawnRate();
+    const maxRain = isMobile ? RAIN_MAX_PARTICLES_MOBILE : RAIN_MAX_PARTICLES;
+    const maxSnow = isMobile ? SNOW_MAX_PARTICLES_MOBILE : SNOW_MAX_PARTICLES;
+
+    const precip = precipitationRef.current;
+
+    // Spawn rain particles
+    if (rainRate > 0) {
+      precip.spawnTimer += delta;
+      while (precip.spawnTimer >= rainRate && precip.rainParticles.length < maxRain) {
+        precip.spawnTimer -= rainRate;
+
+        const x = viewLeft + Math.random() * viewWidth * 1.2 - viewWidth * 0.1;
+        const y = viewTop - 50 - Math.random() * 100;
+        const vx = RAIN_WIND_DRIFT_MIN + Math.random() * (RAIN_WIND_DRIFT_MAX - RAIN_WIND_DRIFT_MIN);
+        const vy = RAIN_PARTICLE_SPEED_MIN + Math.random() * (RAIN_PARTICLE_SPEED_MAX - RAIN_PARTICLE_SPEED_MIN);
+        const length = RAIN_PARTICLE_LENGTH_MIN + Math.random() * (RAIN_PARTICLE_LENGTH_MAX - RAIN_PARTICLE_LENGTH_MIN);
+
+        precip.rainParticles.push({ x, y, vx, vy, length, opacity: RAIN_OPACITY, age: 0 });
+      }
+    }
+
+    // Spawn snow particles
+    if (snowRate > 0) {
+      precip.spawnTimer += delta;
+      while (precip.spawnTimer >= snowRate && precip.snowParticles.length < maxSnow) {
+        precip.spawnTimer -= snowRate;
+
+        const x = viewLeft + Math.random() * viewWidth * 1.2 - viewWidth * 0.1;
+        const y = viewTop - 50 - Math.random() * 100;
+        const vx = SNOW_WIND_DRIFT_MIN + Math.random() * (SNOW_WIND_DRIFT_MAX - SNOW_WIND_DRIFT_MIN);
+        const vy = SNOW_PARTICLE_SPEED_MIN + Math.random() * (SNOW_PARTICLE_SPEED_MAX - SNOW_PARTICLE_SPEED_MIN);
+        const size = SNOW_PARTICLE_SIZE_MIN + Math.random() * (SNOW_PARTICLE_SIZE_MAX - SNOW_PARTICLE_SIZE_MIN);
+        const rotation = Math.random() * Math.PI * 2;
+        const rotationSpeed = SNOW_ROTATION_SPEED_MIN + Math.random() * (SNOW_ROTATION_SPEED_MAX - SNOW_ROTATION_SPEED_MIN);
+
+        precip.snowParticles.push({ x, y, vx, vy, size, opacity: SNOW_OPACITY, rotation, rotationSpeed, age: 0 });
+      }
+    }
+
+    // Update rain particles
+    const viewBottom = viewTop + viewHeight;
+    precip.rainParticles = precip.rainParticles.filter(p => {
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      p.age += delta;
+
+      // Remove if off screen
+      return p.y < viewBottom + 100;
+    });
+
+    // Update snow particles
+    precip.snowParticles = precip.snowParticles.filter(p => {
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      p.rotation += p.rotationSpeed * delta;
+      p.age += delta;
+
+      // Remove if off screen
+      return p.y < viewBottom + 100;
+    });
+  }, [worldStateRef, precipitationRef, getPrecipitationSpawnRate, isMobile]);
+
+  // Draw precipitation
+  const drawPrecipitation = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset, zoom } = worldStateRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const precip = precipitationRef.current;
+
+    if (precip.rainParticles.length === 0 && precip.snowParticles.length === 0) return;
+
+    ctx.save();
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(offset.x / zoom, offset.y / zoom);
+
+    // Draw rain
+    if (precip.rainParticles.length > 0) {
+      ctx.strokeStyle = `rgba(200, 220, 255, ${RAIN_OPACITY})`;
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+
+      for (const rain of precip.rainParticles) {
+        ctx.globalAlpha = rain.opacity;
+        ctx.beginPath();
+        ctx.moveTo(rain.x, rain.y);
+        ctx.lineTo(rain.x - rain.vx * 0.02, rain.y - rain.length);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw snow
+    if (precip.snowParticles.length > 0) {
+      for (const snow of precip.snowParticles) {
+        ctx.globalAlpha = snow.opacity;
+        ctx.fillStyle = '#ffffff';
+
+        ctx.save();
+        ctx.translate(snow.x, snow.y);
+        ctx.rotate(snow.rotation);
+
+        // Draw simple snowflake shape
+        ctx.beginPath();
+        ctx.arc(0, 0, snow.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Add sparkle effect
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(-snow.size, 0);
+        ctx.lineTo(snow.size, 0);
+        ctx.moveTo(0, -snow.size);
+        ctx.lineTo(0, snow.size);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+  }, [worldStateRef, precipitationRef]);
+
+  // Generate lightning bolt segments
+  const generateLightningBolt = useCallback((startX: number, startY: number, targetY: number): { x: number; y: number }[] => {
+    const segments: { x: number; y: number }[] = [{ x: startX, y: startY }];
+    const numSegments = LIGHTNING_SEGMENTS_MIN + Math.floor(Math.random() * (LIGHTNING_SEGMENTS_MAX - LIGHTNING_SEGMENTS_MIN));
+
+    let currentX = startX;
+    let currentY = startY;
+
+    for (let i = 0; i < numSegments; i++) {
+      const progress = (i + 1) / numSegments;
+      const nextY = startY + (targetY - startY) * progress;
+      const segmentLength = LIGHTNING_SEGMENT_LENGTH_MIN + Math.random() * (LIGHTNING_SEGMENT_LENGTH_MAX - LIGHTNING_SEGMENT_LENGTH_MIN);
+      const nextX = currentX + (Math.random() - 0.5) * segmentLength;
+
+      segments.push({ x: nextX, y: nextY });
+      currentX = nextX;
+      currentY = nextY;
+    }
+
+    return segments;
+  }, []);
+
+  // Update lightning strikes
+  const updateLightning = useCallback((delta: number) => {
+    const { canvasSize, zoom, offset, speed: gameSpeed } = worldStateRef.current;
+    const weather = weatherStateRef.current.current;
+
+    if (gameSpeed === 0 || weather !== 'thunderstorm') {
+      lightningStrikesRef.current = [];
+      return;
+    }
+
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const viewWidth = canvasSize.width / (dpr * zoom);
+    const viewHeight = canvasSize.height / (dpr * zoom);
+    const viewLeft = -offset.x / zoom;
+    const viewTop = -offset.y / zoom;
+
+    // Spawn lightning
+    lightningSpawnTimerRef.current -= delta;
+    if (lightningSpawnTimerRef.current <= 0) {
+      lightningSpawnTimerRef.current = LIGHTNING_MIN_INTERVAL + Math.random() * (LIGHTNING_MAX_INTERVAL - LIGHTNING_MIN_INTERVAL);
+
+      const x = viewLeft + Math.random() * viewWidth;
+      const y = viewTop;
+      const targetY = viewTop + viewHeight * (0.3 + Math.random() * 0.5);
+
+      const strike: LightningStrike = {
+        id: lightningIdRef.current++,
+        x,
+        y,
+        segments: generateLightningBolt(x, y, targetY),
+        age: 0,
+        maxAge: LIGHTNING_STRIKE_DURATION,
+        branches: [],
+        flashIntensity: LIGHTNING_FLASH_INTENSITY
+      };
+
+      // Add branches
+      if (Math.random() < LIGHTNING_BRANCH_CHANCE) {
+        const numBranches = 1 + Math.floor(Math.random() * LIGHTNING_MAX_BRANCHES);
+        for (let i = 0; i < numBranches; i++) {
+          const branchStart = Math.floor(strike.segments.length * 0.3 + Math.random() * strike.segments.length * 0.4);
+          const startSeg = strike.segments[branchStart];
+          const branchTarget = startSeg.y + 100 + Math.random() * 150;
+
+          strike.branches.push({
+            segments: generateLightningBolt(startSeg.x, startSeg.y, branchTarget),
+            age: 0
+          });
+        }
+      }
+
+      lightningStrikesRef.current.push(strike);
+    }
+
+    // Update existing strikes
+    lightningStrikesRef.current = lightningStrikesRef.current.filter(strike => {
+      strike.age += delta;
+      strike.flashIntensity = Math.max(0, LIGHTNING_FLASH_INTENSITY * (1 - strike.age / LIGHTNING_FLASH_DURATION));
+
+      for (const branch of strike.branches) {
+        branch.age += delta;
+      }
+
+      return strike.age < strike.maxAge;
+    });
+  }, [worldStateRef, weatherStateRef, lightningStrikesRef, lightningIdRef, lightningSpawnTimerRef, generateLightningBolt]);
+
+  // Draw lightning
+  const drawLightning = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset, zoom } = worldStateRef.current;
+    const strikes = lightningStrikesRef.current;
+
+    if (strikes.length === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+
+    ctx.save();
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(offset.x / zoom, offset.y / zoom);
+
+    for (const strike of strikes) {
+      const alpha = 1 - strike.age / strike.maxAge;
+
+      // Draw main bolt
+      ctx.strokeStyle = `rgba(200, 220, 255, ${alpha})`;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      for (let i = 0; i < strike.segments.length; i++) {
+        const seg = strike.segments[i];
+        if (i === 0) ctx.moveTo(seg.x, seg.y);
+        else ctx.lineTo(seg.x, seg.y);
+      }
+      ctx.stroke();
+
+      // Draw glow
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      // Draw branches
+      for (const branch of strike.branches) {
+        const branchAlpha = Math.max(0, alpha * (1 - branch.age / LIGHTNING_STRIKE_DURATION));
+        ctx.strokeStyle = `rgba(180, 200, 255, ${branchAlpha * 0.7})`;
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        for (let i = 0; i < branch.segments.length; i++) {
+          const seg = branch.segments[i];
+          if (i === 0) ctx.moveTo(seg.x, seg.y);
+          else ctx.lineTo(seg.x, seg.y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+
+    // Draw screen flash
+    const maxFlash = Math.max(...strikes.map(s => s.flashIntensity), 0);
+    if (maxFlash > 0.01) {
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 255, 255, ${maxFlash * 0.3})`;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.restore();
+    }
+  }, [worldStateRef, lightningStrikesRef]);
+
+  // Update fog layer
+  const updateFog = useCallback((delta: number) => {
+    const { canvasSize, zoom, offset, speed: gameSpeed } = worldStateRef.current;
+    const weather = weatherStateRef.current.current;
+
+    if (gameSpeed === 0) return;
+
+    const fog = fogLayerRef.current;
+
+    // Set target density based on weather
+    if (weather === 'fog') {
+      fog.targetDensity = FOG_DENSITY_HEAVY;
+    } else if (weather === 'overcast' || weather === 'heavy_rain') {
+      fog.targetDensity = FOG_DENSITY_LIGHT;
+    } else {
+      fog.targetDensity = 0;
+    }
+
+    // Transition density
+    if (fog.density !== fog.targetDensity) {
+      const densityDelta = delta * 0.02;
+      if (fog.density < fog.targetDensity) {
+        fog.density = Math.min(fog.targetDensity, fog.density + densityDelta);
+      } else {
+        fog.density = Math.max(fog.targetDensity, fog.density - densityDelta);
+      }
+    }
+
+    // Early exit if no fog
+    if (fog.density <= 0.01) {
+      fog.patches = [];
+      return;
+    }
+
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const viewWidth = canvasSize.width / (dpr * zoom);
+    const viewHeight = canvasSize.height / (dpr * zoom);
+    const viewLeft = -offset.x / zoom;
+    const viewTop = -offset.y / zoom;
+
+    const maxPatches = isMobile ? FOG_MAX_PATCHES_MOBILE : FOG_MAX_PATCHES;
+
+    // Spawn fog patches
+    fogSpawnTimerRef.current += delta;
+    if (fogSpawnTimerRef.current >= FOG_SPAWN_INTERVAL && fog.patches.length < maxPatches) {
+      fogSpawnTimerRef.current = 0;
+
+      const x = viewLeft + Math.random() * viewWidth * 1.3 - viewWidth * 0.15;
+      const y = viewTop + Math.random() * viewHeight * 1.3 - viewHeight * 0.15;
+      const vx = FOG_PATCH_SPEED_MIN + Math.random() * (FOG_PATCH_SPEED_MAX - FOG_PATCH_SPEED_MIN);
+      const vy = (Math.random() - 0.5) * FOG_PATCH_SPEED_MIN;
+      const size = FOG_PATCH_SIZE_MIN + Math.random() * (FOG_PATCH_SIZE_MAX - FOG_PATCH_SIZE_MIN);
+      const opacity = (FOG_PATCH_OPACITY_MIN + Math.random() * (FOG_PATCH_OPACITY_MAX - FOG_PATCH_OPACITY_MIN)) * fog.density;
+
+      fog.patches.push({ x, y, vx, vy, size, opacity, age: 0 });
+    }
+
+    // Update patches
+    fog.patches = fog.patches.filter(patch => {
+      patch.x += patch.vx * delta;
+      patch.y += patch.vy * delta;
+      patch.age += delta;
+
+      // Fade out near end of life
+      const fadeStart = FOG_PATCH_MAX_AGE * 0.8;
+      if (patch.age > fadeStart) {
+        const fadeProgress = (patch.age - fadeStart) / (FOG_PATCH_MAX_AGE - fadeStart);
+        patch.opacity *= (1 - fadeProgress);
+      }
+
+      return patch.age < FOG_PATCH_MAX_AGE;
+    });
+  }, [worldStateRef, weatherStateRef, fogLayerRef, fogSpawnTimerRef, isMobile]);
+
+  // Draw fog
+  const drawFog = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset, zoom } = worldStateRef.current;
+    const fog = fogLayerRef.current;
+
+    if (fog.patches.length === 0 || fog.density <= 0.01) return;
+
+    const dpr = window.devicePixelRatio || 1;
+
+    ctx.save();
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(offset.x / zoom, offset.y / zoom);
+
+    for (const patch of fog.patches) {
+      const gradient = ctx.createRadialGradient(patch.x, patch.y, 0, patch.x, patch.y, patch.size);
+      gradient.addColorStop(0, `rgba(240, 245, 250, ${patch.opacity})`);
+      gradient.addColorStop(0.5, `rgba(230, 235, 242, ${patch.opacity * 0.6})`);
+      gradient.addColorStop(1, `rgba(220, 225, 235, 0)`);
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(patch.x, patch.y, patch.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }, [worldStateRef, fogLayerRef]);
+
+  // Get current weather state for external use
+  const getWeatherState = useCallback((): WeatherState => {
+    return weatherStateRef.current;
+  }, [weatherStateRef]);
 
   return {
     updateFireworks,
@@ -1091,6 +1698,15 @@ export function useEffectsSystems(
     drawClouds,
     findFireworkBuildingsCallback,
     findSmogFactoriesCallback,
+    // Weather system exports
+    updateWeather,
+    updatePrecipitation,
+    drawPrecipitation,
+    updateLightning,
+    drawLightning,
+    updateFog,
+    drawFog,
+    getWeatherState,
   };
 }
 
