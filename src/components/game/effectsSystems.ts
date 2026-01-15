@@ -80,6 +80,10 @@ import {
   RAIN_LAYER_LENGTHS,
   RAIN_DROP_COLOR,
   RAIN_SPLASH_COLOR,
+  RAIN_DROP_WIDTH_MIN,
+  RAIN_DROP_WIDTH_MAX,
+  RAIN_CUMULONIMBUS_INTENSITY_MULT,
+  RAIN_VIEWPORT_COVERAGE,
 } from './constants';
 import { gridToScreen } from './utils';
 import { findFireworkBuildings, findSmogFactories } from './gridFinders';
@@ -1113,17 +1117,22 @@ export function useEffectsSystems(
   }, [worldStateRef, cloudsRef]);
 
   // Check if there are rain-producing clouds (cumulonimbus or stratus)
-  const hasRainClouds = useCallback((): { hasRain: boolean; intensity: number; cloudCenters: { x: number; y: number; size: number }[] } => {
+  const hasRainClouds = useCallback((): { hasRain: boolean; intensity: number; cloudCenters: { x: number; y: number; size: number }[]; hasCumulonimbus: boolean } => {
     const rainClouds = cloudsRef.current.filter(c => c.cloudType === 'cumulonimbus' || c.cloudType === 'stratus');
     if (rainClouds.length === 0) {
-      return { hasRain: false, intensity: 0, cloudCenters: [] };
+      return { hasRain: false, intensity: 0, cloudCenters: [], hasCumulonimbus: false };
     }
-    // Intensity based on number of storm clouds (cumulonimbus = 3x intensity, stratus = 1x)
+    // Intensity based on number of storm clouds (cumulonimbus = higher intensity, stratus = moderate)
     let intensity = 0;
+    let hasCumulonimbus = false;
     const cloudCenters: { x: number; y: number; size: number }[] = [];
     for (const cloud of rainClouds) {
-      const mult = cloud.cloudType === 'cumulonimbus' ? 3 : 1;
-      intensity += mult * cloud.opacity;
+      if (cloud.cloudType === 'cumulonimbus') {
+        hasCumulonimbus = true;
+        intensity += RAIN_CUMULONIMBUS_INTENSITY_MULT * cloud.opacity;
+      } else {
+        intensity += 0.8 * cloud.opacity; // stratus gives moderate rain
+      }
       // Get approximate cloud coverage area for spawn positioning
       let maxExtent = 0;
       for (const puff of cloud.puffs) {
@@ -1132,9 +1141,9 @@ export function useEffectsSystems(
       }
       cloudCenters.push({ x: cloud.x, y: cloud.y, size: maxExtent * cloud.scale });
     }
-    // Normalize intensity (0-1 range, capped)
-    const normalizedIntensity = Math.min(1, intensity / 3);
-    return { hasRain: true, intensity: normalizedIntensity, cloudCenters };
+    // Normalize intensity (0-1 range, capped) - scale is more generous
+    const normalizedIntensity = Math.min(1, intensity / 2);
+    return { hasRain: true, intensity: normalizedIntensity, cloudCenters, hasCumulonimbus };
   }, [cloudsRef]);
 
   // Update rain - spawn drops from rain-producing clouds and move them
@@ -1153,7 +1162,7 @@ export function useEffectsSystems(
       return;
     }
     
-    const { hasRain, intensity, cloudCenters } = hasRainClouds();
+    const { hasRain, intensity, cloudCenters, hasCumulonimbus } = hasRainClouds();
     
     // Clear rain if no rain clouds
     if (!hasRain) {
@@ -1178,7 +1187,9 @@ export function useEffectsSystems(
     }
     
     const maxDrops = isMobile ? RAIN_MAX_DROPS_MOBILE : RAIN_MAX_DROPS;
-    const spawnRate = (isMobile ? RAIN_SPAWN_RATE_MOBILE : RAIN_SPAWN_RATE) * intensity;
+    // Boost spawn rate for heavy storms (cumulonimbus)
+    const intensityMult = hasCumulonimbus ? intensity * 1.3 : intensity;
+    const spawnRate = (isMobile ? RAIN_SPAWN_RATE_MOBILE : RAIN_SPAWN_RATE) * intensityMult;
     const maxSplashes = isMobile ? RAIN_MAX_SPLASHES_MOBILE : RAIN_MAX_SPLASHES;
     
     // Calculate viewport bounds
@@ -1190,26 +1201,57 @@ export function useEffectsSystems(
     const viewRight = viewLeft + viewWidth;
     const viewBottom = viewTop + viewHeight;
     
-    // Spawn new rain drops near rain clouds
+    // Spawn new rain drops - when RAIN_VIEWPORT_COVERAGE is true, spawn across entire viewport
     const dropsToSpawn = Math.floor(spawnRate * delta);
     for (let i = 0; i < dropsToSpawn && rainDropsRef.current.length < maxDrops; i++) {
-      // Pick a random cloud to spawn from (weighted by size)
-      const totalSize = cloudCenters.reduce((sum, c) => sum + c.size, 0);
-      let r = Math.random() * totalSize;
-      let sourceCloud = cloudCenters[0];
-      for (const cloud of cloudCenters) {
-        r -= cloud.size;
-        if (r <= 0) {
-          sourceCloud = cloud;
-          break;
-        }
-      }
+      let spawnX: number;
+      let spawnY: number;
       
-      // Spawn position: random within cloud coverage area, slightly above viewport top
-      const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * sourceCloud.size * 0.8;
-      const spawnX = sourceCloud.x + Math.cos(angle) * dist;
-      const spawnY = Math.min(sourceCloud.y + Math.sin(angle) * dist * 0.5, viewTop - 20);
+      if (RAIN_VIEWPORT_COVERAGE && cloudCenters.length > 0) {
+        // Spawn rain across the entire viewport for more realistic coverage
+        // Mix between viewport-wide spawning and cloud-focused spawning
+        const useViewportSpawn = Math.random() < 0.7; // 70% viewport-wide, 30% cloud-centered
+        
+        if (useViewportSpawn) {
+          // Spawn across viewport width, above the top
+          spawnX = viewLeft + Math.random() * viewWidth;
+          spawnY = viewTop - 20 - Math.random() * 50;
+        } else {
+          // Spawn near a cloud
+          const totalSize = cloudCenters.reduce((sum, c) => sum + c.size, 0);
+          let r = Math.random() * totalSize;
+          let sourceCloud = cloudCenters[0];
+          for (const cloud of cloudCenters) {
+            r -= cloud.size;
+            if (r <= 0) {
+              sourceCloud = cloud;
+              break;
+            }
+          }
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.random() * sourceCloud.size * 1.2; // Slightly wider spread
+          spawnX = sourceCloud.x + Math.cos(angle) * dist;
+          spawnY = Math.min(sourceCloud.y + Math.sin(angle) * dist * 0.5, viewTop - 20);
+        }
+      } else if (cloudCenters.length > 0) {
+        // Original behavior: spawn near clouds only
+        const totalSize = cloudCenters.reduce((sum, c) => sum + c.size, 0);
+        let r = Math.random() * totalSize;
+        let sourceCloud = cloudCenters[0];
+        for (const cloud of cloudCenters) {
+          r -= cloud.size;
+          if (r <= 0) {
+            sourceCloud = cloud;
+            break;
+          }
+        }
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * sourceCloud.size * 0.8;
+        spawnX = sourceCloud.x + Math.cos(angle) * dist;
+        spawnY = Math.min(sourceCloud.y + Math.sin(angle) * dist * 0.5, viewTop - 20);
+      } else {
+        continue; // No clouds, skip spawn
+      }
       
       // Only spawn if within viewport width (with margin)
       if (spawnX < viewLeft - 50 || spawnX > viewRight + 50) continue;
@@ -1220,8 +1262,8 @@ export function useEffectsSystems(
       const length = (RAIN_DROP_LENGTH_MIN + Math.random() * (RAIN_DROP_LENGTH_MAX - RAIN_DROP_LENGTH_MIN)) * RAIN_LAYER_LENGTHS[layer];
       const opacity = (RAIN_OPACITY_MIN + Math.random() * (RAIN_OPACITY_MAX - RAIN_OPACITY_MIN)) * RAIN_LAYER_OPACITY[layer];
       
-      // Wind influence on velocity
-      const windInfluence = 0.15 + Math.random() * 0.1;
+      // Wind influence on velocity - more consistent angle
+      const windInfluence = 0.2 + Math.random() * 0.1;
       const vx = Math.cos(RAIN_WIND_ANGLE) * speed * windInfluence;
       const vy = Math.sin(RAIN_WIND_ANGLE + Math.PI / 2) * speed; // Mostly downward
       
@@ -1301,38 +1343,77 @@ export function useEffectsSystems(
     // Sort drops by layer (far to near) for proper depth
     const sortedDrops = [...rainDropsRef.current].sort((a, b) => b.layer - a.layer);
     
-    // Draw rain drops as angled streaks
+    // Draw rain drops as angled streaks with varying thickness
     ctx.lineCap = 'round';
     for (const drop of sortedDrops) {
       const finalOpacity = drop.opacity * zoomOpacity;
       if (finalOpacity <= 0.02) continue;
-      
-      ctx.strokeStyle = RAIN_DROP_COLOR + finalOpacity + ')';
-      ctx.lineWidth = 1 + (2 - drop.layer) * 0.3; // Near drops slightly thicker
       
       // Calculate streak end point based on velocity direction
       const angle = Math.atan2(drop.vy, drop.vx);
       const endX = drop.x - Math.cos(angle) * drop.length;
       const endY = drop.y - Math.sin(angle) * drop.length;
       
+      // Layer-based line width: near drops are thicker
+      const layerWidthMult = [1.0, 0.7, 0.5][drop.layer];
+      const lineWidth = RAIN_DROP_WIDTH_MIN + (RAIN_DROP_WIDTH_MAX - RAIN_DROP_WIDTH_MIN) * layerWidthMult;
+      
+      // Draw drop with slight glow effect for near drops
+      if (drop.layer === 0) {
+        // Outer glow for near drops
+        ctx.strokeStyle = RAIN_DROP_COLOR + (finalOpacity * 0.3) + ')';
+        ctx.lineWidth = lineWidth * 2;
+        ctx.beginPath();
+        ctx.moveTo(drop.x, drop.y);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+      
+      // Main drop streak
+      ctx.strokeStyle = RAIN_DROP_COLOR + finalOpacity + ')';
+      ctx.lineWidth = lineWidth;
       ctx.beginPath();
       ctx.moveTo(drop.x, drop.y);
       ctx.lineTo(endX, endY);
       ctx.stroke();
+      
+      // Bright tip for near and mid drops
+      if (drop.layer <= 1) {
+        ctx.fillStyle = `rgba(230, 240, 255, ${finalOpacity * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(drop.x, drop.y, lineWidth * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     
-    // Draw splashes as small expanding circles
+    // Draw splashes as small expanding circles with ripple effect
     for (const splash of rainSplashesRef.current) {
       const progress = splash.age / RAIN_SPLASH_MAX_AGE;
-      const radius = splash.size * (0.5 + progress * 0.5);
-      const finalOpacity = splash.opacity * (1 - progress) * zoomOpacity;
+      const radius = splash.size * (0.3 + progress * 0.7);
+      const finalOpacity = splash.opacity * (1 - progress * progress) * zoomOpacity; // Quadratic fade for smoother effect
       if (finalOpacity <= 0.02) continue;
       
+      // Outer ripple ring
+      ctx.strokeStyle = RAIN_SPLASH_COLOR + (finalOpacity * 0.5) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(splash.x, splash.y, radius * 1.3, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Main splash circle
       ctx.strokeStyle = RAIN_SPLASH_COLOR + finalOpacity + ')';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(splash.x, splash.y, radius, 0, Math.PI * 2);
       ctx.stroke();
+      
+      // Inner splash center
+      if (progress < 0.3) {
+        ctx.fillStyle = `rgba(220, 230, 245, ${finalOpacity * (1 - progress / 0.3)})`;
+        ctx.beginPath();
+        ctx.arc(splash.x, splash.y, radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     
     ctx.restore();
