@@ -371,3 +371,33 @@ export const CLOUD_TYPE_CONFIG: Record<string, {
   cumulonimbus: { opacityMin: 0.3, opacityMax: 0.5, layerRestriction: 0,  speedMult: 0.7,  scaleMin: 1.2, scaleMax: 1.9, puffCountMin: 6, puffCountMax: 10, puffStretchX: [1, 1.2], puffStretchY: [1, 1.3] },  // Towering, low, dramatic
   altocumulus: { opacityMin: 0.15, opacityMax: 0.35, layerRestriction: 1,  speedMult: 1.1,  scaleMin: 0.6, scaleMax: 1.2, puffCountMin: 4, puffCountMax: 8,  puffStretchX: [1, 1.5], puffStretchY: [0.7, 1] },  // Patchy, mid-level
 };
+
+// =============================================================================
+// RAIN SYSTEM CONSTANTS - precipitation effects from storm clouds
+// =============================================================================
+export const RAIN_MIN_ZOOM = 0.25;                    // Minimum zoom to show rain
+export const RAIN_MAX_ZOOM = 1.8;                     // Maximum zoom to show rain (fade out when very zoomed in)
+export const RAIN_FADE_ZOOM = 2.2;                    // Zoom level at which rain is fully invisible
+export const RAIN_MAX_DROPS = 400;                    // Maximum rain drops on screen
+export const RAIN_MAX_DROPS_MOBILE = 150;             // Fewer drops on mobile for performance
+export const RAIN_SPAWN_RATE = 120;                   // Drops spawned per second (during rain)
+export const RAIN_SPAWN_RATE_MOBILE = 50;             // Slower spawning on mobile
+export const RAIN_DROP_SPEED_MIN = 350;               // Minimum fall speed (pixels/second)
+export const RAIN_DROP_SPEED_MAX = 500;               // Maximum fall speed
+export const RAIN_DROP_LENGTH_MIN = 8;                // Minimum streak length
+export const RAIN_DROP_LENGTH_MAX = 18;               // Maximum streak length
+export const RAIN_WIND_ANGLE = -Math.PI / 6;          // Slight diagonal fall (wind influence) - about -30 degrees
+export const RAIN_OPACITY_MIN = 0.15;                 // Minimum drop opacity
+export const RAIN_OPACITY_MAX = 0.4;                  // Maximum drop opacity
+export const RAIN_DROP_MAX_AGE = 2.5;                 // Seconds before drop despawns (if not off screen)
+export const RAIN_SPLASH_MAX_AGE = 0.25;              // Splash effect duration (seconds)
+export const RAIN_SPLASH_SIZE = 4;                    // Splash effect size
+export const RAIN_MAX_SPLASHES = 60;                  // Maximum splash effects on screen
+export const RAIN_MAX_SPLASHES_MOBILE = 25;           // Fewer splashes on mobile
+export const RAIN_LAYER_SPEEDS = [0.7, 1.0, 1.3];     // Speed multipliers for near/mid/far layers
+export const RAIN_LAYER_OPACITY = [1.0, 0.7, 0.4];    // Opacity multipliers for layers (near is brighter)
+export const RAIN_LAYER_LENGTHS = [1.0, 0.8, 0.6];    // Length multipliers for layers (far drops look smaller)
+// Color for rain drops (light blue-gray streaks)
+export const RAIN_DROP_COLOR = 'rgba(180, 195, 215, ';
+// Color for splashes
+export const RAIN_SPLASH_COLOR = 'rgba(200, 210, 225, ';
