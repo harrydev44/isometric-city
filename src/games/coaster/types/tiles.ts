@@ -74,6 +74,7 @@ export interface CoasterTile extends BaseTile {
   height: number;
   path: PathInfo | null;
   building: CoasterBuilding | null;
+  rideId?: string | null;
   track: TrackSegment | null;
   scenery: Scenery | null;
   zoneId?: string | null;

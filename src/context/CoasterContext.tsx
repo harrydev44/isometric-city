@@ -9,10 +9,14 @@ import {
   PanelType,
   PathInfo,
   PathStyle,
+  Ride,
   RideType,
+  RideQueue,
+  RideStats,
   SavedParkMeta,
   Scenery,
   SceneryType,
+  TOOL_INFO,
 } from '@/games/coaster/types';
 import { isInGrid } from '@/core/types';
 import {
@@ -20,9 +24,41 @@ import {
   DEFAULT_COASTER_GRID_SIZE,
   simulateCoasterTick,
 } from '@/lib/coasterSimulation';
+import { RIDE_DEFINITIONS } from '@/lib/coasterRides';
 
 const STORAGE_KEY = 'coaster-game-state';
 const SAVED_PARKS_INDEX_KEY = 'coaster-saved-parks-index';
+
+const TOOL_RIDE_MAP: Partial<Record<CoasterTool, RideType>> = {
+  ride_carousel: 'carousel',
+  ride_ferris_wheel: 'ferris_wheel',
+  ride_bumper_cars: 'bumper_cars',
+  ride_swing: 'swing_ride',
+  ride_haunted_house: 'haunted_house',
+  ride_spiral_slide: 'spiral_slide',
+};
+
+function createRideStats(rideType: RideType): RideStats {
+  const definition = RIDE_DEFINITIONS[rideType];
+  return {
+    rideTime: definition.rideTime,
+    capacity: definition.capacity,
+    reliability: 0.92,
+    uptime: 1,
+    totalRiders: 0,
+    totalRevenue: 0,
+    lastBreakdownTick: null,
+  };
+}
+
+function createRideQueue(entry: { x: number; y: number }, exit: { x: number; y: number }): RideQueue {
+  return {
+    guestIds: [],
+    maxLength: 30,
+    entry,
+    exit,
+  };
+}
 
 type CoasterContextValue = {
   state: CoasterParkState;
@@ -169,6 +205,74 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
     setState((prev) => ({ ...prev, activePanel: panel }));
   }, []);
 
+  const applyRidePlacement = useCallback((prev: CoasterParkState, rideType: RideType, x: number, y: number) => {
+    const definition = RIDE_DEFINITIONS[rideType];
+    if (!definition) return prev;
+
+    const { width, height } = definition.size;
+    if (x < 0 || y < 0 || x + width > prev.gridSize || y + height > prev.gridSize) {
+      return prev;
+    }
+
+    for (let dy = 0; dy < height; dy++) {
+      for (let dx = 0; dx < width; dx++) {
+        const tile = prev.grid[y + dy][x + dx];
+        if (!tile) return prev;
+        if (tile.path || tile.rideId || tile.building || tile.track || tile.scenery) {
+          return prev;
+        }
+      }
+    }
+
+    const toolKey = (Object.keys(TOOL_RIDE_MAP) as CoasterTool[]).find((tool) => TOOL_RIDE_MAP[tool] === rideType);
+    const toolCost = toolKey ? TOOL_INFO[toolKey].cost : 0;
+    if (toolCost > 0 && prev.finance.cash < toolCost) return prev;
+
+    const grid = prev.grid.map((row) => row.slice());
+    const rideId = `ride-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+    for (let dy = 0; dy < height; dy++) {
+      const row = grid[y + dy].slice();
+      for (let dx = 0; dx < width; dx++) {
+        row[x + dx] = { ...row[x + dx], rideId };
+      }
+      grid[y + dy] = row;
+    }
+
+    const entrance = { x, y: Math.min(prev.gridSize - 1, y + height) };
+    const exit = { x: Math.min(prev.gridSize - 1, x + width - 1), y: Math.min(prev.gridSize - 1, y + height) };
+
+    const ride: Ride = {
+      id: rideId,
+      type: rideType,
+      category: definition.category,
+      name: definition.name,
+      position: { x, y },
+      size: { width, height },
+      entrance,
+      exit,
+      queue: createRideQueue(entrance, exit),
+      stats: createRideStats(rideType),
+      status: 'open',
+      price: definition.basePrice,
+      excitement: definition.excitement,
+      intensity: definition.intensity,
+      nausea: definition.nausea,
+      age: 0,
+      color: definition.color,
+    };
+
+    return {
+      ...prev,
+      grid,
+      rides: [...prev.rides, ride],
+      finance: {
+        ...prev.finance,
+        cash: prev.finance.cash - toolCost,
+      },
+    };
+  }, []);
+
   const placeAtTile = useCallback((x: number, y: number) => {
     setState((prev) => {
       if (!isInGrid({ x, y }, prev.gridSize)) return prev;
@@ -176,6 +280,9 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
       const selectedTool = prev.selectedTool;
       const tile = prev.grid[y][x];
       if (!tile) return prev;
+      const toolInfo = TOOL_INFO[selectedTool];
+      const toolCost = toolInfo?.cost ?? 0;
+      if (toolCost > 0 && prev.finance.cash < toolCost) return prev;
 
       const grid = prev.grid.map((row) => row.slice());
 
@@ -228,44 +335,96 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
         isBridge: false,
       });
 
+      const applyCost = (nextState: CoasterParkState) => (
+        toolCost > 0
+          ? {
+            ...nextState,
+            finance: {
+              ...nextState.finance,
+              cash: nextState.finance.cash - toolCost,
+            },
+          }
+          : nextState
+      );
+
       if (selectedTool === 'path' || selectedTool === 'queue_path') {
         const newPath = createPath(selectedTool === 'queue_path' ? 'queue' : 'concrete', selectedTool === 'queue_path');
+        if (tile.path && tile.path.style === newPath.style && tile.path.isQueue === newPath.isQueue) {
+          return prev;
+        }
         updateTile(x, y, { path: newPath });
         syncNeighborEdges(x, y, newPath.edges);
-        return { ...prev, grid };
+        return applyCost({ ...prev, grid });
       }
 
       if (selectedTool === 'scenery_tree' || selectedTool === 'scenery_flower') {
         const sceneryType: SceneryType = selectedTool === 'scenery_tree' ? 'tree' : 'flower';
         const scenery: Scenery = { type: sceneryType, variant: 0, rotation: 0 };
+        if (tile.scenery?.type === sceneryType) {
+          return prev;
+        }
         updateTile(x, y, { scenery });
-        return { ...prev, grid };
+        return applyCost({ ...prev, grid });
       }
 
       if (selectedTool === 'water') {
         updateTile(x, y, { terrain: tile.terrain === 'water' ? 'grass' : 'water' });
-        return { ...prev, grid };
+        return applyCost({ ...prev, grid });
       }
 
       if (selectedTool === 'bulldoze') {
+        const hasAnything = tile.path || tile.scenery || tile.building || tile.track || tile.rideId;
+        if (!hasAnything) {
+          return prev;
+        }
+        let rides = prev.rides;
+        if (tile.rideId) {
+          const rideId = tile.rideId;
+          rides = prev.rides.filter((ride) => ride.id !== rideId);
+          for (let rowIndex = 0; rowIndex < grid.length; rowIndex++) {
+            const row = grid[rowIndex].slice();
+            let rowUpdated = false;
+            for (let colIndex = 0; colIndex < row.length; colIndex++) {
+              if (row[colIndex].rideId === rideId) {
+                row[colIndex] = { ...row[colIndex], rideId: null };
+                rowUpdated = true;
+              }
+            }
+            if (rowUpdated) {
+              grid[rowIndex] = row;
+            }
+          }
+        }
+
         updateTile(x, y, {
           path: null,
           scenery: null,
           building: null,
+          rideId: null,
           track: null,
         });
         syncNeighborEdges(x, y, { north: false, east: false, south: false, west: false });
-        return { ...prev, grid };
+        return applyCost({ ...prev, grid, rides });
+      }
+
+      const rideType = TOOL_RIDE_MAP[selectedTool];
+      if (rideType) {
+        return applyRidePlacement(prev, rideType, x, y);
       }
 
       return prev;
     });
-  }, []);
+  }, [applyRidePlacement]);
 
-  const buildRide = useCallback((_rideType: RideType, _x: number, _y: number) => {
-    // Placeholder - ride placement logic will be added in Phase 3
-    return false;
-  }, []);
+  const buildRide = useCallback((rideType: RideType, x: number, y: number) => {
+    let success = false;
+    setState((prev) => {
+      const next = applyRidePlacement(prev, rideType, x, y);
+      success = next !== prev;
+      return next;
+    });
+    return success;
+  }, [applyRidePlacement]);
 
   const buildPath = useCallback((_x: number, _y: number) => {
     // Placeholder - path placement logic will be added in Phase 2

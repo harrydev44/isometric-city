@@ -56,6 +56,9 @@ export default function CoasterMiniMap({ onNavigate, viewport }: CoasterMiniMapP
           if (tile.track) {
             color = '#f97316';
           }
+          if (tile.rideId) {
+            color = '#f97316';
+          }
           if (tile.scenery) {
             color = '#22c55e';
           }

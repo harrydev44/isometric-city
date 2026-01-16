@@ -25,6 +25,7 @@ export function createInitialGrid(size: number): CoasterTile[][] {
         height: 0,
         path: null,
         building: null,
+        rideId: null,
         track: null,
         scenery: null,
         zoneId: null,

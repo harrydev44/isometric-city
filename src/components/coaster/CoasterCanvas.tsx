@@ -119,7 +119,7 @@ export type CoasterCanvasProps = {
 
 export default function CoasterCanvas({ navigationTarget, onNavigationComplete, onViewportChange }: CoasterCanvasProps) {
   const { state, placeAtTile } = useCoaster();
-  const { grid, gridSize } = state;
+  const { grid, gridSize, rides } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -131,6 +131,7 @@ export default function CoasterCanvas({ navigationTarget, onNavigationComplete, 
 
   const tileWidth = useMemo(() => TILE_WIDTH * zoom, [zoom]);
   const tileHeight = useMemo(() => TILE_HEIGHT * zoom, [zoom]);
+  const rideColors = useMemo(() => new Map(rides.map((ride) => [ride.id, ride.color])), [rides]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -194,6 +195,17 @@ export default function CoasterCanvas({ navigationTarget, onNavigationComplete, 
         if (tile.path) {
           const pathColor = tile.path.style === 'queue' ? '#f4b400' : '#8b9099';
           drawPathOverlay(ctx, screenX, screenY, tileWidth, tileHeight, pathColor);
+        }
+        if (tile.rideId && rideColors.has(tile.rideId)) {
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          drawDiamond(ctx, screenX, screenY, tileWidth, tileHeight, {
+            top: rideColors.get(tile.rideId) ?? '#f97316',
+            left: rideColors.get(tile.rideId) ?? '#f97316',
+            right: rideColors.get(tile.rideId) ?? '#f97316',
+            stroke: '#1f2937',
+          });
+          ctx.restore();
         }
         if (tile.scenery?.type) {
           drawScenery(ctx, screenX, screenY, tileWidth, tileHeight, tile.scenery.type);
