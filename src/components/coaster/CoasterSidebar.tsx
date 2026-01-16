@@ -28,7 +28,7 @@ export default function CoasterSidebar() {
         <div className="text-sidebar-foreground font-bold tracking-tight">COASTER PARK</div>
         <div className="text-xs text-muted-foreground mt-1">Theme Park Tools</div>
       </div>
-      <ScrollArea className="flex-1 py-2">
+      <ScrollArea className="flex-1 py-2 pb-10">
         {toolGroups.map((group) => (
           <div key={group.label} className="mb-4">
             <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
@@ -59,7 +59,7 @@ export default function CoasterSidebar() {
             </div>
           </div>
         ))}
-        <div className="mt-2">
+        <div className="mt-2 mb-4">
           <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
             Management
           </div>
