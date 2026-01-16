@@ -5,6 +5,7 @@ import { useCoaster } from '@/context/CoasterContext';
 import { CoasterTool, TOOL_INFO } from '@/games/coaster/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { T, useGT, useMessages } from 'gt-next';
 
 type ToolGroup = {
   label: string;
@@ -14,19 +15,23 @@ type ToolGroup = {
 export default function CoasterSidebar() {
   const { state, setTool } = useCoaster();
   const { selectedTool, finance } = state;
+  const gt = useGT();
+  const m = useMessages();
 
   const toolGroups = useMemo<ToolGroup[]>(() => [
-    { label: 'Tools', tools: ['select', 'path', 'queue_path', 'coaster_track', 'bulldoze', 'water'] },
-    { label: 'Scenery', tools: ['scenery_tree', 'scenery_flower'] },
-    { label: 'Rides', tools: ['ride_carousel', 'ride_ferris_wheel', 'ride_bumper_cars', 'ride_swing', 'ride_haunted_house', 'ride_spiral_slide'] },
-    { label: 'Shops', tools: ['shop_food', 'shop_drink', 'shop_toilet'] },
-  ], []);
+    { label: gt('Tools'), tools: ['select', 'path', 'queue_path', 'coaster_track', 'bulldoze', 'water'] },
+    { label: gt('Scenery'), tools: ['scenery_tree', 'scenery_flower'] },
+    { label: gt('Rides'), tools: ['ride_carousel', 'ride_ferris_wheel', 'ride_bumper_cars', 'ride_swing', 'ride_haunted_house', 'ride_spiral_slide'] },
+    { label: gt('Shops'), tools: ['shop_food', 'shop_drink', 'shop_toilet'] },
+  ], [gt]);
 
   return (
     <div className="w-56 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
       <div className="px-4 py-4 border-b border-sidebar-border">
-        <div className="text-sidebar-foreground font-bold tracking-tight">COASTER PARK</div>
-        <div className="text-xs text-muted-foreground mt-1">Theme Park Tools</div>
+        <T>
+          <div className="text-sidebar-foreground font-bold tracking-tight">COASTER PARK</div>
+          <div className="text-xs text-muted-foreground mt-1">Theme Park Tools</div>
+        </T>
       </div>
       <ScrollArea className="flex-1 py-2">
         {toolGroups.map((group) => (
@@ -49,7 +54,7 @@ export default function CoasterSidebar() {
                       isSelected ? 'bg-primary text-primary-foreground' : ''
                     }`}
                   >
-                    <span className="flex-1 text-left truncate">{info.name}</span>
+                    <span className="flex-1 text-left truncate">{m(info.name)}</span>
                     {info.cost > 0 && (
                       <span className="text-xs opacity-60">${info.cost}</span>
                     )}
