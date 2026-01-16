@@ -75,6 +75,13 @@ export default function CoasterSidebar() {
         >
           Guests
         </Button>
+        <Button
+          variant={activePanel === 'staff' ? 'default' : 'ghost'}
+          className="w-full justify-start"
+          onClick={() => setActivePanel(activePanel === 'staff' ? 'none' : 'staff')}
+        >
+          Staff
+        </Button>
       </div>
     </div>
   );

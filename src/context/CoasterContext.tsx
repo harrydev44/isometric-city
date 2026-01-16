@@ -27,6 +27,7 @@ import {
   simulateCoasterTick,
 } from '@/lib/coasterSimulation';
 import { RIDE_DEFINITIONS } from '@/lib/coasterRides';
+import { STAFF_DEFINITIONS } from '@/lib/coasterStaff';
 
 const STORAGE_KEY = 'coaster-game-state';
 const SAVED_PARKS_INDEX_KEY = 'coaster-saved-parks-index';
@@ -102,6 +103,7 @@ type CoasterContextValue = {
   buildPath: (x: number, y: number) => void;
   setRidePrice: (rideId: string, price: number) => void;
   toggleRideStatus: (rideId: string) => void;
+  hireStaff: (type: 'handyman' | 'mechanic' | 'security' | 'entertainer') => void;
   newGame: (name?: string, size?: number) => void;
   loadState: (stateString: string) => boolean;
   exportState: () => string;
@@ -587,6 +589,40 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
     }));
   }, []);
 
+  const hireStaff = useCallback((type: 'handyman' | 'mechanic' | 'security' | 'entertainer') => {
+    const definition = STAFF_DEFINITIONS.find((staff) => staff.type === type);
+    if (!definition) return;
+    setState((prev) => {
+      if (prev.finance.cash < definition.hiringFee) return prev;
+      const nextId = prev.staff.length > 0 ? Math.max(...prev.staff.map((s) => s.id)) + 1 : 1;
+      const nextStaff = {
+        id: nextId,
+        name: `${definition.name} ${nextId}`,
+        type,
+        tileX: prev.parkEntrance.x,
+        tileY: prev.parkEntrance.y,
+        direction: 'south',
+        progress: 0,
+        state: 'idle' as const,
+        patrolArea: null,
+        patrolRouteId: null,
+        target: null,
+        wage: definition.wage,
+        fatigue: 0,
+      };
+      return {
+        ...prev,
+        staff: [...prev.staff, nextStaff],
+        finance: {
+          ...prev.finance,
+          cash: prev.finance.cash - definition.hiringFee,
+          staffCost: prev.finance.staffCost + definition.wage,
+          expenses: prev.finance.expenses + definition.wage,
+        },
+      };
+    });
+  }, []);
+
   const newGame = useCallback((name?: string, size?: number) => {
     const fresh = createInitialCoasterState(size ?? DEFAULT_COASTER_GRID_SIZE, name ?? 'Coaster Park');
     skipNextSaveRef.current = true;
@@ -689,6 +725,7 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
     buildPath,
     setRidePrice,
     toggleRideStatus,
+    hireStaff,
     newGame,
     loadState,
     exportState,

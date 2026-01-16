@@ -9,9 +9,10 @@ import CoasterMiniMap from './CoasterMiniMap';
 import FinancePanel from './panels/FinancePanel';
 import GuestPanel from './panels/GuestPanel';
 import RidePanel from './panels/RidePanel';
+import StaffPanel from './panels/StaffPanel';
 
 export default function CoasterGame() {
-  const { state, setSpeed, newGame, setRidePrice, toggleRideStatus, setActivePanel } = useCoaster();
+  const { state, setSpeed, newGame, setRidePrice, toggleRideStatus, setActivePanel, hireStaff } = useCoaster();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{ offset: { x: number; y: number }; zoom: number; canvasSize: { width: number; height: number } } | null>(null);
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
@@ -92,6 +93,14 @@ export default function CoasterGame() {
             <GuestPanel
               guests={state.guests}
               onClose={() => setActivePanel('none')}
+            />
+          )}
+          {state.activePanel === 'staff' && (
+            <StaffPanel
+              staff={state.staff}
+              cash={state.finance.cash}
+              onClose={() => setActivePanel('none')}
+              onHire={hireStaff}
             />
           )}
         </div>
