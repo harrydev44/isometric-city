@@ -137,6 +137,14 @@ const SHOP_EFFECTS: Record<CoasterBuildingType, { hunger?: number; thirst?: numb
   staff_room: { happiness: 0, cost: 0 },
 };
 
+function calculateParkRating(guests: Guest[], rides: number, cleanliness: number): number {
+  const averageHappiness = guests.length > 0
+    ? guests.reduce((sum, guest) => sum + guest.happiness, 0) / guests.length
+    : 180;
+  const rideBonus = Math.min(160, rides * 12);
+  return clamp(Math.round(averageHappiness * 0.7 + cleanliness * 0.2 + rideBonus), 0, 999);
+}
+
 function applyShopEffects(guest: Guest, shopType: CoasterBuildingType): Guest {
   const effect = SHOP_EFFECTS[shopType];
   if (!effect) return guest;
@@ -454,6 +462,13 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       ...state.stats,
       guestsInPark: nextGuests.length,
       totalGuests,
+      rating: calculateParkRating(nextGuests, updatedRides.length, state.stats.cleanliness),
+      excitement: updatedRides.length > 0
+        ? Math.round(updatedRides.reduce((sum, ride) => sum + ride.excitement, 0) / updatedRides.length)
+        : state.stats.excitement,
+      nausea: nextGuests.length > 0
+        ? Math.round(nextGuests.reduce((sum, guest) => sum + guest.needs.nausea, 0) / nextGuests.length)
+        : 0,
     },
   };
 }
