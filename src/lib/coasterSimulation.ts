@@ -1,3 +1,4 @@
+import { msg } from 'gt-next';
 import { CardinalDirection } from '@/core/types';
 import { CoasterBuildingType, CoasterParkState, CoasterTile, Finance, Guest, ParkStats, PathInfo, Research, WeatherState } from '@/games/coaster/types';
 import { findPath } from '@/lib/coasterPathfinding';
@@ -60,7 +61,7 @@ function createGuest(id: number, tileX: number, tileY: number): Guest {
   const pickColor = () => colors[Math.floor(Math.random() * colors.length)];
   return {
     id,
-    name: `Guest ${id}`,
+    name: msg('Guest {id}', { id }),
     tileX,
     tileY,
     direction: 'south',
