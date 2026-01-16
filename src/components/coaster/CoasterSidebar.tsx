@@ -59,30 +59,35 @@ export default function CoasterSidebar() {
             </div>
           </div>
         ))}
+        <div className="mt-2">
+          <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+            Management
+          </div>
+          <div className="px-2 flex flex-col gap-1">
+            <Button
+              variant={activePanel === 'finance' ? 'default' : 'ghost'}
+              className="w-full justify-start"
+              onClick={() => setActivePanel(activePanel === 'finance' ? 'none' : 'finance')}
+            >
+              Finance
+            </Button>
+            <Button
+              variant={activePanel === 'guests' ? 'default' : 'ghost'}
+              className="w-full justify-start"
+              onClick={() => setActivePanel(activePanel === 'guests' ? 'none' : 'guests')}
+            >
+              Guests
+            </Button>
+            <Button
+              variant={activePanel === 'staff' ? 'default' : 'ghost'}
+              className="w-full justify-start"
+              onClick={() => setActivePanel(activePanel === 'staff' ? 'none' : 'staff')}
+            >
+              Staff
+            </Button>
+          </div>
+        </div>
       </ScrollArea>
-      <div className="border-t border-sidebar-border p-2 space-y-2">
-        <Button
-          variant={activePanel === 'finance' ? 'default' : 'ghost'}
-          className="w-full justify-start"
-          onClick={() => setActivePanel(activePanel === 'finance' ? 'none' : 'finance')}
-        >
-          Finance
-        </Button>
-        <Button
-          variant={activePanel === 'guests' ? 'default' : 'ghost'}
-          className="w-full justify-start"
-          onClick={() => setActivePanel(activePanel === 'guests' ? 'none' : 'guests')}
-        >
-          Guests
-        </Button>
-        <Button
-          variant={activePanel === 'staff' ? 'default' : 'ghost'}
-          className="w-full justify-start"
-          onClick={() => setActivePanel(activePanel === 'staff' ? 'none' : 'staff')}
-        >
-          Staff
-        </Button>
-      </div>
     </div>
   );
 }
