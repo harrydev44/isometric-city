@@ -12,8 +12,8 @@ type ToolGroup = {
 };
 
 export default function CoasterSidebar() {
-  const { state, setTool } = useCoaster();
-  const { selectedTool, finance } = state;
+  const { state, setTool, setActivePanel } = useCoaster();
+  const { selectedTool, finance, activePanel } = state;
 
   const toolGroups = useMemo<ToolGroup[]>(() => [
     { label: 'Tools', tools: ['select', 'path', 'queue_path', 'coaster_track', 'bulldoze', 'water'] },
@@ -60,6 +60,15 @@ export default function CoasterSidebar() {
           </div>
         ))}
       </ScrollArea>
+      <div className="border-t border-sidebar-border p-2">
+        <Button
+          variant={activePanel === 'finance' ? 'default' : 'ghost'}
+          className="w-full justify-start"
+          onClick={() => setActivePanel(activePanel === 'finance' ? 'none' : 'finance')}
+        >
+          Finance
+        </Button>
+      </div>
     </div>
   );
 }

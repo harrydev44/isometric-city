@@ -6,10 +6,11 @@ import { useCoaster } from '@/context/CoasterContext';
 import CoasterCanvas from './CoasterCanvas';
 import CoasterSidebar from './CoasterSidebar';
 import CoasterMiniMap from './CoasterMiniMap';
+import FinancePanel from './panels/FinancePanel';
 import RidePanel from './panels/RidePanel';
 
 export default function CoasterGame() {
-  const { state, setSpeed, newGame, setRidePrice, toggleRideStatus } = useCoaster();
+  const { state, setSpeed, newGame, setRidePrice, toggleRideStatus, setActivePanel } = useCoaster();
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{ offset: { x: number; y: number }; zoom: number; canvasSize: { width: number; height: number } } | null>(null);
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
@@ -73,6 +74,17 @@ export default function CoasterGame() {
               onClose={() => setSelectedRideId(null)}
               onToggleStatus={() => toggleRideStatus(selectedRide.id)}
               onPriceChange={(price) => setRidePrice(selectedRide.id, price)}
+            />
+          )}
+          {state.activePanel === 'finance' && (
+            <FinancePanel
+              cash={state.finance.cash}
+              rideRevenue={state.finance.rideRevenue}
+              shopRevenue={state.finance.shopRevenue}
+              income={state.finance.income}
+              expenses={state.finance.expenses}
+              loan={state.finance.loan}
+              onClose={() => setActivePanel('none')}
             />
           )}
         </div>
