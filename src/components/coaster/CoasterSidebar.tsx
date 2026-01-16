@@ -60,13 +60,20 @@ export default function CoasterSidebar() {
           </div>
         ))}
       </ScrollArea>
-      <div className="border-t border-sidebar-border p-2">
+      <div className="border-t border-sidebar-border p-2 space-y-2">
         <Button
           variant={activePanel === 'finance' ? 'default' : 'ghost'}
           className="w-full justify-start"
           onClick={() => setActivePanel(activePanel === 'finance' ? 'none' : 'finance')}
         >
           Finance
+        </Button>
+        <Button
+          variant={activePanel === 'guests' ? 'default' : 'ghost'}
+          className="w-full justify-start"
+          onClick={() => setActivePanel(activePanel === 'guests' ? 'none' : 'guests')}
+        >
+          Guests
         </Button>
       </div>
     </div>

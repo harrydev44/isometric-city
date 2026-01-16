@@ -7,6 +7,7 @@ import CoasterCanvas from './CoasterCanvas';
 import CoasterSidebar from './CoasterSidebar';
 import CoasterMiniMap from './CoasterMiniMap';
 import FinancePanel from './panels/FinancePanel';
+import GuestPanel from './panels/GuestPanel';
 import RidePanel from './panels/RidePanel';
 
 export default function CoasterGame() {
@@ -84,6 +85,12 @@ export default function CoasterGame() {
               income={state.finance.income}
               expenses={state.finance.expenses}
               loan={state.finance.loan}
+              onClose={() => setActivePanel('none')}
+            />
+          )}
+          {state.activePanel === 'guests' && (
+            <GuestPanel
+              guests={state.guests}
               onClose={() => setActivePanel('none')}
             />
           )}
