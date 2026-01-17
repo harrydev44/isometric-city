@@ -353,6 +353,7 @@ export function CoasterCanvasGrid({
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
     ctx.scale(zoom, zoom);
 
     for (let y = 0; y < gridSize; y += 1) {
