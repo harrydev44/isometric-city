@@ -5,6 +5,7 @@ import { Ride } from '@/games/coaster/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
+import { Progress } from '@/components/ui/progress';
 import { estimateQueueWaitMinutes } from '@/lib/coasterQueue';
 
 interface RidePanelProps {
@@ -23,6 +24,8 @@ export default function RidePanel({ ride, onClose, onToggleStatus, onPriceChange
 
   const queueLength = ride.queue.guestIds.length;
   const estimatedWait = estimateQueueWaitMinutes(queueLength, ride.stats.rideTime, ride.stats.capacity);
+  const reliabilityPercent = Math.round(ride.stats.reliability * 100);
+  const uptimePercent = Math.round(ride.stats.uptime * 100);
 
   const statusLabel = useMemo(() => {
     switch (ride.status) {
@@ -81,6 +84,18 @@ export default function RidePanel({ ride, onClose, onToggleStatus, onPriceChange
               <div className="text-muted-foreground">Nausea</div>
               <div className="font-semibold">{ride.nausea}</div>
             </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Reliability</span>
+              <span>{reliabilityPercent}%</span>
+            </div>
+            <Progress value={reliabilityPercent} className="h-2" />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Uptime</span>
+              <span>{uptimePercent}%</span>
+            </div>
+            <Progress value={uptimePercent} className="h-2" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">

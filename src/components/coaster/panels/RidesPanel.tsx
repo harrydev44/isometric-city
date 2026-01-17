@@ -66,7 +66,10 @@ export default function RidesPanel({ rides, onClose, onSelectRide, onToggleRide 
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {estimatedWait > 0 ? `${estimatedWait} min wait` : 'No wait'} · ${ride.price} ticket ·{' '}
-                        {ride.stats.totalRiders} riders
+                        {Math.round(ride.stats.reliability * 100)}% reliable
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {Math.round(ride.stats.uptime * 100)}% uptime · {ride.stats.totalRiders} riders
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
