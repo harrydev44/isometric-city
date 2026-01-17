@@ -7,6 +7,7 @@ import { TILE_WIDTH, TILE_HEIGHT } from '@/components/game/types';
 import { gridToScreen, screenToGrid } from '@/components/game/utils';
 import { drawIsometricDiamond } from '@/components/game/drawing';
 import { CoasterTile } from '@/games/coaster/types';
+import { drawCoasterTrack } from '@/components/coaster/trackSystem';
 
 const TERRAIN_COLORS = {
   grass: {
@@ -107,61 +108,6 @@ export function CoasterCanvasGrid({
     []
   );
 
-  const drawTrackLines = useCallback(
-    (ctx: CanvasRenderingContext2D, tile: CoasterTile, screenX: number, screenY: number) => {
-      if (!tile.track) return;
-
-      const north = grid[tile.y - 1]?.[tile.x]?.track;
-      const south = grid[tile.y + 1]?.[tile.x]?.track;
-      const east = grid[tile.y]?.[tile.x - 1]?.track;
-      const west = grid[tile.y]?.[tile.x + 1]?.track;
-
-      const edges = {
-        north: { x: screenX + TILE_WIDTH * 0.25, y: screenY + TILE_HEIGHT * 0.25 },
-        east: { x: screenX + TILE_WIDTH * 0.75, y: screenY + TILE_HEIGHT * 0.25 },
-        south: { x: screenX + TILE_WIDTH * 0.75, y: screenY + TILE_HEIGHT * 0.75 },
-        west: { x: screenX + TILE_WIDTH * 0.25, y: screenY + TILE_HEIGHT * 0.75 },
-        center: { x: screenX + TILE_WIDTH / 2, y: screenY + TILE_HEIGHT / 2 },
-      };
-
-      ctx.strokeStyle = '#c2410c';
-      ctx.lineWidth = 2.2;
-      ctx.lineCap = 'round';
-
-      if (north) {
-        ctx.beginPath();
-        ctx.moveTo(edges.center.x, edges.center.y);
-        ctx.lineTo(edges.north.x, edges.north.y);
-        ctx.stroke();
-      }
-      if (south) {
-        ctx.beginPath();
-        ctx.moveTo(edges.center.x, edges.center.y);
-        ctx.lineTo(edges.south.x, edges.south.y);
-        ctx.stroke();
-      }
-      if (east) {
-        ctx.beginPath();
-        ctx.moveTo(edges.center.x, edges.center.y);
-        ctx.lineTo(edges.east.x, edges.east.y);
-        ctx.stroke();
-      }
-      if (west) {
-        ctx.beginPath();
-        ctx.moveTo(edges.center.x, edges.center.y);
-        ctx.lineTo(edges.west.x, edges.west.y);
-        ctx.stroke();
-      }
-
-      if (tile.track.special) {
-        ctx.fillStyle = tile.track.special === 'station' ? '#f8fafc' : tile.track.special === 'lift' ? '#facc15' : tile.track.special === 'brakes' ? '#ef4444' : tile.track.special === 'booster' ? '#22c55e' : '#f97316';
-        ctx.beginPath();
-        ctx.arc(edges.center.x, edges.center.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    },
-    [grid]
-  );
 
   const drawScenery = useCallback(
     (ctx: CanvasRenderingContext2D, tile: CoasterTile, screenX: number, screenY: number) => {
@@ -231,7 +177,9 @@ export function CoasterCanvasGrid({
         }
 
         drawRides(ctx, tile, screenX, screenY);
-        drawTrackLines(ctx, tile, screenX, screenY);
+        if (tile.track) {
+          drawCoasterTrack(ctx, screenX, screenY, x, y, grid, gridSize, zoom);
+        }
         drawScenery(ctx, tile, screenX, screenY);
 
         if (tile.facility) {
@@ -268,7 +216,7 @@ export function CoasterCanvasGrid({
       ctx.closePath();
       ctx.stroke();
     }
-  }, [drawInsetDiamond, drawRides, drawScenery, drawTrackLines, grid, gridSize, hoveredTile, offset.x, offset.y, selectedTile, zoom]);
+  }, [drawInsetDiamond, drawRides, drawScenery, grid, gridSize, hoveredTile, offset.x, offset.y, selectedTile, zoom]);
 
   useEffect(() => {
     drawGrid();
