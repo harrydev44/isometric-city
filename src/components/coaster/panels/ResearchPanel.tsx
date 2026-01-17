@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { T, useGT, Var, Num, Currency, Branch } from 'gt-next';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -21,6 +22,7 @@ export default function ResearchPanel({
   onFundingChange,
   onStartResearch,
 }: ResearchPanelProps) {
+  const gt = useGT();
   const fundingPercent = Math.round(research.funding * 100);
 
   return (
@@ -28,20 +30,24 @@ export default function ResearchPanel({
       <Card className="bg-card/95 border-border/70 shadow-xl">
         <div className="flex items-start justify-between p-4 border-b border-border/60">
           <div>
-            <div className="text-sm text-muted-foreground uppercase tracking-[0.2em]">Research</div>
-            <div className="text-lg font-semibold">Innovation Lab</div>
+            <T>
+              <div className="text-sm text-muted-foreground uppercase tracking-[0.2em]">Research</div>
+              <div className="text-lg font-semibold">Innovation Lab</div>
+            </T>
           </div>
-          <Button size="icon-sm" variant="ghost" onClick={onClose} aria-label="Close research panel">
+          <Button size="icon-sm" variant="ghost" onClick={onClose} aria-label={gt('Close research panel')}>
             ✕
           </Button>
         </div>
         <div className="p-4 space-y-4 text-sm">
           <div className="space-y-2">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Funding</div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Budget</span>
-              <span>{fundingPercent}%</span>
-            </div>
+            <T>
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Funding</div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Budget</span>
+                <span><Num>{fundingPercent}</Num>%</span>
+              </div>
+            </T>
             <Slider
               value={[fundingPercent]}
               min={0}
@@ -50,7 +56,9 @@ export default function ResearchPanel({
               onValueChange={(value) => onFundingChange(value[0] / 100)}
             />
           </div>
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Projects</div>
+          <T>
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Projects</div>
+          </T>
           <ScrollArea className="h-56 rounded-md border border-border/50">
             <div className="p-3 space-y-3">
               {research.items.map((item) => {
@@ -59,26 +67,37 @@ export default function ResearchPanel({
                 return (
                   <div key={item.id} className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">
-                          {item.category} · ${item.cost}
+                      <T>
+                        <div>
+                          <div className="font-medium"><Var>{item.name}</Var></div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            <Var>{item.category}</Var> · <Currency currency="USD">{item.cost}</Currency>
+                          </div>
                         </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={isActive ? 'default' : 'outline'}
-                        className="h-7 px-2 text-xs"
-                        disabled={item.unlocked}
-                        onClick={() => onStartResearch(item.id)}
-                      >
-                        {item.unlocked ? 'Unlocked' : isActive ? 'Active' : 'Research'}
-                      </Button>
+                      </T>
+                      <T>
+                        <Button
+                          size="sm"
+                          variant={isActive ? 'default' : 'outline'}
+                          className="h-7 px-2 text-xs"
+                          disabled={item.unlocked}
+                          onClick={() => onStartResearch(item.id)}
+                        >
+                          <Branch
+                            branch={item.unlocked ? 'unlocked' : isActive ? 'active' : 'research'}
+                            unlocked={<>Unlocked</>}
+                            active={<>Active</>}
+                            research={<>Research</>}
+                          />
+                        </Button>
+                      </T>
                     </div>
                     <Progress value={percent} className="h-2" />
-                    <div className="text-xs text-muted-foreground">
-                      {Math.min(100, percent)}% complete
-                    </div>
+                    <T>
+                      <div className="text-xs text-muted-foreground">
+                        <Num>{Math.min(100, percent)}</Num>% complete
+                      </div>
+                    </T>
                   </div>
                 );
               })}
