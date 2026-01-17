@@ -6,9 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X } from 'lucide-react';
+import { RIDE_DEFINITIONS } from '@/games/coaster/types/buildings';
 
 export function RidesPanel() {
-  const { state, setActivePanel, openRide, closeRide, setRidePrice } = useCoaster();
+  const { state, setActivePanel, openRide, closeRide, startTrackBuild } = useCoaster();
   const { rides } = state;
 
   const getStatusColor = (status: string) => {
@@ -42,11 +43,15 @@ export function RidesPanel() {
           </p>
         ) : (
           <div className="space-y-3">
-            {rides.map(ride => (
-              <div 
-                key={ride.id}
-                className="p-3 bg-white/5 rounded-lg border border-white/10"
-              >
+            {rides.map(ride => {
+              const rideDef = RIDE_DEFINITIONS[ride.type];
+              const isTracked = rideDef?.isTracked ?? false;
+
+              return (
+                <div 
+                  key={ride.id}
+                  className="p-3 bg-white/5 rounded-lg border border-white/10"
+                >
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-white font-medium">{ride.name}</h3>
@@ -76,6 +81,16 @@ export function RidesPanel() {
                 </div>
 
                 <div className="mt-3 flex gap-2">
+                  {isTracked && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startTrackBuild(ride.id)}
+                      className="flex-1 text-xs h-7 border-white/20 text-white/80 hover:bg-white/10"
+                    >
+                      Build Track
+                    </Button>
+                  )}
                   {ride.status === 'open' ? (
                     <Button
                       variant="outline"
@@ -96,7 +111,8 @@ export function RidesPanel() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </ScrollArea>

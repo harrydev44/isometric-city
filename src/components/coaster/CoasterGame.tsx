@@ -13,6 +13,7 @@ import { FinancesPanel } from './panels/FinancesPanel';
 import { GuestsPanel } from './panels/GuestsPanel';
 import { ParkPanel } from './panels/ParkPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
+import { TrackBuilderPanel } from './panels/TrackBuilderPanel';
 
 interface CoasterGameProps {
   onExit?: () => void;
@@ -89,6 +90,7 @@ export function CoasterGame({ onExit }: CoasterGameProps) {
           {state.activePanel === 'finances' && <FinancesPanel />}
           {state.activePanel === 'park' && <ParkPanel />}
           {state.activePanel === 'settings' && <SettingsPanel onExit={onExit} />}
+          {state.trackBuildRideId && <TrackBuilderPanel />}
         </div>
       </TooltipProvider>
     );
@@ -125,6 +127,7 @@ export function CoasterGame({ onExit }: CoasterGameProps) {
         {state.activePanel === 'finances' && <FinancesPanel />}
         {state.activePanel === 'park' && <ParkPanel />}
         {state.activePanel === 'settings' && <SettingsPanel onExit={onExit} />}
+        {state.trackBuildRideId && <TrackBuilderPanel />}
       </div>
     </TooltipProvider>
   );

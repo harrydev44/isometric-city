@@ -30,6 +30,7 @@ import {
 } from '@/games/coaster/types/guests';
 import {
   Ride,
+  TrackPieceType,
   generateRideId,
   generateRideName,
   createEmptyStats,
@@ -44,6 +45,7 @@ import {
   SCENERY_DEFINITIONS,
   PathSurface,
 } from '@/games/coaster/types/buildings';
+import { calculateTrackEnd, canPlaceTrackPiece, calculateRideStats, TRACK_PIECES, isCircuitComplete } from '@/components/coaster/systems/trackBuilder';
 import { updateAllGuests, processGuestInteractions } from '@/components/coaster/systems/guestAI';
 import { updateRides } from '@/components/coaster/systems/rideSystem';
 
@@ -89,6 +91,11 @@ interface CoasterContextValue {
   closeRide: (rideId: string) => void;
   setRidePrice: (rideId: string, price: number) => void;
   renameRide: (rideId: string, name: string) => void;
+  startTrackBuild: (rideId: string) => void;
+  stopTrackBuild: () => void;
+  addTrackPiece: (piece: TrackPieceType) => void;
+  undoTrackPiece: () => void;
+  setSelectedTrackPiece: (piece?: TrackPieceType) => void;
   
   // Staff management
   hireStaff: (type: StaffType, x: number, y: number) => void;
@@ -345,6 +352,9 @@ function createInitialGameState(size: number = DEFAULT_GRID_SIZE, parkName: stri
     selectedRideType: undefined,
     selectedShopType: undefined,
     selectedSceneryType: undefined,
+    trackBuildRideId: undefined,
+    selectedTrackPiece: undefined,
+    trackBuildError: undefined,
     activePanel: 'none',
     notifications: [],
     gameVersion: 1,
@@ -374,6 +384,9 @@ function loadGameState(): CoasterGameState | null {
       if (parsed && parsed.grid && parsed.gridSize && parsed.park) {
         if (!parsed.shops) parsed.shops = [];
         if (!parsed.selectedShopType) parsed.selectedShopType = undefined;
+        if (!parsed.trackBuildRideId) parsed.trackBuildRideId = undefined;
+        if (!parsed.selectedTrackPiece) parsed.selectedTrackPiece = undefined;
+        if (!parsed.trackBuildError) parsed.trackBuildError = undefined;
         return parsed as CoasterGameState;
       }
     }
@@ -760,7 +773,7 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
         exitY: y + def.size.height,
         track: [],
         tiles: rideTiles,
-        status: 'open',
+        status: def.isTracked ? 'building' : 'open',
         operatingMode: 'normal',
         trains: [],
         numTrains: 1,
@@ -791,6 +804,9 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         grid: newGrid,
         rides: [...prev.rides, newRide],
+        trackBuildRideId: def.isTracked ? rideId : prev.trackBuildRideId,
+        selectedTrackPiece: def.isTracked ? 'station' : prev.selectedTrackPiece,
+        trackBuildError: undefined,
         finances: {
           ...prev.finances,
           cash: prev.finances.cash - def.buildCost,
@@ -1068,6 +1084,126 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
       rides: prev.rides.map(r => r.id === rideId ? { ...r, name, customName: true } : r),
     }));
   }, []);
+
+  const startTrackBuild = useCallback((rideId: string) => {
+    setState(prev => ({
+      ...prev,
+      trackBuildRideId: rideId,
+      selectedTrackPiece: 'station',
+      trackBuildError: undefined,
+    }));
+  }, []);
+
+  const stopTrackBuild = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      trackBuildRideId: undefined,
+      selectedTrackPiece: undefined,
+      trackBuildError: undefined,
+    }));
+  }, []);
+
+  const setSelectedTrackPiece = useCallback((piece?: TrackPieceType) => {
+    setState(prev => ({
+      ...prev,
+      selectedTrackPiece: piece,
+      trackBuildError: undefined,
+    }));
+  }, []);
+
+  const addTrackPiece = useCallback((piece: TrackPieceType) => {
+    setState(prev => {
+      if (!prev.trackBuildRideId) return prev;
+      const rideIndex = prev.rides.findIndex(r => r.id === prev.trackBuildRideId);
+      if (rideIndex < 0) return prev;
+
+      const ride = prev.rides[rideIndex];
+      const def = RIDE_DEFINITIONS[ride.type];
+      if (!def?.isTracked) {
+        return { ...prev, trackBuildError: 'Track building is only available for tracked rides.' };
+      }
+
+      const newTrack = [...ride.track];
+      if (newTrack.length === 0 && piece !== 'station') {
+        return { ...prev, trackBuildError: 'Track must start with a station.' };
+      }
+
+      let nextElement: { type: TrackPieceType; x: number; y: number; height: number; direction: 0 | 1 | 2 | 3 } | null = null;
+
+      if (newTrack.length === 0) {
+        const tileHeight = prev.grid[ride.entranceY]?.[ride.entranceX]?.height ?? 0;
+        nextElement = {
+          type: piece,
+          x: ride.entranceX,
+          y: Math.max(0, ride.entranceY - 1),
+          height: tileHeight,
+          direction: 0,
+        };
+      } else {
+        const last = newTrack[newTrack.length - 1];
+        const lastDef = TRACK_PIECES[last.type];
+        if (!lastDef) return prev;
+        const end = calculateTrackEnd(last, lastDef);
+        const validation = canPlaceTrackPiece(newTrack, piece, end.x, end.y, end.height, end.direction, prev.gridSize);
+        if (!validation.valid) {
+          return { ...prev, trackBuildError: validation.error ?? 'Invalid track placement' };
+        }
+        nextElement = {
+          type: piece,
+          x: end.x,
+          y: end.y,
+          height: end.height,
+          direction: end.direction,
+        };
+      }
+
+      if (!nextElement) return prev;
+      newTrack.push(nextElement);
+
+      const updatedRide: Ride = {
+        ...ride,
+        track: newTrack,
+        stats: def.category === 'coaster' ? calculateRideStats(newTrack, ride.type as any) : ride.stats,
+        status: isCircuitComplete(newTrack) ? 'open' : ride.status,
+      };
+
+      const newRides = [...prev.rides];
+      newRides[rideIndex] = updatedRide;
+
+      return {
+        ...prev,
+        rides: newRides,
+        trackBuildError: undefined,
+      };
+    });
+  }, []);
+
+  const undoTrackPiece = useCallback(() => {
+    setState(prev => {
+      if (!prev.trackBuildRideId) return prev;
+      const rideIndex = prev.rides.findIndex(r => r.id === prev.trackBuildRideId);
+      if (rideIndex < 0) return prev;
+
+      const ride = prev.rides[rideIndex];
+      if (ride.track.length === 0) return prev;
+
+      const newTrack = ride.track.slice(0, -1);
+      const updatedRide: Ride = {
+        ...ride,
+        track: newTrack,
+        status: newTrack.length === 0 ? 'building' : ride.status,
+      };
+
+      const newRides = [...prev.rides];
+      newRides[rideIndex] = updatedRide;
+
+      return {
+        ...prev,
+        rides: newRides,
+        trackBuildError: undefined,
+      };
+    });
+  }, []);
   
   const hireStaff = useCallback((type: StaffType, x: number, y: number) => {
     setState(prev => {
@@ -1147,6 +1283,9 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
       if (parsed && parsed.grid && parsed.gridSize && parsed.park) {
         if (!parsed.shops) parsed.shops = [];
         if (!parsed.selectedShopType) parsed.selectedShopType = undefined;
+        if (!parsed.trackBuildRideId) parsed.trackBuildRideId = undefined;
+        if (!parsed.selectedTrackPiece) parsed.selectedTrackPiece = undefined;
+        if (!parsed.trackBuildError) parsed.trackBuildError = undefined;
         skipNextSaveRef.current = true;
         setState(parsed as CoasterGameState);
         return true;
@@ -1215,6 +1354,9 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
       if (parsed && parsed.grid && parsed.gridSize && parsed.park) {
         if (!parsed.shops) parsed.shops = [];
         if (!parsed.selectedShopType) parsed.selectedShopType = undefined;
+        if (!parsed.trackBuildRideId) parsed.trackBuildRideId = undefined;
+        if (!parsed.selectedTrackPiece) parsed.selectedTrackPiece = undefined;
+        if (!parsed.trackBuildError) parsed.trackBuildError = undefined;
         skipNextSaveRef.current = true;
         setState(parsed as CoasterGameState);
         saveGameStateAsync(parsed);
@@ -1284,6 +1426,11 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
     closeRide,
     setRidePrice,
     renameRide,
+    startTrackBuild,
+    stopTrackBuild,
+    addTrackPiece,
+    undoTrackPiece,
+    setSelectedTrackPiece,
     hireStaff,
     fireStaff,
     setParkEntranceFee,

@@ -849,7 +849,7 @@ export const RIDE_DEFINITIONS: Record<RideType, RideDefinition> = {
     category: 'coaster',
     name: 'Junior Coaster',
     description: 'A gentle coaster for younger guests',
-    buildCost: 25000,
+    buildCost: 8000,
     runningCostPerHour: 80,
     size: { width: 2, height: 1 },
     isTracked: true,

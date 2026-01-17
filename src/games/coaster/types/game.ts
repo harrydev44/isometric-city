@@ -4,7 +4,7 @@
 
 import { PathSurface, PathType, ParkBuilding, SceneryType, RideType, ShopType, Shop } from './buildings';
 import { Guest, Staff } from './guests';
-import { Ride, TrackElement } from './rides';
+import { Ride, TrackElement, TrackPieceType } from './rides';
 
 // =============================================================================
 // TERRAIN
@@ -353,6 +353,9 @@ export interface CoasterGameState {
   selectedShopType?: ShopType;
   selectedSceneryType?: SceneryType;
   activePanel: 'none' | 'rides' | 'guests' | 'staff' | 'finances' | 'research' | 'park' | 'settings';
+  trackBuildRideId?: string;
+  selectedTrackPiece?: TrackPieceType;
+  trackBuildError?: string;
   
   // Notifications
   notifications: Notification[];
