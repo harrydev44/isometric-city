@@ -70,6 +70,66 @@ const findPath = (
   return null;
 };
 
+const getQueueTilesForRide = (state: CoasterGameState, ride: Ride) => {
+  if (!ride.entrance) return [];
+  const startTiles = [
+    { x: ride.entrance.x - 1, y: ride.entrance.y },
+    { x: ride.entrance.x + 1, y: ride.entrance.y },
+    { x: ride.entrance.x, y: ride.entrance.y - 1 },
+    { x: ride.entrance.x, y: ride.entrance.y + 1 },
+  ].filter((pos) => state.grid[pos.y]?.[pos.x]?.path === 'queue');
+
+  const queueTiles: { x: number; y: number; distance: number }[] = [];
+  const visited = new Set<string>();
+  const queue = startTiles.map((tile) => ({ ...tile, distance: 1 }));
+
+  queue.forEach((tile) => visited.add(`${tile.x},${tile.y}`));
+
+  while (queue.length) {
+    const current = queue.shift()!;
+    queueTiles.push(current);
+    const neighbors = [
+      { x: current.x - 1, y: current.y },
+      { x: current.x + 1, y: current.y },
+      { x: current.x, y: current.y - 1 },
+      { x: current.x, y: current.y + 1 },
+    ];
+
+    neighbors.forEach((neighbor) => {
+      const key = `${neighbor.x},${neighbor.y}`;
+      if (visited.has(key)) return;
+      if (state.grid[neighbor.y]?.[neighbor.x]?.path !== 'queue') return;
+      visited.add(key);
+      queue.push({ ...neighbor, distance: current.distance + 1 });
+    });
+  }
+
+  return queueTiles;
+};
+
+const getRideTargetTile = (state: CoasterGameState, ride: Ride) => {
+  if (!ride.entrance) return null;
+
+  const queueTiles = getQueueTilesForRide(state, ride);
+  if (queueTiles.length) {
+    return queueTiles.reduce((furthest, tile) => (tile.distance > furthest.distance ? tile : furthest));
+  }
+
+  const entranceTile = state.grid[ride.entrance.y]?.[ride.entrance.x];
+  if (entranceTile?.path) {
+    return { x: ride.entrance.x, y: ride.entrance.y, distance: 0 };
+  }
+
+  const adjacentPath = [
+    { x: ride.entrance.x - 1, y: ride.entrance.y },
+    { x: ride.entrance.x + 1, y: ride.entrance.y },
+    { x: ride.entrance.x, y: ride.entrance.y - 1 },
+    { x: ride.entrance.x, y: ride.entrance.y + 1 },
+  ].find((pos) => state.grid[pos.y]?.[pos.x]?.path);
+
+  return adjacentPath ? { ...adjacentPath, distance: 0 } : null;
+};
+
 const chooseRide = (state: CoasterGameState, guest: Guest): Ride | null => {
   const openRides = state.rides.filter((ride) => ride.status !== 'closed');
   if (!openRides.length) return null;
@@ -173,6 +233,7 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
     let progress = guest.progress;
     let direction = guest.direction;
     let guestState = guest.state;
+    let queueTile = guest.queueTile;
 
     if (needs.hunger < 15 || needs.thirst < 15 || needs.energy < 10) {
       needs.happiness = clamp(needs.happiness - deltaSeconds * 0.4, 0, 100);
@@ -198,12 +259,24 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
         }
       } else if (!targetRideId) {
         const nextRide = chooseRide(state, guest);
-        if (nextRide && nextRide.entrance) {
-          const targetPath = findPath(state, { x: tileX, y: tileY }, nextRide.entrance);
+        if (nextRide) {
+          const targetTile = getRideTargetTile(state, nextRide);
+          if (!targetTile) {
+            return {
+              ...guest,
+              needs,
+              state: guestState,
+              stateTimer,
+              money,
+            };
+          }
+
+          const targetPath = findPath(state, { x: tileX, y: tileY }, targetTile);
           if (targetPath) {
             targetRideId = nextRide.id;
             path = targetPath;
             pathIndex = 0;
+            queueTile = targetTile.distance > 0 ? { x: targetTile.x, y: targetTile.y } : null;
           }
         }
       }
@@ -231,14 +304,22 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
       if (!ride) {
         guestState = 'walking';
         targetRideId = null;
-      } else if (stateTimer >= Math.min(MAX_QUEUE_WAIT, ride.performance.waitTime + 2)) {
+      } else {
+        const queueTiles = getQueueTilesForRide(state, ride);
+        const queueLength = queueTiles.length || 1;
+        const baseWait = (ride.duration / 10) * (queueLength / Math.max(1, ride.capacity));
+        ride.performance.waitTime = clamp(baseWait, 0.5, MAX_QUEUE_WAIT);
+      }
+
+      if (ride && ride.status === 'closed') {
+        guestState = 'walking';
+        targetRideId = null;
+      } else if (ride && stateTimer >= Math.min(MAX_QUEUE_WAIT, ride.performance.waitTime + 2)) {
         guestState = 'riding';
         stateTimer = 0;
         currentRideId = ride.id;
         targetRideId = null;
         ride.performance.waitTime = Math.max(0, ride.performance.waitTime - 1);
-      } else {
-        ride.performance.waitTime = Math.min(MAX_QUEUE_WAIT, ride.performance.waitTime + deltaSeconds * 0.2);
       }
     }
 
@@ -294,6 +375,7 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
       currentRideId,
       targetRideId,
       stateTimer,
+      queueTile,
     };
   });
 

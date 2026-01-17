@@ -441,6 +441,58 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
             additionalCost += loopCost;
           }
 
+          const pathCost = COASTER_TOOL_INFO.path.cost;
+          const queueCost = COASTER_TOOL_INFO.queue.cost;
+          const entranceTarget = { x, y: y + 1 };
+          const pathTargets: { x: number; y: number; type: 'path' | 'queue' }[] = [];
+          let currentX = prev.parkEntrance.x;
+          let currentY = prev.parkEntrance.y;
+
+          while (currentX !== entranceTarget.x) {
+            currentX += Math.sign(entranceTarget.x - currentX);
+            pathTargets.push({ x: currentX, y: currentY, type: 'path' });
+          }
+          while (currentY !== entranceTarget.y) {
+            currentY += Math.sign(entranceTarget.y - currentY);
+            pathTargets.push({ x: currentX, y: currentY, type: 'path' });
+          }
+
+          if (
+            pathTargets.length &&
+            pathTargets[pathTargets.length - 1].x === entranceTarget.x &&
+            pathTargets[pathTargets.length - 1].y === entranceTarget.y
+          ) {
+            pathTargets.pop();
+          }
+
+          pathTargets.push({ x: entranceTarget.x, y: entranceTarget.y, type: 'queue' });
+          pathTargets.push({ x: entranceTarget.x, y: entranceTarget.y + 1, type: 'queue' });
+
+          const pathEdits: { x: number; y: number; type: 'path' | 'queue' }[] = [];
+          pathTargets.forEach((target) => {
+            const targetTile = grid[target.y]?.[target.x];
+            if (!targetTile) return;
+            if (targetTile.track || targetTile.rideId || targetTile.facility) return;
+            if (target.type === 'queue' && targetTile.path === 'queue') return;
+            if (target.type === 'path' && targetTile.path) return;
+            pathEdits.push(target);
+          });
+
+          const pathTotalCost = pathEdits.reduce(
+            (sum, target) => sum + (target.type === 'queue' ? queueCost : pathCost),
+            0
+          );
+
+          const availableFunds = prev.finance.money - toolInfo.cost - additionalCost;
+          if (availableFunds >= pathTotalCost) {
+            pathEdits.forEach((target) => {
+              const updatedTile = { ...grid[target.y][target.x], scenery: [...grid[target.y][target.x].scenery] };
+              updatedTile.path = target.type;
+              grid[target.y][target.x] = updatedTile;
+            });
+            additionalCost += pathTotalCost;
+          }
+
           updated = true;
           tileUpdated = true;
         }

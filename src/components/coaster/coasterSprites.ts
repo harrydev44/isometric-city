@@ -126,6 +126,13 @@ export const COASTER_ENTRANCE_SPRITE: SpriteConfig = {
   offsetY: -0.4,
 };
 
+export const COASTER_QUEUE_SPRITE: SpriteConfig = {
+  src: '/assets/coaster/queue_barrier.png',
+  scale: 1.05,
+  offsetX: 0,
+  offsetY: -0.15,
+};
+
 export function preloadCoasterSprites() {
   const sources = [
     ...Object.values(COASTER_TRACK_SPRITES).map((sprite) => sprite.src),
@@ -133,6 +140,7 @@ export function preloadCoasterSprites() {
     ...Object.values(COASTER_STALL_SPRITES).map((sprite) => sprite.src),
     COASTER_TRAIN_SPRITE.src,
     COASTER_ENTRANCE_SPRITE.src,
+    COASTER_QUEUE_SPRITE.src,
   ];
 
   sources.forEach((src) => {

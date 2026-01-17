@@ -12,6 +12,7 @@ import {
   COASTER_STALL_SPRITES,
   COASTER_TRAIN_SPRITE,
   COASTER_ENTRANCE_SPRITE,
+  COASTER_QUEUE_SPRITE,
   preloadCoasterSprites,
   SpriteConfig,
 } from '@/components/coaster/coasterSprites';
@@ -369,6 +370,9 @@ export function CoasterCanvasGrid({
           const centerX = screenX + TILE_WIDTH / 2;
           const centerY = screenY + TILE_HEIGHT / 2;
           drawInsetDiamond(ctx, centerX, centerY, TILE_WIDTH * 0.7, TILE_HEIGHT * 0.7, PATH_COLORS[tile.path]);
+          if (tile.path === 'queue') {
+            drawSprite(ctx, COASTER_QUEUE_SPRITE, centerX, centerY);
+          }
         }
 
         if (tile.x === parkEntrance.x && tile.y === parkEntrance.y) {
