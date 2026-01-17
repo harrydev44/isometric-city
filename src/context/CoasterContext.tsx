@@ -50,6 +50,8 @@ const TOOL_SHOP_MAP: Partial<Record<CoasterTool, CoasterBuildingType>> = {
   shop_ice_cream: 'ice_cream_stall',
   shop_souvenir: 'souvenir_shop',
   shop_info: 'info_kiosk',
+  shop_atm: 'atm',
+  shop_first_aid: 'first_aid',
   shop_toilet: 'toilets',
 };
 

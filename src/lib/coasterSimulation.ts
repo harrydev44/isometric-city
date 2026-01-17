@@ -68,6 +68,8 @@ const BENCH_REST_RADIUS = 3;
 const BENCH_REST_TICKS = 25;
 const BENCH_ENERGY_RECOVERY = 2.5;
 const BENCH_HAPPINESS_RECOVERY = 0.3;
+const ATM_VISIT_THRESHOLD = 30;
+const ATM_TARGET_CASH = 100;
 const MECHANIC_UPTIME_BOOST = 0.0012;
 const RIDE_UPTIME_DECAY = 0.0005;
 const PAYROLL_INTERVAL_DAYS = 7;
@@ -266,7 +268,7 @@ function applyWeatherMood(guest: Guest, weather: WeatherState): Guest {
   };
 }
 
-const SHOP_EFFECTS: Record<CoasterBuildingType, { hunger?: number; thirst?: number; bathroom?: number; happiness?: number; cost: number }> = {
+const SHOP_EFFECTS: Record<CoasterBuildingType, { hunger?: number; thirst?: number; bathroom?: number; happiness?: number; nausea?: number; energy?: number; moneyDelta?: number; cost: number }> = {
   food_stall: { hunger: 100, happiness: 6, cost: 5 },
   drink_stall: { thirst: 110, happiness: 4, cost: 3 },
   ice_cream_stall: { hunger: 80, happiness: 8, cost: 4 },
@@ -274,7 +276,7 @@ const SHOP_EFFECTS: Record<CoasterBuildingType, { hunger?: number; thirst?: numb
   info_kiosk: { happiness: 2, cost: 2 },
   toilets: { bathroom: 140, happiness: 4, cost: 0 },
   atm: { happiness: 2, cost: 0 },
-  first_aid: { happiness: 6, cost: 0 },
+  first_aid: { happiness: 6, nausea: -80, cost: 0 },
   staff_room: { happiness: 0, cost: 0 },
 };
 
@@ -316,18 +318,23 @@ function applyShopEffects(
   const effect = SHOP_EFFECTS[shopType];
   if (!effect) return guest;
   const cost = priceOverride ?? effect.cost ?? 0;
+  const moneyDelta = shopType === 'atm'
+    ? Math.max(0, ATM_TARGET_CASH - guest.money)
+    : effect.moneyDelta ?? 0;
   const needs = {
     ...guest.needs,
     hunger: clamp(guest.needs.hunger + (effect.hunger ?? 0)),
     thirst: clamp(guest.needs.thirst + (effect.thirst ?? 0)),
     bathroom: clamp(guest.needs.bathroom + (effect.bathroom ?? 0)),
+    nausea: clamp(guest.needs.nausea + (effect.nausea ?? 0)),
+    energy: clamp(guest.needs.energy + (effect.energy ?? 0)),
   };
   const happiness = clamp(guest.happiness + (effect.happiness ?? 0));
   return {
     ...guest,
     needs: { ...needs, happiness },
     happiness,
-    money: Math.max(0, guest.money - cost),
+    money: Math.max(0, guest.money - cost + moneyDelta),
     hasItem: item ?? guest.hasItem,
   };
 }
@@ -841,8 +848,9 @@ function updateGuestThoughts(guest: Guest, tick: number, entranceFee: number, sc
   };
 }
 
-function shouldGuestLeavePark(guest: Guest): boolean {
-  return guest.money <= LEAVE_PARK_MONEY
+function shouldGuestLeavePark(guest: Guest, canUseATM: boolean): boolean {
+  const lowMoney = guest.money <= LEAVE_PARK_MONEY && !canUseATM;
+  return lowMoney
     || guest.happiness < LEAVE_PARK_HAPPINESS
     || guest.needs.energy < LEAVE_PARK_ENERGY
     || guest.needs.hunger < LEAVE_PARK_NEED
@@ -1103,6 +1111,9 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     });
   }
 
+  const shopTargets = findShopTargets(state.grid);
+  const atmTargets = shopTargets.filter((target) => target.type === 'atm');
+
   const entertainers = state.staff.filter((member) => member.type === 'entertainer');
   const securityStaff = state.staff.filter((member) => member.type === 'security');
   nextGuests = nextGuests.map((guest) => applyQueuePatience(guest, state.tick));
@@ -1142,7 +1153,8 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     : state.parkEntrance;
   nextGuests = nextGuests.map((guest) => {
     if (guest.state === 'leaving_park' || guest.state === 'on_ride' || guest.state === 'at_shop') return guest;
-    if (!shouldGuestLeavePark(guest)) return guest;
+    const canUseATM = atmTargets.some((target) => target.price <= guest.money);
+    if (!shouldGuestLeavePark(guest, canUseATM)) return guest;
     const path = findPath({ x: guest.tileX, y: guest.tileY }, exitTarget, state.grid);
     if (!path || path.length < 2) {
       return { ...guest, age: guest.maxAge + 1 };
@@ -1185,10 +1197,25 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     return guest;
   });
 
-  const shopTargets = findShopTargets(state.grid);
   if (shopTargets.length > 0) {
     nextGuests = nextGuests.map((guest) => {
       if (guest.state !== 'wandering' || guest.targetRideId || guest.targetShop) return guest;
+      if (guest.money <= ATM_VISIT_THRESHOLD) {
+        const shop = findClosestShop(guest, shopTargets, ['atm']);
+        if (shop) {
+          const path = findPath({ x: guest.tileX, y: guest.tileY }, shop.position, state.grid);
+          if (path && path.length > 1) {
+            return {
+              ...guest,
+              state: 'heading_to_shop',
+              targetShop: shop,
+              path,
+              pathIndex: 0,
+              progress: 0,
+            };
+          }
+        }
+      }
       if (guest.needs.hunger < 110) {
         const shop = findClosestShop(guest, shopTargets, ['food_stall', 'ice_cream_stall']);
         if (shop) {
@@ -1223,6 +1250,54 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       }
       if (guest.needs.bathroom < 80) {
         const shop = findClosestShop(guest, shopTargets, ['toilets']);
+        if (shop) {
+          const path = findPath({ x: guest.tileX, y: guest.tileY }, shop.position, state.grid);
+          if (path && path.length > 1) {
+            return {
+              ...guest,
+              state: 'heading_to_shop',
+              targetShop: shop,
+              path,
+              pathIndex: 0,
+              progress: 0,
+            };
+          }
+        }
+      }
+      if (guest.needs.nausea > 110) {
+        const shop = findClosestShop(guest, shopTargets, ['first_aid']);
+        if (shop) {
+          const path = findPath({ x: guest.tileX, y: guest.tileY }, shop.position, state.grid);
+          if (path && path.length > 1) {
+            return {
+              ...guest,
+              state: 'heading_to_shop',
+              targetShop: shop,
+              path,
+              pathIndex: 0,
+              progress: 0,
+            };
+          }
+        }
+      }
+      if (!guest.hasItem && guest.money >= 2 && Math.random() < 0.03) {
+        const shop = findClosestShop(guest, shopTargets, ['info_kiosk']);
+        if (shop) {
+          const path = findPath({ x: guest.tileX, y: guest.tileY }, shop.position, state.grid);
+          if (path && path.length > 1) {
+            return {
+              ...guest,
+              state: 'heading_to_shop',
+              targetShop: shop,
+              path,
+              pathIndex: 0,
+              progress: 0,
+            };
+          }
+        }
+      }
+      if (guest.happiness > 140 && guest.money >= 6 && Math.random() < 0.02) {
+        const shop = findClosestShop(guest, shopTargets, ['souvenir_shop']);
         if (shop) {
           const path = findPath({ x: guest.tileX, y: guest.tileY }, shop.position, state.grid);
           if (path && path.length > 1) {

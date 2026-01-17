@@ -61,6 +61,8 @@ export type CoasterTool =
   | 'shop_ice_cream'
   | 'shop_souvenir'
   | 'shop_info'
+  | 'shop_atm'
+  | 'shop_first_aid'
   | 'shop_toilet'
   | 'staff_handyman'
   | 'staff_mechanic'
@@ -101,6 +103,8 @@ export const TOOL_INFO: Record<CoasterTool, ToolInfo> = {
   shop_ice_cream: { name: 'Ice Cream', cost: 420, description: 'Sweet treats for guests', size: 1 },
   shop_souvenir: { name: 'Souvenir Shop', cost: 550, description: 'Sell park souvenirs', size: 1 },
   shop_info: { name: 'Info Kiosk', cost: 250, description: 'Provide maps and tips', size: 1 },
+  shop_atm: { name: 'ATM', cost: 300, description: 'Let guests withdraw cash', size: 1 },
+  shop_first_aid: { name: 'First Aid', cost: 350, description: 'Help guests recover', size: 1 },
   shop_toilet: { name: 'Toilets', cost: 200, description: 'Restrooms for guests', size: 1 },
   staff_handyman: { name: 'Handyman', cost: 0, description: 'Hire a handyman for cleaning' },
   staff_mechanic: { name: 'Mechanic', cost: 0, description: 'Hire a mechanic for repairs' },
