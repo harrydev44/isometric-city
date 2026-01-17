@@ -69,6 +69,9 @@ export default function CoasterGame() {
           <div className="flex items-center gap-4 text-sm">
             <div>Guests: {state.stats.guestsInPark}</div>
             <div>Rating: {state.stats.rating}</div>
+            <div className="capitalize text-muted-foreground">
+              {state.weather.type} · {state.weather.temperature}°C
+            </div>
             <div className="font-medium">${state.finance.cash.toLocaleString()}</div>
           </div>
           <div className="flex items-center gap-2">
