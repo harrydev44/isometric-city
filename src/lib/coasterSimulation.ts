@@ -61,6 +61,8 @@ const CLEANLINESS_DECAY_PER_GUEST = 0.006;
 const HANDYMAN_CLEANLINESS_BOOST = 0.25;
 const ENTERTAINER_RADIUS = 4;
 const SECURITY_RADIUS = 3;
+const SCENERY_RADIUS = 3;
+const SCENERY_HAPPINESS_BOOST = 0.4;
 const MECHANIC_UPTIME_BOOST = 0.0012;
 const RIDE_UPTIME_DECAY = 0.0005;
 const PAYROLL_INTERVAL_DAYS = 7;
@@ -495,7 +497,8 @@ function updateStaffMovement(staff: Staff, grid: CoasterTile[][]): Staff {
   };
 }
 
-type ShopTarget = { position: { x: number; y: number }; type: CoasterBuildingType };
+type ShopTarget = { position: { x: number; y: number }; type: CoasterBuildingType; price: number };
+type SceneryTarget = { position: { x: number; y: number } };
 
 function findShopTargets(grid: CoasterTile[][]): ShopTarget[] {
   const targets: ShopTarget[] = [];
@@ -503,7 +506,7 @@ function findShopTargets(grid: CoasterTile[][]): ShopTarget[] {
     for (let x = 0; x < grid[y].length; x++) {
       const building = grid[y][x].building;
       if (building) {
-        targets.push({ position: { x, y }, type: building.type });
+        targets.push({ position: { x, y }, type: building.type, price: building.price });
       }
     }
   }
@@ -515,6 +518,7 @@ function findClosestShop(guest: Guest, targets: ShopTarget[], types: CoasterBuil
   let closestDistance = Number.POSITIVE_INFINITY;
   targets.forEach((target) => {
     if (!types.includes(target.type)) return;
+    if (target.price > guest.money) return;
     const distance = Math.abs(target.position.x - guest.tileX) + Math.abs(target.position.y - guest.tileY);
     if (distance < closestDistance) {
       closestDistance = distance;
@@ -522,6 +526,38 @@ function findClosestShop(guest: Guest, targets: ShopTarget[], types: CoasterBuil
     }
   });
   return closest;
+}
+
+function findSceneryTargets(grid: CoasterTile[][]): SceneryTarget[] {
+  const targets: SceneryTarget[] = [];
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      const scenery = grid[y][x].scenery;
+      if (scenery) {
+        targets.push({ position: { x, y } });
+      }
+    }
+  }
+  return targets;
+}
+
+function isSceneryNearby(guest: Guest, targets: SceneryTarget[], radius: number): boolean {
+  return targets.some((target) => (
+    Math.abs(target.position.x - guest.tileX) + Math.abs(target.position.y - guest.tileY) <= radius
+  ));
+}
+
+function applySceneryMood(guest: Guest): Guest {
+  const happiness = clamp(guest.happiness + SCENERY_HAPPINESS_BOOST);
+  if (happiness === guest.happiness) return guest;
+  return {
+    ...guest,
+    happiness,
+    needs: {
+      ...guest.needs,
+      happiness,
+    },
+  };
 }
 
 function findRideAccessTile(ride: CoasterParkState['rides'][number], grid: CoasterTile[][]): { x: number; y: number } | null {
@@ -661,7 +697,8 @@ function calculateQueueCapacities(state: CoasterParkState): Map<string, number> 
 function getGuestThoughtCandidate(
   guest: Guest,
   tick: number,
-  entranceFee: number
+  entranceFee: number,
+  sceneryNearby: boolean
 ): { type: GuestThoughtType; message: string } | null {
   if (guest.state === 'queuing' && guest.queueJoinTick !== null && tick - guest.queueJoinTick > QUEUE_THOUGHT_TICKS) {
     return { type: 'warning', message: 'This line is taking forever.' };
@@ -681,6 +718,9 @@ function getGuestThoughtCandidate(
   if (guest.state === 'on_ride') {
     return { type: 'positive', message: 'This ride is fun!' };
   }
+  if (sceneryNearby) {
+    return { type: 'positive', message: 'The park looks beautiful.' };
+  }
   if (entranceFee >= 15 && guest.age < 120) {
     return { type: 'negative', message: 'That entrance fee was steep.' };
   }
@@ -693,8 +733,8 @@ function getGuestThoughtCandidate(
   return null;
 }
 
-function updateGuestThoughts(guest: Guest, tick: number, entranceFee: number): Guest {
-  const candidate = getGuestThoughtCandidate(guest, tick, entranceFee);
+function updateGuestThoughts(guest: Guest, tick: number, entranceFee: number, sceneryNearby: boolean): Guest {
+  const candidate = getGuestThoughtCandidate(guest, tick, entranceFee, sceneryNearby);
   if (!candidate) return guest;
   const lastThought = guest.thoughts[0];
   if (lastThought && lastThought.message === candidate.message && tick - lastThought.timestamp < THOUGHT_COOLDOWN) {
@@ -943,7 +983,16 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     nextGuests = nextGuests.map((guest) => applyStaffMoodEffects(guest, entertainers, securityStaff));
   }
 
-  nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick, state.finance.entranceFee));
+  const sceneryTargets = findSceneryTargets(state.grid);
+  if (sceneryTargets.length > 0) {
+    nextGuests = nextGuests.map((guest) => {
+      const sceneryNearby = isSceneryNearby(guest, sceneryTargets, SCENERY_RADIUS);
+      const boostedGuest = sceneryNearby ? applySceneryMood(guest) : guest;
+      return updateGuestThoughts(boostedGuest, state.tick, state.finance.entranceFee, sceneryNearby);
+    });
+  } else {
+    nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick, state.finance.entranceFee, false));
+  }
 
   nextGuests = nextGuests.map((guest) => {
     if (guest.state !== 'queuing' || guest.queueJoinTick === null) return guest;
