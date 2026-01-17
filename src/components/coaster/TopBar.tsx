@@ -158,6 +158,13 @@ export function TopBar() {
         >
           Rides
         </Button>
+        <Button
+          variant={state.activePanel === 'settings' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setActivePanel(state.activePanel === 'settings' ? 'none' : 'settings')}
+        >
+          Settings
+        </Button>
       </div>
     </div>
   );

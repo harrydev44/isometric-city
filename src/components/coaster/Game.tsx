@@ -7,6 +7,7 @@ import { CoasterGrid } from './CoasterGrid';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { MiniMap } from './MiniMap';
+import { Panels } from './panels/Panels';
 
 interface GameProps {
   onExit?: () => void;
@@ -56,6 +57,9 @@ export default function CoasterGame({ onExit }: GameProps) {
               onNavigate={(x, y) => setNavigationTarget({ x, y })}
               viewport={viewport}
             />
+
+            {/* Panels */}
+            <Panels />
           </div>
         </div>
       </div>
