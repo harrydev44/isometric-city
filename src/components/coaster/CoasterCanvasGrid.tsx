@@ -1,4 +1,3 @@
-/* eslint-disable no-param-reassign */
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -108,6 +107,7 @@ export function CoasterCanvasGrid({
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
+  const lastNavigationRef = useRef<{ x: number; y: number } | null>(null);
 
   const drawInsetDiamond = useCallback(
     (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, width: number, height: number, colors: typeof PATH_COLORS.path) => {
@@ -486,15 +486,22 @@ export function CoasterCanvasGrid({
     });
   }, [canvasSize, offset, onViewportChange, zoom]);
 
-  useEffect(() => {
-    if (!navigationTarget) return;
+  if (
+    navigationTarget &&
+    (lastNavigationRef.current?.x !== navigationTarget.x ||
+      lastNavigationRef.current?.y !== navigationTarget.y)
+  ) {
+    lastNavigationRef.current = { x: navigationTarget.x, y: navigationTarget.y };
     const { screenX, screenY } = gridToScreen(navigationTarget.x, navigationTarget.y, 0, 0);
-    setOffset({
+    const newOffset = {
       x: canvasSize.width / 2 - screenX,
       y: canvasSize.height / 2 - screenY,
-    });
+    };
+    if (offset.x !== newOffset.x || offset.y !== newOffset.y) {
+      setOffset(newOffset);
+    }
     onNavigationComplete?.();
-  }, [canvasSize.height, canvasSize.width, navigationTarget, onNavigationComplete]);
+  }
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {

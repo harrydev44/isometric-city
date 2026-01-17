@@ -1,20 +1,37 @@
 'use client';
 
 import React from 'react';
+import { msg, useMessages, useGT } from 'gt-next';
 import { useCoaster } from '@/context/CoasterContext';
 import { Button } from '@/components/ui/button';
 import { MoneyIcon, PopulationIcon, HappyIcon, PlayIcon, PauseIcon, FastForwardIcon } from '@/components/ui/Icons';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS: Record<string, unknown> = {
+  1: msg('Jan'),
+  2: msg('Feb'),
+  3: msg('Mar'),
+  4: msg('Apr'),
+  5: msg('May'),
+  6: msg('Jun'),
+  7: msg('Jul'),
+  8: msg('Aug'),
+  9: msg('Sep'),
+  10: msg('Oct'),
+  11: msg('Nov'),
+  12: msg('Dec'),
+};
 
 export function CoasterTopBar() {
   const { state, setSpeed } = useCoaster();
   const { finance, guests, parkRating, hour, day, month, year, speed, parkName } = state;
+  const m = useMessages();
+  const gt = useGT();
 
   const hourInt = Math.floor(hour);
   const minutes = Math.floor((hour - hourInt) * 60);
   const timeLabel = `${hourInt.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  const dateLabel = `${MONTHS[Math.max(0, month - 1)]} ${day}, ${year}`;
+  const monthLabel = m(MONTHS[month] as Parameters<typeof m>[0]);
+  const dateLabel = gt('{month} {day}, {year}', { month: monthLabel, day, year });
 
   return (
     <div className="h-16 border-b border-border bg-card/70 backdrop-blur-md px-4 flex items-center justify-between">
@@ -43,7 +60,7 @@ export function CoasterTopBar() {
             variant={speed === 0 ? 'default' : 'ghost'}
             size="icon-sm"
             onClick={() => setSpeed(0)}
-            title="Pause"
+            title={gt('Pause')}
           >
             <PauseIcon size={16} />
           </Button>
@@ -51,7 +68,7 @@ export function CoasterTopBar() {
             variant={speed === 1 ? 'default' : 'ghost'}
             size="icon-sm"
             onClick={() => setSpeed(1)}
-            title="Normal Speed"
+            title={gt('Normal Speed')}
           >
             <PlayIcon size={16} />
           </Button>
@@ -59,7 +76,7 @@ export function CoasterTopBar() {
             variant={speed === 2 ? 'default' : 'ghost'}
             size="icon-sm"
             onClick={() => setSpeed(2)}
-            title="Fast Speed"
+            title={gt('Fast Speed')}
           >
             <FastForwardIcon size={16} />
           </Button>
@@ -67,7 +84,7 @@ export function CoasterTopBar() {
             variant={speed === 3 ? 'default' : 'ghost'}
             size="icon-sm"
             onClick={() => setSpeed(3)}
-            title="Ultra Speed"
+            title={gt('Ultra Speed')}
           >
             <FastForwardIcon size={16} className="translate-x-0.5" />
           </Button>
