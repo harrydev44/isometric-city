@@ -5,6 +5,7 @@ export type RideType =
   | 'carousel'
   | 'ferris_wheel'
   | 'swing_ride'
+  | 'scrambler'
   | 'food_stall'
   | 'drink_stall'
   | 'souvenir_stall'

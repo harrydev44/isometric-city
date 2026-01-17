@@ -171,6 +171,8 @@ const rideTypeFromTool = (tool: CoasterTool): RideType | null => {
       return 'junior_coaster';
     case 'log_flume':
       return 'log_flume';
+    case 'scrambler':
+      return 'scrambler';
     case 'food_stall':
       return 'food_stall';
     case 'drink_stall':
@@ -211,6 +213,8 @@ const defaultRideStats = (type: RideType) => {
       return { price: 6, capacity: 14, duration: 50, excitement: 5, intensity: 3, nausea: 2, footprint: { width: 2, height: 2 } };
     case 'log_flume':
       return { price: 7, capacity: 16, duration: 65, excitement: 6, intensity: 4, nausea: 3, footprint: { width: 3, height: 2 } };
+    case 'scrambler':
+      return { price: 6, capacity: 20, duration: 55, excitement: 6, intensity: 5, nausea: 4, footprint: { width: 2, height: 2 } };
     case 'food_stall':
       return { price: 3, capacity: 1, duration: 12, excitement: 2, intensity: 1, nausea: 0, footprint: { width: 1, height: 1 } };
     case 'drink_stall':

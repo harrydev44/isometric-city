@@ -57,6 +57,7 @@ const RIDE_COLORS: Record<string, string> = {
   carousel: '#f472b6',
   ferris_wheel: '#38bdf8',
   swing_ride: '#facc15',
+  scrambler: '#a855f7',
   food_stall: '#fb7185',
   drink_stall: '#22d3ee',
   souvenir_stall: '#a855f7',

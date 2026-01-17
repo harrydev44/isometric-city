@@ -21,6 +21,7 @@ export type CoasterTool =
   | 'swing_ride'
   | 'junior_coaster'
   | 'log_flume'
+  | 'scrambler'
   | 'food_stall'
   | 'drink_stall'
   | 'souvenir_stall'
@@ -59,6 +60,7 @@ export const COASTER_TOOL_INFO: Record<CoasterTool, CoasterToolInfo> = {
   swing_ride: { name: msg('Swing Ride'), cost: 1400, description: msg('Spinning thrill ride'), size: 2 },
   junior_coaster: { name: msg('Junior Coaster'), cost: 1200, description: msg('Family coaster with mild thrills'), size: 2 },
   log_flume: { name: msg('Log Flume'), cost: 2400, description: msg('Water ride with splashdown'), size: 3 },
+  scrambler: { name: msg('Scrambler'), cost: 1600, description: msg('Chaotic spinning ride'), size: 2 },
   food_stall: { name: msg('Food Stall'), cost: 450, description: msg('Feeds hungry guests') },
   drink_stall: { name: msg('Drink Stall'), cost: 450, description: msg('Quenches thirst') },
   souvenir_stall: { name: msg('Souvenir Stall'), cost: 600, description: msg('Extra income and happiness') },

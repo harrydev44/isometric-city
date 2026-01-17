@@ -40,7 +40,7 @@ export function CoasterSidebar() {
           'coaster_corkscrew',
         ] as CoasterTool[],
       },
-      { key: 'flat', tools: ['carousel', 'ferris_wheel', 'swing_ride', 'junior_coaster'] as CoasterTool[] },
+      { key: 'flat', tools: ['carousel', 'ferris_wheel', 'swing_ride', 'junior_coaster', 'scrambler'] as CoasterTool[] },
       { key: 'water', tools: ['log_flume'] as CoasterTool[] },
       { key: 'stalls', tools: ['food_stall', 'drink_stall', 'souvenir_stall', 'toilet', 'information'] as CoasterTool[] },
       { key: 'scenery', tools: ['tree', 'bench', 'lamp', 'fence'] as CoasterTool[] },

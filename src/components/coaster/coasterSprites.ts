@@ -89,6 +89,12 @@ export const COASTER_RIDE_SPRITES: Record<string, SpriteConfig> = {
     offsetX: 0,
     offsetY: -0.6,
   },
+  scrambler: {
+    src: '/assets/coaster/ride_scrambler.png',
+    scale: 1.55,
+    offsetX: 0,
+    offsetY: -0.55,
+  },
 };
 
 export const COASTER_STALL_SPRITES: Record<string, SpriteConfig> = {
