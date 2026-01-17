@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { CoasterBuildingType } from '@/games/coaster/types';
+import { T, Var, Branch, useGT } from 'gt-next';
 
 type ShopEntry = {
   id: string;
@@ -26,22 +27,25 @@ interface ShopPanelProps {
 const PRICE_RANGE = [0, 20];
 
 export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen }: ShopPanelProps) {
+  const gt = useGT();
   return (
     <div className="absolute top-20 right-6 z-50 w-96">
       <Card className="space-y-4 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Shop Ops</div>
-            <h2 className="text-lg font-semibold">Stall Pricing</h2>
+            <T><div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Shop Ops</div></T>
+            <T><h2 className="text-lg font-semibold">Stall Pricing</h2></T>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}><T>Close</T></Button>
         </div>
 
         <ScrollArea className="h-64 pr-3">
           {shops.length === 0 && (
-            <div className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              No shops built yet. Place a stall to set its pricing.
-            </div>
+            <T>
+              <div className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
+                No shops built yet. Place a stall to set its pricing.
+              </div>
+            </T>
           )}
           <div className="space-y-4">
             {shops.map((shop) => (
@@ -49,13 +53,19 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-medium">{shop.name}</div>
-                    <div className="text-xs text-muted-foreground capitalize">
-                      {shop.type.replaceAll('_', ' ')} · ({shop.position.x}, {shop.position.y})
-                    </div>
+                    <T>
+                      <div className="text-xs text-muted-foreground capitalize">
+                        <Var>{shop.type.replaceAll('_', ' ')}</Var> · (<Var>{shop.position.x}</Var>, <Var>{shop.position.y}</Var>)
+                      </div>
+                    </T>
                   </div>
-                  <div className={`text-xs font-semibold ${shop.open ? 'text-emerald-200' : 'text-rose-200'}`}>
-                    {shop.open ? 'Open' : 'Closed'}
-                  </div>
+                  <T>
+                    <Branch
+                      branch={shop.open.toString()}
+                      true={<div className="text-xs font-semibold text-emerald-200">Open</div>}
+                      false={<div className="text-xs font-semibold text-rose-200">Closed</div>}
+                    />
+                  </T>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold">${shop.price}</div>
@@ -64,7 +74,7 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                     variant={shop.open ? 'outline' : 'default'}
                     onClick={() => onToggleOpen(shop.position)}
                   >
-                    {shop.open ? 'Close' : 'Open'}
+                    {shop.open ? gt('Close') : gt('Open')}
                   </Button>
                 </div>
                 <div className="mt-3 space-y-2">
@@ -75,9 +85,11 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                     value={[shop.price]}
                     onValueChange={(value) => onPriceChange(shop.position, value[0] ?? shop.price)}
                   />
-                  <div className="text-xs text-muted-foreground">
-                    Adjust pricing between ${PRICE_RANGE[0]} and ${PRICE_RANGE[1]}.
-                  </div>
+                  <T>
+                    <div className="text-xs text-muted-foreground">
+                      Adjust pricing between $<Var>{PRICE_RANGE[0]}</Var> and $<Var>{PRICE_RANGE[1]}</Var>.
+                    </div>
+                  </T>
                 </div>
               </div>
             ))}
