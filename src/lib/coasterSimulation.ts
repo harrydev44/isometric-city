@@ -1,4 +1,4 @@
-import { CardinalDirection, isInBounds } from '@/core/types';
+import { CardinalDirection, GridPosition, isInBounds } from '@/core/types';
 import { CoasterBuildingType, CoasterParkState, CoasterTile, Finance, Guest, GuestThoughtType, ParkStats, PathInfo, Research, Staff, WeatherState, WeatherType } from '@/games/coaster/types';
 import { findPath } from '@/lib/coasterPathfinding';
 import { estimateQueueWaitMinutes, getRideDispatchCapacity } from '@/lib/coasterQueue';
@@ -547,6 +547,45 @@ function findRideAccessTile(ride: CoasterParkState['rides'][number], grid: Coast
   return accessTile ?? ride.entrance;
 }
 
+function buildQueuePathOrder(
+  grid: CoasterTile[][],
+  rideId: string,
+  entry: GridPosition
+): GridPosition[] {
+  const startTile = grid[entry.y]?.[entry.x]?.path;
+  if (!startTile?.isQueue || startTile.queueRideId !== rideId) return [];
+
+  const visited = new Set<string>();
+  const queue: Array<{ pos: GridPosition; distance: number }> = [{ pos: entry, distance: 0 }];
+  const ordered: Array<{ pos: GridPosition; distance: number }> = [];
+  const directionOrder: CardinalDirection[] = ['north', 'east', 'south', 'west'];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const key = `${current.pos.x},${current.pos.y}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    ordered.push(current);
+
+    const path = grid[current.pos.y]?.[current.pos.x]?.path;
+    if (!path?.isQueue || path.queueRideId !== rideId) continue;
+    directionOrder.forEach((direction) => {
+      if (!path.edges[direction]) return;
+      const delta = DIRECTION_VECTORS[direction];
+      const next = { x: current.pos.x + delta.dx, y: current.pos.y + delta.dy };
+      const nextPath = grid[next.y]?.[next.x]?.path;
+      if (!nextPath?.isQueue || nextPath.queueRideId !== rideId) return;
+      if (!nextPath.edges[OPPOSITE_DIRECTION[direction]]) return;
+      queue.push({ pos: next, distance: current.distance + 1 });
+    });
+  }
+
+  return ordered
+    .sort((a, b) => a.distance - b.distance || a.pos.y - b.pos.y || a.pos.x - b.pos.x)
+    .map((entry) => entry.pos);
+}
+
 function isStaffNearby(guest: Guest, staffMembers: Staff[], radius: number): boolean {
   return staffMembers.some((member) => (
     Math.abs(member.tileX - guest.tileX) + Math.abs(member.tileY - guest.tileY) <= radius
@@ -1021,7 +1060,7 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       if (rideOptions.length === 0) return guest;
       const weightedRides = rideOptions.map((ride) => {
         const queueLength = queueCounts.get(ride.id) ?? ride.queue.guestIds.length;
-        const waitMinutes = estimateQueueWaitMinutes(queueLength, ride.stats.rideTime, ride.stats.capacity);
+        const waitMinutes = estimateQueueWaitMinutes(queueLength, ride.stats.rideTime, getRideDispatchCapacity(ride));
         const excitementBoost = Math.max(1, ride.excitement / 15);
         const weight = excitementBoost / (1 + waitMinutes);
         return { ride, weight };
@@ -1080,6 +1119,22 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     } else {
       queueMap.set(rideId, queueGuests);
     }
+  });
+
+  queueMap.forEach((queueGuests, rideId) => {
+    const ride = state.rides.find((item) => item.id === rideId);
+    if (!ride) return;
+    const queueTiles = buildQueuePathOrder(state.grid, rideId, ride.queue.entry);
+    if (queueTiles.length === 0) return;
+    queueGuests.forEach((guest, index) => {
+      const tileIndex = Math.floor(index / QUEUE_GUESTS_PER_TILE);
+      const tile = queueTiles[Math.min(tileIndex, queueTiles.length - 1)];
+      guestUpdates.set(guest.id, {
+        tileX: tile.x,
+        tileY: tile.y,
+        progress: 0,
+      });
+    });
   });
 
   let updatedRides = state.rides.map((ride) => ({
