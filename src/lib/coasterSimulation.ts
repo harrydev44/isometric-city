@@ -1,5 +1,5 @@
 import { CardinalDirection, GridPosition, isInBounds } from '@/core/types';
-import { CoasterBuildingType, CoasterParkState, CoasterTile, Finance, Guest, GuestItem, GuestThoughtType, ParkStats, PathInfo, Research, Staff, WeatherState, WeatherType } from '@/games/coaster/types';
+import { CoasterBuildingType, CoasterParkState, CoasterTile, Finance, Guest, GuestItem, GuestThoughtType, ParkStats, PathInfo, Research, SceneryType, Staff, WeatherState, WeatherType } from '@/games/coaster/types';
 import { findPath } from '@/lib/coasterPathfinding';
 import { estimateQueueWaitMinutes, getRideDispatchCapacity } from '@/lib/coasterQueue';
 import { createResearchItems } from '@/lib/coasterResearch';
@@ -62,7 +62,8 @@ const HANDYMAN_CLEANLINESS_BOOST = 0.25;
 const ENTERTAINER_RADIUS = 4;
 const SECURITY_RADIUS = 3;
 const SCENERY_RADIUS = 3;
-const SCENERY_HAPPINESS_BOOST = 0.4;
+const TRASH_CAN_CLEANLINESS_BOOST = 0.02;
+const LAMP_NIGHT_BONUS = 0.25;
 const BENCH_REST_THRESHOLD = 200;
 const BENCH_REST_RADIUS = 3;
 const BENCH_REST_TICKS = 25;
@@ -571,7 +572,7 @@ function updateStaffMovement(staff: Staff, grid: CoasterTile[][]): Staff {
 }
 
 type ShopTarget = { position: { x: number; y: number }; type: CoasterBuildingType; price: number };
-type SceneryTarget = { position: { x: number; y: number } };
+type SceneryTarget = { position: { x: number; y: number }; type: SceneryType };
 type BenchTarget = { position: { x: number; y: number } };
 
 function findShopTargets(grid: CoasterTile[][]): ShopTarget[] {
@@ -608,7 +609,7 @@ function findSceneryTargets(grid: CoasterTile[][]): SceneryTarget[] {
     for (let x = 0; x < grid[y].length; x++) {
       const scenery = grid[y][x].scenery;
       if (scenery) {
-        targets.push({ position: { x, y } });
+        targets.push({ position: { x, y }, type: scenery.type });
       }
     }
   }
@@ -628,10 +629,55 @@ function findBenchTargets(grid: CoasterTile[][]): BenchTarget[] {
   return targets;
 }
 
-function isSceneryNearby(guest: Guest, targets: SceneryTarget[], radius: number): boolean {
-  return targets.some((target) => (
-    Math.abs(target.position.x - guest.tileX) + Math.abs(target.position.y - guest.tileY) <= radius
-  ));
+function countSceneryType(grid: CoasterTile[][], type: SceneryType): number {
+  let count = 0;
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      if (grid[y][x].scenery?.type === type) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+const SCENERY_EFFECTS: Record<SceneryType, { happiness: number; beauty: boolean }> = {
+  tree: { happiness: 0.35, beauty: true },
+  flower: { happiness: 0.45, beauty: true },
+  shrub: { happiness: 0.3, beauty: true },
+  bench: { happiness: 0.2, beauty: false },
+  lamp: { happiness: 0.25, beauty: true },
+  statue: { happiness: 0.6, beauty: true },
+  fountain: { happiness: 0.7, beauty: true },
+  trash_can: { happiness: 0.15, beauty: false },
+  fence: { happiness: 0.1, beauty: false },
+};
+
+function getSceneryMoodBoost(
+  guest: Guest,
+  targets: SceneryTarget[],
+  radius: number,
+  isNight: boolean
+): { boost: number; beauty: boolean } {
+  let boost = 0;
+  let beauty = false;
+  targets.forEach((target) => {
+    const distance = Math.abs(target.position.x - guest.tileX) + Math.abs(target.position.y - guest.tileY);
+    if (distance > radius) return;
+    const effect = SCENERY_EFFECTS[target.type];
+    if (!effect) return;
+    let happiness = effect.happiness;
+    if (target.type === 'lamp' && isNight) {
+      happiness += LAMP_NIGHT_BONUS;
+    }
+    if (happiness > boost) {
+      boost = happiness;
+    }
+    if (effect.beauty) {
+      beauty = true;
+    }
+  });
+  return { boost, beauty };
 }
 
 function isBenchNearby(guest: Guest, targets: BenchTarget[], radius: number): boolean {
@@ -640,8 +686,8 @@ function isBenchNearby(guest: Guest, targets: BenchTarget[], radius: number): bo
   ));
 }
 
-function applySceneryMood(guest: Guest): Guest {
-  const happiness = clamp(guest.happiness + SCENERY_HAPPINESS_BOOST);
+function applySceneryMood(guest: Guest, boost: number): Guest {
+  const happiness = clamp(guest.happiness + boost);
   if (happiness === guest.happiness) return guest;
   return {
     ...guest,
@@ -922,7 +968,9 @@ function updateStaff(state: CoasterParkState): CoasterParkState {
   const handymanCount = updatedStaff.filter((member) => member.type === 'handyman').length;
   const mechanicCount = updatedStaff.filter((member) => member.type === 'mechanic').length;
   const cleanlinessDecay = state.guests.length * CLEANLINESS_DECAY_PER_GUEST;
-  const cleanlinessBoost = handymanCount * HANDYMAN_CLEANLINESS_BOOST;
+  const trashCanCount = countSceneryType(state.grid, 'trash_can');
+  const cleanlinessBoost = handymanCount * HANDYMAN_CLEANLINESS_BOOST
+    + trashCanCount * TRASH_CAN_CLEANLINESS_BOOST;
   const nextCleanliness = clamp(state.stats.cleanliness - cleanlinessDecay + cleanlinessBoost);
 
   const mechanicBoost = mechanicCount * MECHANIC_UPTIME_BOOST;
@@ -1123,11 +1171,12 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
   }
 
   const sceneryTargets = findSceneryTargets(state.grid);
+  const isNight = state.hour >= 19 || state.hour < 6;
   if (sceneryTargets.length > 0) {
     nextGuests = nextGuests.map((guest) => {
-      const sceneryNearby = isSceneryNearby(guest, sceneryTargets, SCENERY_RADIUS);
-      const boostedGuest = sceneryNearby ? applySceneryMood(guest) : guest;
-      return updateGuestThoughts(boostedGuest, state.tick, state.finance.entranceFee, sceneryNearby);
+      const { boost, beauty } = getSceneryMoodBoost(guest, sceneryTargets, SCENERY_RADIUS, isNight);
+      const boostedGuest = boost > 0 ? applySceneryMood(guest, boost) : guest;
+      return updateGuestThoughts(boostedGuest, state.tick, state.finance.entranceFee, beauty);
     });
   } else {
     nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick, state.finance.entranceFee, false));
