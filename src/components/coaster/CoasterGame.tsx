@@ -127,6 +127,7 @@ export default function CoasterGame() {
               parkName={state.parkName}
               stats={state.stats}
               weather={state.weather}
+              onNameChange={setParkName}
               onClose={handleClosePanel}
             />
           )}

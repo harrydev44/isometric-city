@@ -4,16 +4,18 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { ParkStats, WeatherState } from '@/games/coaster/types';
 
 interface ParkPanelProps {
   parkName: string;
   stats: ParkStats;
   weather: WeatherState;
+  onNameChange: (name: string) => void;
   onClose: () => void;
 }
 
-export default function ParkPanel({ parkName, stats, weather, onClose }: ParkPanelProps) {
+export default function ParkPanel({ parkName, stats, weather, onNameChange, onClose }: ParkPanelProps) {
   const ratingPercent = Math.round((stats.rating / 999) * 100);
   const cleanlinessPercent = Math.round((stats.cleanliness / 255) * 100);
   const excitementPercent = Math.min(100, Math.round(stats.excitement));
@@ -32,6 +34,14 @@ export default function ParkPanel({ parkName, stats, weather, onClose }: ParkPan
           </Button>
         </div>
         <div className="p-4 space-y-4 text-sm">
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Park Name</div>
+            <Input
+              value={parkName}
+              onChange={(event) => onNameChange(event.target.value)}
+              maxLength={32}
+            />
+          </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Park Rating</span>
