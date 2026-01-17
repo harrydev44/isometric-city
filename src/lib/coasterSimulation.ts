@@ -1,7 +1,7 @@
 import { CardinalDirection, isInBounds } from '@/core/types';
 import { CoasterBuildingType, CoasterParkState, CoasterTile, Finance, Guest, GuestThoughtType, ParkStats, PathInfo, Research, Staff, WeatherState } from '@/games/coaster/types';
 import { findPath } from '@/lib/coasterPathfinding';
-import { estimateQueueWaitMinutes } from '@/lib/coasterQueue';
+import { estimateQueueWaitMinutes, getRideDispatchCapacity } from '@/lib/coasterQueue';
 
 export const DEFAULT_COASTER_GRID_SIZE = 50;
 
@@ -953,13 +953,14 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       return { ...ride, cycleTimer: 0 };
     }
     const queueGuests = queueMap.get(ride.id) ?? [];
-    const cycleTicks = Math.max(6, Math.round(ride.stats.rideTime / 2));
+    const cycleTicks = Math.max(10, Math.round(ride.stats.rideTime));
     const nextTimer = Math.max(0, ride.cycleTimer - 1);
     if (nextTimer > 0 || queueGuests.length === 0) {
       return { ...ride, cycleTimer: nextTimer };
     }
 
-    const dispatchCount = Math.min(ride.stats.capacity, queueGuests.length);
+    const dispatchCapacity = getRideDispatchCapacity(ride);
+    const dispatchCount = Math.min(dispatchCapacity, queueGuests.length);
     const boardingGuests = queueGuests.slice(0, dispatchCount);
     if (dispatchCount === 0) {
       return { ...ride, cycleTimer: nextTimer };

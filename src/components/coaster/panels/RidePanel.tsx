@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Progress } from '@/components/ui/progress';
-import { estimateQueueWaitMinutes } from '@/lib/coasterQueue';
+import { estimateQueueWaitMinutes, getRideDispatchCapacity } from '@/lib/coasterQueue';
 
 interface RidePanelProps {
   ride: Ride;
@@ -23,7 +23,7 @@ export default function RidePanel({ ride, onClose, onToggleStatus, onPriceChange
   }, [ride.price]);
 
   const queueLength = ride.queue.guestIds.length;
-  const estimatedWait = estimateQueueWaitMinutes(queueLength, ride.stats.rideTime, ride.stats.capacity);
+  const estimatedWait = estimateQueueWaitMinutes(queueLength, ride.stats.rideTime, getRideDispatchCapacity(ride));
   const reliabilityPercent = Math.round(ride.stats.reliability * 100);
   const uptimePercent = Math.round(ride.stats.uptime * 100);
 
