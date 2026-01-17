@@ -77,6 +77,12 @@ export function simulateCoasterTick(
   const trainsUpdated = updateCoasterTrains(synced, deltaSeconds);
   const guestsUpdated = updateGuests(trainsUpdated, deltaSeconds);
   const staffUpdated = updateStaff(guestsUpdated, deltaSeconds);
+  const ridesUpdated = staffUpdated.rides.map((ride) => {
+    if (ride.status === 'testing' && Date.now() - ride.createdAt > 20000) {
+      return { ...ride, status: 'open' };
+    }
+    return ride;
+  });
 
   let cloudSpawnTimer = staffUpdated.cloudSpawnTimer + deltaSeconds;
   let clouds = staffUpdated.clouds.map((cloud) => ({
@@ -98,13 +104,14 @@ export function simulateCoasterTick(
     staffUpdated.guests.length > 0
       ? staffUpdated.guests.reduce((sum, guest) => sum + guest.needs.happiness, 0) / staffUpdated.guests.length
       : 75;
-  const rideVariety = Math.min(1, staffUpdated.rides.length / 8);
+  const rideVariety = Math.min(1, ridesUpdated.length / 8);
   const rating = Math.round(Math.min(100, Math.max(10, avgHappiness * 0.65 + rideVariety * 35)));
 
   return {
     ...staffUpdated,
     clouds,
     cloudSpawnTimer,
+    rides: ridesUpdated,
     parkRating: rating,
   };
 }

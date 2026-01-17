@@ -16,6 +16,9 @@ const UI_LABELS = {
   closed: msg('Closed'),
   testing: msg('Testing'),
   close: msg('Close'),
+  waitTime: msg('Wait'),
+  guests: msg('Guests'),
+  revenue: msg('Revenue'),
 };
 
 export function RidesPanel() {
@@ -80,6 +83,17 @@ export function RidesPanel() {
                     : ride.status === 'open'
                     ? m(UI_LABELS.open)
                     : m(UI_LABELS.closed)}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                <span>
+                  {m(UI_LABELS.waitTime)}: {ride.performance.waitTime.toFixed(1)}m
+                </span>
+                <span>
+                  {m(UI_LABELS.guests)}: {ride.performance.guestsToday}
+                </span>
+                <span>
+                  {m(UI_LABELS.revenue)}: ${Math.round(ride.performance.revenueToday)}
                 </span>
               </div>
             </div>
