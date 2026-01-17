@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 
 interface FinancePanelProps {
   cash: number;
+  entranceRevenue: number;
   rideRevenue: number;
   shopRevenue: number;
   income: number;
@@ -16,6 +17,7 @@ interface FinancePanelProps {
 
 export default function FinancePanel({
   cash,
+  entranceRevenue,
   rideRevenue,
   shopRevenue,
   income,
@@ -42,6 +44,10 @@ export default function FinancePanel({
           </div>
           <div className="space-y-2">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Income</div>
+            <div className="flex items-center justify-between">
+              <span>Admissions</span>
+              <span>${entranceRevenue.toLocaleString()}</span>
+            </div>
             <div className="flex items-center justify-between">
               <span>Ride Tickets</span>
               <span>${rideRevenue.toLocaleString()}</span>

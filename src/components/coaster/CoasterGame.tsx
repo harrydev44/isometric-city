@@ -107,6 +107,7 @@ export default function CoasterGame() {
           {state.activePanel === 'finance' && (
             <FinancePanel
               cash={state.finance.cash}
+              entranceRevenue={state.finance.entranceRevenue}
               rideRevenue={state.finance.rideRevenue}
               shopRevenue={state.finance.shopRevenue}
               income={state.finance.income}

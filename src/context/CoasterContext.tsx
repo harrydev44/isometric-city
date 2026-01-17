@@ -62,6 +62,10 @@ const SHOP_DEFAULTS: Record<CoasterBuildingType, { name: string; price: number; 
 function normalizeCoasterState(state: CoasterParkState): CoasterParkState {
   return {
     ...state,
+    finance: {
+      ...state.finance,
+      entranceRevenue: state.finance.entranceRevenue ?? 0,
+    },
     coasterTrains: state.coasterTrains ?? [],
     rides: state.rides.map((ride) => ({
       ...ride,

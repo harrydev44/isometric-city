@@ -872,6 +872,7 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     },
   }));
   let rideRevenue = 0;
+  let entranceRevenue = 0;
   updatedRides = updatedRides.map((ride) => {
     if (ride.status !== 'open') {
       return { ...ride, cycleTimer: 0 };
@@ -943,7 +944,14 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     const entranceTile = state.grid[state.parkEntrance.y]?.[state.parkEntrance.x];
     if (entranceTile?.path) {
       const nextId = state.guests.length > 0 ? Math.max(...state.guests.map((g) => g.id)) + 1 : 1;
-      nextGuests = [...nextGuests, createGuest(nextId, state.parkEntrance.x, state.parkEntrance.y)];
+      const newGuest = createGuest(nextId, state.parkEntrance.x, state.parkEntrance.y);
+      const entranceFee = state.finance.entranceFee;
+      const adjustedGuest = {
+        ...newGuest,
+        money: Math.max(0, newGuest.money - entranceFee),
+      };
+      entranceRevenue += entranceFee;
+      nextGuests = [...nextGuests, adjustedGuest];
       totalGuests += 1;
     }
   }
@@ -952,12 +960,13 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     ...state,
     guests: nextGuests,
     rides: updatedRides,
-    finance: rideRevenue > 0 || shopRevenue > 0 ? {
+    finance: rideRevenue > 0 || shopRevenue > 0 || entranceRevenue > 0 ? {
       ...state.finance,
-      cash: state.finance.cash + rideRevenue + shopRevenue,
+      cash: state.finance.cash + rideRevenue + shopRevenue + entranceRevenue,
+      entranceRevenue: state.finance.entranceRevenue + entranceRevenue,
       rideRevenue: state.finance.rideRevenue + rideRevenue,
       shopRevenue: state.finance.shopRevenue + shopRevenue,
-      income: state.finance.income + rideRevenue + shopRevenue,
+      income: state.finance.income + rideRevenue + shopRevenue + entranceRevenue,
     } : state.finance,
     stats: {
       ...state.stats,
@@ -993,6 +1002,7 @@ function createDefaultFinance(): Finance {
     entranceFee: 10,
     income: 0,
     expenses: 0,
+    entranceRevenue: 0,
     rideRevenue: 0,
     shopRevenue: 0,
     staffCost: 0,

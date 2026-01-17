@@ -25,6 +25,7 @@ export type Finance = {
   entranceFee: number;
   income: number;
   expenses: number;
+  entranceRevenue: number;
   rideRevenue: number;
   shopRevenue: number;
   staffCost: number;
