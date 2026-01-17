@@ -952,7 +952,7 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       return { ...ride, cycleTimer: 0 };
     }
     const queueGuests = queueMap.get(ride.id) ?? [];
-    const cycleTicks = Math.max(4, Math.round(ride.stats.rideTime / 10));
+    const cycleTicks = Math.max(6, Math.round(ride.stats.rideTime / 2));
     const nextTimer = Math.max(0, ride.cycleTimer - 1);
     if (nextTimer > 0 || queueGuests.length === 0) {
       return { ...ride, cycleTimer: nextTimer };
