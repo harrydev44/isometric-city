@@ -22,6 +22,7 @@ import {
 } from '@/games/coaster/types';
 import { isInGrid } from '@/core/types';
 import {
+  calculateSceneryScore,
   createInitialCoasterState,
   DEFAULT_COASTER_GRID_SIZE,
   simulateCoasterTick,
@@ -95,6 +96,10 @@ function normalizeCoasterState(state: CoasterParkState): CoasterParkState {
       activeResearchId: state.research?.activeResearchId ?? null,
       funding: state.research?.funding ?? 0.2,
       items: mergeResearchItems(state.research?.items ?? []),
+    },
+    stats: {
+      ...state.stats,
+      scenery: state.stats.scenery ?? 0,
     },
     coasterTrains: state.coasterTrains ?? [],
     rides: state.rides.map((ride) => ({
@@ -507,8 +512,8 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
         }
       };
 
-      const applyCost = (nextState: CoasterParkState) => (
-        toolCost > 0
+      const applyCost = (nextState: CoasterParkState) => {
+        const stateWithCost = toolCost > 0
           ? {
             ...nextState,
             finance: {
@@ -516,8 +521,15 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
               cash: nextState.finance.cash - toolCost,
             },
           }
-          : nextState
-      );
+          : nextState;
+        return {
+          ...stateWithCost,
+          stats: {
+            ...stateWithCost.stats,
+            scenery: calculateSceneryScore(stateWithCost.grid),
+          },
+        };
+      };
 
       if (selectedTool === 'path' || selectedTool === 'queue_path') {
         const adjacentRide = selectedTool === 'queue_path' ? findAdjacentRideId(x, y) : null;

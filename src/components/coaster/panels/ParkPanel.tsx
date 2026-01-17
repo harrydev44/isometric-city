@@ -18,6 +18,7 @@ interface ParkPanelProps {
 export default function ParkPanel({ parkName, stats, weather, onNameChange, onClose }: ParkPanelProps) {
   const ratingPercent = Math.round((stats.rating / 999) * 100);
   const cleanlinessPercent = Math.round((stats.cleanliness / 255) * 100);
+  const sceneryPercent = Math.round((stats.scenery / 255) * 100);
   const excitementPercent = Math.min(100, Math.round(stats.excitement));
   const nauseaPercent = Math.min(100, Math.round(stats.nausea));
 
@@ -55,6 +56,13 @@ export default function ParkPanel({ parkName, stats, weather, onNameChange, onCl
               <span>{cleanlinessPercent}%</span>
             </div>
             <Progress value={cleanlinessPercent} className="h-2" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Scenery</span>
+              <span>{sceneryPercent}%</span>
+            </div>
+            <Progress value={sceneryPercent} className="h-2" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">

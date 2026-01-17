@@ -302,12 +302,13 @@ function getShopPrice(grid: CoasterTile[][], target: Guest['targetShop']): numbe
   return SHOP_EFFECTS[target.type]?.cost ?? 0;
 }
 
-function calculateParkRating(guests: Guest[], rides: number, cleanliness: number): number {
+function calculateParkRating(guests: Guest[], rides: number, cleanliness: number, sceneryScore: number): number {
   const averageHappiness = guests.length > 0
     ? guests.reduce((sum, guest) => sum + guest.happiness, 0) / guests.length
     : 180;
   const rideBonus = Math.min(160, rides * 12);
-  return clamp(Math.round(averageHappiness * 0.7 + cleanliness * 0.2 + rideBonus), 0, 999);
+  const sceneryBonus = Math.min(120, sceneryScore * 0.4);
+  return clamp(Math.round(averageHappiness * 0.7 + cleanliness * 0.2 + rideBonus + sceneryBonus), 0, 999);
 }
 
 function applyShopEffects(
@@ -653,6 +654,18 @@ const SCENERY_EFFECTS: Record<SceneryType, { happiness: number; beauty: boolean 
   fence: { happiness: 0.1, beauty: false },
 };
 
+const SCENERY_RATING_WEIGHTS: Record<SceneryType, number> = {
+  tree: 4,
+  flower: 4,
+  shrub: 3,
+  bench: 2,
+  lamp: 3,
+  statue: 6,
+  fountain: 7,
+  trash_can: 1,
+  fence: 1,
+};
+
 function getSceneryMoodBoost(
   guest: Guest,
   targets: SceneryTarget[],
@@ -678,6 +691,18 @@ function getSceneryMoodBoost(
     }
   });
   return { boost, beauty };
+}
+
+export function calculateSceneryScore(grid: CoasterTile[][]): number {
+  let score = 0;
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      const type = grid[y][x].scenery?.type;
+      if (!type) continue;
+      score += SCENERY_RATING_WEIGHTS[type] ?? 0;
+    }
+  }
+  return clamp(score, 0, 255);
 }
 
 function isBenchNearby(guest: Guest, targets: BenchTarget[], radius: number): boolean {
@@ -1551,6 +1576,8 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     });
   }
 
+  const sceneryScore = calculateSceneryScore(state.grid);
+
   const spawnInterval = getGuestSpawnInterval(state);
   if (state.tick % spawnInterval === 0 && nextGuests.length < MAX_GUESTS) {
     const entranceTile = state.grid[state.parkEntrance.y]?.[state.parkEntrance.x];
@@ -1584,7 +1611,8 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
       ...state.stats,
       guestsInPark: nextGuests.length,
       totalGuests,
-      rating: calculateParkRating(nextGuests, updatedRides.length, state.stats.cleanliness),
+      rating: calculateParkRating(nextGuests, updatedRides.length, state.stats.cleanliness, sceneryScore),
+      scenery: sceneryScore,
       excitement: updatedRides.length > 0
         ? Math.round(updatedRides.reduce((sum, ride) => sum + ride.excitement, 0) / updatedRides.length)
         : state.stats.excitement,
@@ -1601,6 +1629,7 @@ function createDefaultStats(): ParkStats {
     totalGuests: 0,
     rating: 550,
     cleanliness: 80,
+    scenery: 0,
     excitement: 40,
     nausea: 0,
   };
