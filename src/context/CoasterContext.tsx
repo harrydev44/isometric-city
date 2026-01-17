@@ -33,6 +33,8 @@ import { isResearchUnlocked, mergeResearchItems } from '@/lib/coasterResearch';
 
 const STORAGE_KEY = 'coaster-game-state';
 const SAVED_PARKS_INDEX_KEY = 'coaster-saved-parks-index';
+const MAX_TERRAIN_HEIGHT = 4;
+const MIN_TERRAIN_HEIGHT = 0;
 
 const TOOL_RIDE_MAP: Partial<Record<CoasterTool, RideType>> = {
   ride_carousel: 'carousel',
@@ -532,6 +534,43 @@ export function CoasterProvider({ children, startFresh = false }: { children: Re
           },
         };
       };
+
+      if (selectedTool === 'terrain_raise' || selectedTool === 'terrain_lower' || selectedTool === 'terrain_smooth') {
+        const isEditable = !tile.path && !tile.rideId && !tile.building && !tile.track && !tile.scenery && tile.terrain !== 'water';
+        if (!isEditable) {
+          return prev;
+        }
+        if (selectedTool === 'terrain_raise') {
+          if (tile.height >= MAX_TERRAIN_HEIGHT) return prev;
+          updateTile(x, y, { height: tile.height + 1 });
+          return applyCost({ ...prev, grid });
+        }
+        if (selectedTool === 'terrain_lower') {
+          if (tile.height <= MIN_TERRAIN_HEIGHT) return prev;
+          updateTile(x, y, { height: tile.height - 1 });
+          return applyCost({ ...prev, grid });
+        }
+        const neighborOffsets = [
+          { dx: 0, dy: 0 },
+          { dx: 0, dy: -1 },
+          { dx: 1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: -1, dy: 0 },
+        ];
+        let sum = 0;
+        let count = 0;
+        neighborOffsets.forEach((offset) => {
+          const neighbor = grid[y + offset.dy]?.[x + offset.dx];
+          if (!neighbor) return;
+          sum += neighbor.height;
+          count += 1;
+        });
+        if (count === 0) return prev;
+        const averaged = Math.max(MIN_TERRAIN_HEIGHT, Math.min(MAX_TERRAIN_HEIGHT, Math.round(sum / count)));
+        if (averaged === tile.height) return prev;
+        updateTile(x, y, { height: averaged });
+        return applyCost({ ...prev, grid });
+      }
 
       if (selectedTool === 'path' || selectedTool === 'queue_path') {
         const adjacentRide = selectedTool === 'queue_path' ? findAdjacentRideId(x, y) : null;
