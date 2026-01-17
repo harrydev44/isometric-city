@@ -26,6 +26,10 @@ type CoasterContextValue = {
   setTool: (tool: CoasterTool) => void;
   setSpeed: (speed: CoasterGameState['speed']) => void;
   setActivePanel: (panel: CoasterGameState['activePanel']) => void;
+  setEntranceFee: (fee: number) => void;
+  updateRide: (rideId: string, updates: Partial<CoasterGameState['rides'][number]>) => void;
+  setParkName: (name: string) => void;
+  setMaxGuests: (count: number) => void;
   placeAtTile: (x: number, y: number) => void;
   addMoney: (amount: number) => void;
   addNotification: (title: string, description: string) => void;
@@ -254,6 +258,28 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
 
   const setActivePanel = useCallback((panel: CoasterGameState['activePanel']) => {
     setState((prev) => ({ ...prev, activePanel: panel }));
+  }, []);
+
+  const setEntranceFee = useCallback((fee: number) => {
+    setState((prev) => ({
+      ...prev,
+      finance: { ...prev.finance, entranceFee: fee },
+    }));
+  }, []);
+
+  const updateRide = useCallback((rideId: string, updates: Partial<CoasterGameState['rides'][number]>) => {
+    setState((prev) => ({
+      ...prev,
+      rides: prev.rides.map((ride) => (ride.id === rideId ? { ...ride, ...updates } : ride)),
+    }));
+  }, []);
+
+  const setParkName = useCallback((name: string) => {
+    setState((prev) => ({ ...prev, parkName: name }));
+  }, []);
+
+  const setMaxGuests = useCallback((count: number) => {
+    setState((prev) => ({ ...prev, maxGuests: count }));
   }, []);
 
   const addMoney = useCallback((amount: number) => {
@@ -536,6 +562,10 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
     setTool,
     setSpeed,
     setActivePanel,
+    setEntranceFee,
+    updateRide,
+    setParkName,
+    setMaxGuests,
     placeAtTile,
     addMoney,
     addNotification,

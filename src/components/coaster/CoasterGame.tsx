@@ -6,8 +6,14 @@ import { CoasterCanvasGrid } from '@/components/coaster/CoasterCanvasGrid';
 import { CoasterSidebar } from '@/components/coaster/CoasterSidebar';
 import { CoasterTopBar } from '@/components/coaster/CoasterTopBar';
 import { CoasterMiniMap } from '@/components/coaster/CoasterMiniMap';
+import { FinancesPanel } from '@/components/coaster/panels/FinancesPanel';
+import { RidesPanel } from '@/components/coaster/panels/RidesPanel';
+import { GuestsPanel } from '@/components/coaster/panels/GuestsPanel';
+import { SettingsPanel } from '@/components/coaster/panels/SettingsPanel';
+import { useCoaster } from '@/context/CoasterContext';
 
 export function CoasterGame() {
+  const { state } = useCoaster();
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{
     offset: { x: number; y: number };
@@ -34,6 +40,11 @@ export function CoasterGame() {
             <CoasterMiniMap onNavigate={(x, y) => setNavigationTarget({ x, y })} viewport={viewport} />
           </div>
         </div>
+
+        {state.activePanel === 'finances' && <FinancesPanel />}
+        {state.activePanel === 'rides' && <RidesPanel />}
+        {state.activePanel === 'guests' && <GuestsPanel />}
+        {state.activePanel === 'settings' && <SettingsPanel />}
       </div>
     </TooltipProvider>
   );

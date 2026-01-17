@@ -145,6 +145,7 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
     if (guest.money >= finance.entranceFee) {
       guest.money -= finance.entranceFee;
       finance.money += finance.entranceFee;
+      finance.dailyIncome += finance.entranceFee;
     }
     guests.push(guest);
     lastGuestId += 1;
@@ -255,6 +256,7 @@ export function updateGuests(state: CoasterGameState, deltaSeconds: number): Coa
         if (guest.money >= ride.price) {
           guest.money -= ride.price;
           finance.money += ride.price;
+          finance.dailyIncome += ride.price;
           ride.performance.revenueToday += ride.price;
         }
         ride.performance.guestsToday += 1;

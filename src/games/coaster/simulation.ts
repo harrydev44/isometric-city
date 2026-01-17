@@ -18,6 +18,7 @@ export function simulateCoasterTick(
   let day = state.day;
   let month = state.month;
   let year = state.year;
+  let finance = { ...state.finance };
 
   while (hour >= 24) {
     hour -= 24;
@@ -34,6 +35,15 @@ export function simulateCoasterTick(
     year += 1;
   }
 
+  const dayChanged = day !== state.day;
+  if (dayChanged) {
+    const staffCosts = state.staff.length * 120;
+    const rideCosts = state.rides.length * 25;
+    finance.dailyExpenses = staffCosts + rideCosts;
+    finance.money = Math.max(0, finance.money - finance.dailyExpenses);
+    finance.dailyIncome = 0;
+  }
+
   const timeUpdated = {
     ...state,
     hour,
@@ -41,9 +51,22 @@ export function simulateCoasterTick(
     month,
     year,
     tick: state.tick + 1,
+    finance,
   };
 
   const synced = syncCoasterTrains(timeUpdated);
   const trainsUpdated = updateCoasterTrains(synced, deltaSeconds);
-  return updateGuests(trainsUpdated, deltaSeconds);
+  const guestsUpdated = updateGuests(trainsUpdated, deltaSeconds);
+
+  const avgHappiness =
+    guestsUpdated.guests.length > 0
+      ? guestsUpdated.guests.reduce((sum, guest) => sum + guest.needs.happiness, 0) / guestsUpdated.guests.length
+      : 75;
+  const rideVariety = Math.min(1, guestsUpdated.rides.length / 8);
+  const rating = Math.round(Math.min(100, Math.max(10, avgHappiness * 0.65 + rideVariety * 35)));
+
+  return {
+    ...guestsUpdated,
+    parkRating: rating,
+  };
 }
