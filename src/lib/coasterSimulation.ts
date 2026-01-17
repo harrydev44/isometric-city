@@ -78,9 +78,9 @@ const LEAVE_PARK_MONEY = 2;
 const BREAKDOWN_INTERVAL_TICKS = 180;
 const REPAIR_TICKS = 90;
 const MAINTENANCE_BASE_COST = 120;
-const QUEUE_PATIENCE_START = 30;
-const QUEUE_PATIENCE_MEDIUM = 90;
-const QUEUE_PATIENCE_HIGH = 150;
+const QUEUE_PATIENCE_START = 15;
+const QUEUE_PATIENCE_MEDIUM = 45;
+const QUEUE_PATIENCE_HIGH = 90;
 const QUEUE_PATIENCE_LOW_PENALTY = 0.2;
 const QUEUE_PATIENCE_MEDIUM_PENALTY = 0.35;
 const QUEUE_PATIENCE_HIGH_PENALTY = 0.5;
@@ -503,7 +503,7 @@ function getGuestThoughtCandidate(
   tick: number,
   entranceFee: number
 ): { type: GuestThoughtType; message: string } | null {
-  if (guest.state === 'queuing' && guest.queueJoinTick !== null && tick - guest.queueJoinTick > 120) {
+  if (guest.state === 'queuing' && guest.queueJoinTick !== null && tick - guest.queueJoinTick > 90) {
     return { type: 'warning', message: 'This line is taking forever.' };
   }
   if (guest.needs.bathroom < 60) {
