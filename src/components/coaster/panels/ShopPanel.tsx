@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { CoasterBuildingType } from '@/games/coaster/types';
+import { T, Var, Num, Branch } from 'gt-next';
 
 type ShopEntry = {
   id: string;
@@ -31,16 +32,16 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
       <Card className="space-y-4 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Shop Ops</div>
-            <h2 className="text-lg font-semibold">Stall Pricing</h2>
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground"><T>Shop Ops</T></div>
+            <h2 className="text-lg font-semibold"><T>Stall Pricing</T></h2>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}><T>Close</T></Button>
         </div>
 
         <ScrollArea className="h-64 pr-3">
           {shops.length === 0 && (
             <div className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              No shops built yet. Place a stall to set its pricing.
+              <T>No shops built yet. Place a stall to set its pricing.</T>
             </div>
           )}
           <div className="space-y-4">
@@ -50,11 +51,17 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                   <div>
                     <div className="font-medium">{shop.name}</div>
                     <div className="text-xs text-muted-foreground capitalize">
-                      {shop.type.replaceAll('_', ' ')} · ({shop.position.x}, {shop.position.y})
+                      <T><Var>{shop.type.replaceAll('_', ' ')}</Var> · (<Num>{shop.position.x}</Num>, <Num>{shop.position.y}</Num>)</T>
                     </div>
                   </div>
                   <div className={`text-xs font-semibold ${shop.open ? 'text-emerald-200' : 'text-rose-200'}`}>
-                    {shop.open ? 'Open' : 'Closed'}
+                    <T>
+                      <Branch
+                        branch={shop.open.toString()}
+                        true={<>Open</>}
+                        false={<>Closed</>}
+                      />
+                    </T>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -64,7 +71,13 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                     variant={shop.open ? 'outline' : 'default'}
                     onClick={() => onToggleOpen(shop.position)}
                   >
-                    {shop.open ? 'Close' : 'Open'}
+                    <T>
+                      <Branch
+                        branch={shop.open.toString()}
+                        true={<>Close</>}
+                        false={<>Open</>}
+                      />
+                    </T>
                   </Button>
                 </div>
                 <div className="mt-3 space-y-2">
@@ -76,7 +89,7 @@ export default function ShopPanel({ shops, onClose, onPriceChange, onToggleOpen 
                     onValueChange={(value) => onPriceChange(shop.position, value[0] ?? shop.price)}
                   />
                   <div className="text-xs text-muted-foreground">
-                    Adjust pricing between ${PRICE_RANGE[0]} and ${PRICE_RANGE[1]}.
+                    <T>Adjust pricing between $<Num>{PRICE_RANGE[0]}</Num> and $<Num>{PRICE_RANGE[1]}</Num>.</T>
                   </div>
                 </div>
               </div>
