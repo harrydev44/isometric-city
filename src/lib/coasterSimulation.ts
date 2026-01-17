@@ -79,9 +79,11 @@ const BREAKDOWN_INTERVAL_TICKS = 180;
 const REPAIR_TICKS = 90;
 const MAINTENANCE_BASE_COST = 120;
 
-function createGuest(id: number, tileX: number, tileY: number): Guest {
+function createGuest(id: number, tileX: number, tileY: number, entranceFee: number): Guest {
   const colors = ['#60a5fa', '#f87171', '#facc15', '#34d399', '#a78bfa'];
   const pickColor = () => colors[Math.floor(Math.random() * colors.length)];
+  const entrancePenalty = Math.max(0, entranceFee - 10) * 3;
+  const startingHappiness = clamp(180 - entrancePenalty);
   return {
     id,
     name: `Guest ${id}`,
@@ -96,11 +98,11 @@ function createGuest(id: number, tileX: number, tileY: number): Guest {
       hunger: 200,
       thirst: 200,
       bathroom: 200,
-      happiness: 180,
+      happiness: startingHappiness,
       nausea: 0,
       energy: 220,
     },
-    happiness: 180,
+    happiness: startingHappiness,
     energy: 220,
     money: 50 + Math.floor(Math.random() * 50),
     thoughts: [],
@@ -490,7 +492,11 @@ function calculateQueueCapacities(state: CoasterParkState): Map<string, number> 
   return queueCapacities;
 }
 
-function getGuestThoughtCandidate(guest: Guest, tick: number): { type: GuestThoughtType; message: string } | null {
+function getGuestThoughtCandidate(
+  guest: Guest,
+  tick: number,
+  entranceFee: number
+): { type: GuestThoughtType; message: string } | null {
   if (guest.state === 'queuing' && guest.queueJoinTick !== null && tick - guest.queueJoinTick > 120) {
     return { type: 'warning', message: 'This line is taking forever.' };
   }
@@ -509,6 +515,9 @@ function getGuestThoughtCandidate(guest: Guest, tick: number): { type: GuestThou
   if (guest.state === 'on_ride') {
     return { type: 'positive', message: 'This ride is fun!' };
   }
+  if (entranceFee >= 15 && guest.age < 120) {
+    return { type: 'negative', message: 'That entrance fee was steep.' };
+  }
   if (guest.happiness < 90) {
     return { type: 'negative', message: 'This park is boring.' };
   }
@@ -518,8 +527,8 @@ function getGuestThoughtCandidate(guest: Guest, tick: number): { type: GuestThou
   return null;
 }
 
-function updateGuestThoughts(guest: Guest, tick: number): Guest {
-  const candidate = getGuestThoughtCandidate(guest, tick);
+function updateGuestThoughts(guest: Guest, tick: number, entranceFee: number): Guest {
+  const candidate = getGuestThoughtCandidate(guest, tick, entranceFee);
   if (!candidate) return guest;
   const lastThought = guest.thoughts[0];
   if (lastThought && lastThought.message === candidate.message && tick - lastThought.timestamp < THOUGHT_COOLDOWN) {
@@ -706,7 +715,7 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     nextGuests = nextGuests.map((guest) => applyStaffMoodEffects(guest, entertainers, securityStaff));
   }
 
-  nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick));
+  nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick, state.finance.entranceFee));
 
   nextGuests = nextGuests.map((guest) => {
     if (guest.state !== 'queuing' || guest.queueJoinTick === null) return guest;
@@ -980,7 +989,7 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
     const entranceTile = state.grid[state.parkEntrance.y]?.[state.parkEntrance.x];
     if (entranceTile?.path) {
       const nextId = state.guests.length > 0 ? Math.max(...state.guests.map((g) => g.id)) + 1 : 1;
-      const newGuest = createGuest(nextId, state.parkEntrance.x, state.parkEntrance.y);
+      const newGuest = createGuest(nextId, state.parkEntrance.x, state.parkEntrance.y, state.finance.entranceFee);
       const entranceFee = state.finance.entranceFee;
       const adjustedGuest = {
         ...newGuest,
