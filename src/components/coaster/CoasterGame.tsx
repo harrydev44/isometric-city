@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCoaster } from '@/context/CoasterContext';
+import { T, Var, Num, useGT } from 'gt-next';
 import CoasterCanvas from './CoasterCanvas';
 import CoasterSidebar from './CoasterSidebar';
 import CoasterMiniMap from './CoasterMiniMap';
@@ -38,6 +39,8 @@ export default function CoasterGame() {
   const [staffAssignmentId, setStaffAssignmentId] = useState<number | null>(null);
   const [patrolRadius, setPatrolRadius] = useState(4);
 
+  const gt = useGT();
+
   const selectedRide = useMemo(
     () => state.rides.find((ride) => ride.id === selectedRideId) ?? null,
     [selectedRideId, state.rides]
@@ -67,22 +70,30 @@ export default function CoasterGame() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-slate-900/70">
           <div className="flex items-center gap-4">
             <div className="text-lg font-semibold tracking-wide">{state.parkName}</div>
-            <div className="text-xs text-muted-foreground">
-              Year {state.year} · Day {state.day} · {state.hour.toString().padStart(2, '0')}:00
-            </div>
+            <T>
+              <div className="text-xs text-muted-foreground">
+                Year <Num>{state.year}</Num> · Day <Num>{state.day}</Num> · <Var>{state.hour.toString().padStart(2, '0')}</Var>:00
+              </div>
+            </T>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <div>Guests: {state.stats.guestsInPark}</div>
-            <div>Rating: {state.stats.rating}</div>
+            <T>
+              <div>Guests: <Num>{state.stats.guestsInPark}</Num></div>
+            </T>
+            <T>
+              <div>Rating: <Num>{state.stats.rating}</Num></div>
+            </T>
             <div className="capitalize text-muted-foreground">
-              {state.weather.type} · {state.weather.temperature}°C
+              {gt('{weatherType} · {temperature}°C', { weatherType: state.weather.type, temperature: state.weather.temperature })}
             </div>
             <div className="font-medium">${state.finance.cash.toLocaleString()}</div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant={state.speed === 0 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(0)}>
-              Pause
-            </Button>
+            <T>
+              <Button variant={state.speed === 0 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(0)}>
+                Pause
+              </Button>
+            </T>
             <Button variant={state.speed === 1 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(1)}>
               1x
             </Button>
@@ -92,9 +103,11 @@ export default function CoasterGame() {
             <Button variant={state.speed === 3 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(3)}>
               3x
             </Button>
-            <Button variant="outline" size="sm" onClick={() => newGame()}>
-              New Park
-            </Button>
+            <T>
+              <Button variant="outline" size="sm" onClick={() => newGame()}>
+                New Park
+              </Button>
+            </T>
           </div>
         </div>
         <div className="flex-1 relative">
