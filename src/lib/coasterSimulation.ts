@@ -69,6 +69,12 @@ const MAX_QUEUE_LENGTH = 80;
 const DEFAULT_QUEUE_LENGTH = 30;
 const THOUGHT_COOLDOWN = 120;
 const MAX_THOUGHTS = 3;
+const LEAVE_QUEUE_TICKS = 180;
+const LEAVE_QUEUE_HAPPINESS = 130;
+const LEAVE_PARK_HAPPINESS = 70;
+const LEAVE_PARK_NEED = 25;
+const LEAVE_PARK_ENERGY = 20;
+const LEAVE_PARK_MONEY = 2;
 
 function createGuest(id: number, tileX: number, tileY: number): Guest {
   const colors = ['#60a5fa', '#f87171', '#facc15', '#34d399', '#a78bfa'];
@@ -216,6 +222,10 @@ function updateGuestMovement(guest: Guest, state: CoasterParkState): Guest {
     return { ...guest, stateTimer: nextTimer, age: nextAge };
   }
 
+  if (guest.state === 'leaving_park' && guest.path.length <= 1) {
+    return { ...guest, age: guest.maxAge + 1 };
+  }
+
   if (guest.state === 'at_shop') {
     const nextTimer = guest.stateTimer - 1;
     if (nextTimer <= 0) {
@@ -250,6 +260,19 @@ function updateGuestMovement(guest: Guest, state: CoasterParkState): Guest {
       return { ...guest, progress: nextProgress, direction, age: nextAge };
     }
     const reachedEnd = guest.pathIndex + 1 >= guest.path.length - 1;
+    if (reachedEnd && guest.state === 'leaving_park') {
+      return {
+        ...guest,
+        tileX: nextTarget.x,
+        tileY: nextTarget.y,
+        direction,
+        progress: 0,
+        pathIndex: guest.pathIndex + 1,
+        path: [],
+        age: guest.maxAge + 1,
+      };
+    }
+
     const nextState = reachedEnd && guest.targetRideId
       ? 'queuing'
       : reachedEnd && guest.targetShop
@@ -511,6 +534,15 @@ function updateGuestThoughts(guest: Guest, tick: number): Guest {
   };
 }
 
+function shouldGuestLeavePark(guest: Guest): boolean {
+  return guest.money <= LEAVE_PARK_MONEY
+    || guest.happiness < LEAVE_PARK_HAPPINESS
+    || guest.needs.energy < LEAVE_PARK_ENERGY
+    || guest.needs.hunger < LEAVE_PARK_NEED
+    || guest.needs.thirst < LEAVE_PARK_NEED
+    || guest.needs.bathroom < LEAVE_PARK_NEED;
+}
+
 function updateStaff(state: CoasterParkState): CoasterParkState {
   const updatedStaff = state.staff.map((member) => updateStaffMovement(member, state.grid));
   const handymanCount = updatedStaff.filter((member) => member.type === 'handyman').length;
@@ -639,6 +671,43 @@ function updateGuests(state: CoasterParkState): CoasterParkState {
   }
 
   nextGuests = nextGuests.map((guest) => updateGuestThoughts(guest, state.tick));
+
+  nextGuests = nextGuests.map((guest) => {
+    if (guest.state !== 'queuing' || guest.queueJoinTick === null) return guest;
+    const waitTicks = state.tick - guest.queueJoinTick;
+    if (waitTicks < LEAVE_QUEUE_TICKS || guest.happiness >= LEAVE_QUEUE_HAPPINESS) return guest;
+    return {
+      ...guest,
+      state: 'wandering',
+      targetRideId: null,
+      queueJoinTick: null,
+      path: [],
+      pathIndex: 0,
+      progress: 0,
+    };
+  });
+
+  const exitTarget = state.grid[state.parkExit.y]?.[state.parkExit.x]?.path
+    ? state.parkExit
+    : state.parkEntrance;
+  nextGuests = nextGuests.map((guest) => {
+    if (guest.state === 'leaving_park' || guest.state === 'on_ride' || guest.state === 'at_shop') return guest;
+    if (!shouldGuestLeavePark(guest)) return guest;
+    const path = findPath({ x: guest.tileX, y: guest.tileY }, exitTarget, state.grid);
+    if (!path || path.length < 2) {
+      return { ...guest, age: guest.maxAge + 1 };
+    }
+    return {
+      ...guest,
+      state: 'leaving_park',
+      targetRideId: null,
+      targetShop: null,
+      queueJoinTick: null,
+      path,
+      pathIndex: 0,
+      progress: 0,
+    };
+  });
 
   const queueCapacityByRide = calculateQueueCapacities(state);
   const queueCounts = new Map<string, number>();

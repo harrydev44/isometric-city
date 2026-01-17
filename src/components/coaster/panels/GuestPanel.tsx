@@ -12,7 +12,7 @@ interface GuestPanelProps {
 }
 
 export default function GuestPanel({ guests, onClose }: GuestPanelProps) {
-  const [filter, setFilter] = useState<'all' | 'wandering' | 'queue' | 'ride' | 'shop'>('all');
+  const [filter, setFilter] = useState<'all' | 'wandering' | 'queue' | 'ride' | 'shop' | 'leaving'>('all');
 
   const getMoodStyles = (guest: Guest) => {
     if (guest.happiness >= 180) {
@@ -53,6 +53,7 @@ export default function GuestPanel({ guests, onClose }: GuestPanelProps) {
     if (filter === 'queue') return guests.filter((guest) => guest.state === 'queuing');
     if (filter === 'ride') return guests.filter((guest) => guest.state === 'on_ride');
     if (filter === 'shop') return guests.filter((guest) => guest.state === 'at_shop');
+    if (filter === 'leaving') return guests.filter((guest) => guest.state === 'leaving_park');
     return guests.filter((guest) => guest.state === 'wandering');
   }, [filter, guests]);
 
@@ -76,6 +77,7 @@ export default function GuestPanel({ guests, onClose }: GuestPanelProps) {
             { key: 'queue', label: 'Queueing' },
             { key: 'ride', label: 'On Ride' },
             { key: 'shop', label: 'At Shop' },
+            { key: 'leaving', label: 'Leaving' },
           ].map((item) => (
             <Button
               key={item.key}
