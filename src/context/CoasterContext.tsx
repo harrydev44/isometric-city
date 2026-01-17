@@ -225,6 +225,41 @@ function normalizeLoadedState(state: GameState): GameState {
   };
 }
 
+function isRideBuilding(type: string) {
+  return type.startsWith('ride_') || type.startsWith('show_') || type.startsWith('station_');
+}
+
+function calculateMonthlyUpkeep(grid: Tile[][]): { upkeep: number; buildingCount: number; rideCount: number; trackCount: number } {
+  let buildingCount = 0;
+  let rideCount = 0;
+  let trackCount = 0;
+  
+  for (const row of grid) {
+    for (const tile of row) {
+      if (tile.trackPiece) trackCount += 1;
+      const type = tile.building?.type;
+      if (!type || type === 'empty' || type === 'grass' || type === 'water' || type === 'path' || type === 'queue') {
+        continue;
+      }
+      buildingCount += 1;
+      if (isRideBuilding(type)) rideCount += 1;
+    }
+  }
+  
+  const upkeep = buildingCount * 5 + rideCount * 20 + trackCount * 2;
+  return { upkeep, buildingCount, rideCount, trackCount };
+}
+
+function calculateStaffWages(staff: Staff[]): number {
+  const wageMap: Record<Staff['type'], number> = {
+    handyman: DEFAULT_PRICES.handymanWage,
+    mechanic: DEFAULT_PRICES.mechanicWage,
+    security: DEFAULT_PRICES.securityWage,
+    entertainer: DEFAULT_PRICES.entertainerWage,
+  };
+  return staff.reduce((sum, member) => sum + (wageMap[member.type] ?? 0), 0);
+}
+
 function createDefaultTrain(): CoasterTrain {
   const car: CoasterCar = {
     trackProgress: 0,
@@ -419,6 +454,58 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
           return { ...coaster, trains: updatedTrains };
         });
         
+        const incomeAdmissions = prev.finances.incomeAdmissions + admissionRevenue;
+        const incomeRides = prev.finances.incomeRides + rideRevenue;
+        const incomeTotal = incomeAdmissions + incomeRides + prev.finances.incomeFood + prev.finances.incomeShops;
+        const expenseTotal = prev.finances.expenseWages + prev.finances.expenseUpkeep + prev.finances.expenseMarketing + prev.finances.expenseResearch;
+        const profit = incomeTotal - expenseTotal;
+
+        const monthChanged = month !== prev.month || year !== prev.year;
+        let finances = {
+          ...prev.finances,
+          cash: prev.finances.cash + admissionRevenue + rideRevenue,
+          incomeAdmissions,
+          incomeRides,
+          incomeTotal,
+          expenseTotal,
+          profit,
+        };
+
+        if (monthChanged) {
+          const { upkeep } = calculateMonthlyUpkeep(prev.grid);
+          const wages = calculateStaffWages(prev.staff);
+          const monthlyExpenses = upkeep + wages + prev.finances.expenseMarketing + prev.finances.expenseResearch;
+          const monthlyProfit = incomeTotal - monthlyExpenses;
+
+          finances = {
+            ...prev.finances,
+            cash: prev.finances.cash + admissionRevenue + rideRevenue - monthlyExpenses,
+            incomeAdmissions: 0,
+            incomeRides: 0,
+            incomeFood: 0,
+            incomeShops: 0,
+            incomeTotal: 0,
+            expenseWages: 0,
+            expenseUpkeep: 0,
+            expenseMarketing: 0,
+            expenseResearch: 0,
+            expenseTotal: 0,
+            profit: 0,
+            history: [
+              ...prev.finances.history,
+              {
+                month: prev.month,
+                year: prev.year,
+                income: incomeTotal,
+                expenses: monthlyExpenses,
+                profit: monthlyProfit,
+                guests: guestsInPark,
+                parkValue: prev.stats.parkValue,
+              },
+            ].slice(-24),
+          };
+        }
+
         return {
           ...prev,
           tick: newTick,
@@ -439,13 +526,7 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
             parkRating,
             totalRidesRidden: prev.stats.totalRidesRidden + rideCompletions,
           },
-          finances: {
-            ...prev.finances,
-            cash: prev.finances.cash + admissionRevenue + rideRevenue,
-            incomeAdmissions: prev.finances.incomeAdmissions + admissionRevenue,
-            incomeRides: prev.finances.incomeRides + rideRevenue,
-            incomeTotal: prev.finances.incomeTotal + admissionRevenue + rideRevenue,
-          },
+          finances,
         };
       });
     }, tickInterval);
