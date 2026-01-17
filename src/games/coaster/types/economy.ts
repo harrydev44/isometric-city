@@ -59,6 +59,8 @@ export interface Guest {
   // Queue state
   queueRideId: string | null;
   queuePosition: number;
+  queueTimer: number; // Remaining wait/ride time
+  decisionCooldown: number; // Time until next ride decision
   
   // Needs (0-100, higher = more urgent)
   hunger: number;
