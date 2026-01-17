@@ -50,7 +50,7 @@ export function RidesPanel() {
                   size="sm"
                   onClick={() =>
                     updateRide(ride.id, {
-                      status: ride.status === 'open' ? 'closed' : 'open',
+                      status: ride.status === 'closed' ? 'open' : 'closed',
                     })
                   }
                 >
