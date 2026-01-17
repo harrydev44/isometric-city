@@ -277,7 +277,7 @@ export function CoasterCanvas({
       ctx.lineTo(0, halfH);
       ctx.lineTo(-halfW, 0);
       ctx.closePath();
-      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255,255,255,0.5)';
+      ctx.strokeStyle = !tile.owned ? 'rgba(239, 68, 68, 0.8)' : (isSelected ? '#ffffff' : 'rgba(255,255,255,0.5)');
       ctx.lineWidth = isSelected ? 2 : 1;
       ctx.stroke();
       ctx.restore();

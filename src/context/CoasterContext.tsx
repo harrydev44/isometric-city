@@ -746,7 +746,7 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
         exitY: y + def.size.height,
         track: [],
         tiles: rideTiles,
-        status: 'closed',
+        status: 'open',
         operatingMode: 'normal',
         trains: [],
         numTrains: 1,
