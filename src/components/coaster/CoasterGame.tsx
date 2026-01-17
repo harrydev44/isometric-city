@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { T, Var, Num, Currency } from 'gt-next';
 import { Button } from '@/components/ui/button';
 import { useCoaster } from '@/context/CoasterContext';
 import CoasterCanvas from './CoasterCanvas';
@@ -37,12 +38,6 @@ export default function CoasterGame() {
     [selectedRideId, state.rides]
   );
 
-  useEffect(() => {
-    if (selectedRideId && !selectedRide) {
-      setSelectedRideId(null);
-    }
-  }, [selectedRideId, selectedRide]);
-
   const handleAssignPatrol = useCallback((position: { x: number; y: number }) => {
     if (staffAssignmentId === null) return;
     setStaffPatrolArea(staffAssignmentId, position, patrolRadius);
@@ -61,30 +56,32 @@ export default function CoasterGame() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-slate-900/70">
           <div className="flex items-center gap-4">
             <div className="text-lg font-semibold tracking-wide">{state.parkName}</div>
-            <div className="text-xs text-muted-foreground">
-              Year {state.year} · Day {state.day} · {state.hour.toString().padStart(2, '0')}:00
-            </div>
+            <T>
+              <div className="text-xs text-muted-foreground">
+                Year <Num>{state.year}</Num> · Day <Num>{state.day}</Num> · <Var>{state.hour.toString().padStart(2, '0')}</Var>:00
+              </div>
+            </T>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <div>Guests: {state.stats.guestsInPark}</div>
-            <div>Rating: {state.stats.rating}</div>
-            <div className="font-medium">${state.finance.cash.toLocaleString()}</div>
+            <T><div>Guests: <Num>{state.stats.guestsInPark}</Num></div></T>
+            <T><div>Rating: <Num>{state.stats.rating}</Num></div></T>
+            <T><div className="font-medium"><Currency currency="USD">{state.finance.cash}</Currency></div></T>
           </div>
           <div className="flex items-center gap-2">
             <Button variant={state.speed === 0 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(0)}>
-              Pause
+              <T>Pause</T>
             </Button>
             <Button variant={state.speed === 1 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(1)}>
-              1x
+              <T>1x</T>
             </Button>
             <Button variant={state.speed === 2 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(2)}>
-              2x
+              <T>2x</T>
             </Button>
             <Button variant={state.speed === 3 ? 'default' : 'ghost'} size="sm" onClick={() => setSpeed(3)}>
-              3x
+              <T>3x</T>
             </Button>
             <Button variant="outline" size="sm" onClick={() => newGame()}>
-              New Park
+              <T>New Park</T>
             </Button>
           </div>
         </div>
