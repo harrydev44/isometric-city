@@ -1,4 +1,5 @@
 import { CoasterGameState } from './types';
+import { syncCoasterTrains, updateCoasterTrains } from '@/components/coaster/coasterTrainSystem';
 
 const HOURS_PER_SECOND = 0.04;
 const DAYS_PER_MONTH = 30;
@@ -32,7 +33,7 @@ export function simulateCoasterTick(
     year += 1;
   }
 
-  return {
+  const timeUpdated = {
     ...state,
     hour,
     day,
@@ -40,4 +41,7 @@ export function simulateCoasterTick(
     year,
     tick: state.tick + 1,
   };
+
+  const synced = syncCoasterTrains(timeUpdated);
+  return updateCoasterTrains(synced, deltaSeconds);
 }

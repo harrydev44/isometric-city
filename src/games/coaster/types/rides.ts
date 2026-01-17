@@ -67,11 +67,14 @@ export interface CoasterTrain {
   id: string;
   rideId: string;
   cars: CoasterCar[];
+  path: { x: number; y: number }[];
   segmentIndex: number;
   progress: number;
   speed: number;
+  direction: 'north' | 'east' | 'south' | 'west';
   state: 'loading' | 'running' | 'waiting';
   lastDispatchTime: number;
+  stateTimer: number;
 }
 
 export interface CoasterCar {
