@@ -62,22 +62,32 @@ const DIRECTION_STEP: Record<CardinalDirection, { dx: number; dy: number }> = {
   west: { dx: 0, dy: 1 },
 };
 
-export function isTrackTile(grid: CoasterTile[][], gridSize: number, x: number, y: number): boolean {
+export function isTrackTile(
+  grid: CoasterTile[][],
+  gridSize: number,
+  x: number,
+  y: number,
+  rideId?: string
+): boolean {
   if (x < 0 || y < 0 || x >= gridSize || y >= gridSize) return false;
-  return Boolean(grid[y][x].track);
+  const track = grid[y][x].track;
+  if (!track) return false;
+  if (rideId && track.rideId !== rideId) return false;
+  return true;
 }
 
 export function getAdjacentTrack(
   grid: CoasterTile[][],
   gridSize: number,
   x: number,
-  y: number
+  y: number,
+  rideId?: string
 ): TrackConnections {
   return {
-    north: isTrackTile(grid, gridSize, x - 1, y),
-    east: isTrackTile(grid, gridSize, x, y - 1),
-    south: isTrackTile(grid, gridSize, x + 1, y),
-    west: isTrackTile(grid, gridSize, x, y + 1),
+    north: isTrackTile(grid, gridSize, x - 1, y, rideId),
+    east: isTrackTile(grid, gridSize, x, y - 1, rideId),
+    south: isTrackTile(grid, gridSize, x + 1, y, rideId),
+    west: isTrackTile(grid, gridSize, x, y + 1, rideId),
   };
 }
 
@@ -382,13 +392,14 @@ export function getTrackDirectionOptions(
   grid: CoasterTile[][],
   gridSize: number,
   x: number,
-  y: number
+  y: number,
+  rideId?: string
 ): CardinalDirection[] {
   const options: CardinalDirection[] = [];
-  if (isTrackTile(grid, gridSize, x - 1, y)) options.push('north');
-  if (isTrackTile(grid, gridSize, x, y - 1)) options.push('east');
-  if (isTrackTile(grid, gridSize, x + 1, y)) options.push('south');
-  if (isTrackTile(grid, gridSize, x, y + 1)) options.push('west');
+  if (isTrackTile(grid, gridSize, x - 1, y, rideId)) options.push('north');
+  if (isTrackTile(grid, gridSize, x, y - 1, rideId)) options.push('east');
+  if (isTrackTile(grid, gridSize, x + 1, y, rideId)) options.push('south');
+  if (isTrackTile(grid, gridSize, x, y + 1, rideId)) options.push('west');
   return options;
 }
 
@@ -396,9 +407,10 @@ export function buildTrackLoop(
   grid: CoasterTile[][],
   gridSize: number,
   startX: number,
-  startY: number
+  startY: number,
+  rideId?: string
 ): { x: number; y: number }[] | null {
-  const startOptions = getTrackDirectionOptions(grid, gridSize, startX, startY);
+  const startOptions = getTrackDirectionOptions(grid, gridSize, startX, startY, rideId);
   if (startOptions.length === 0) return null;
 
   const path: { x: number; y: number }[] = [{ x: startX, y: startY }];
@@ -411,7 +423,7 @@ export function buildTrackLoop(
     const step = DIRECTION_STEP[direction];
     const nextX = currentX + step.dx;
     const nextY = currentY + step.dy;
-    if (!isTrackTile(grid, gridSize, nextX, nextY)) {
+    if (!isTrackTile(grid, gridSize, nextX, nextY, rideId)) {
       return null;
     }
 
@@ -421,7 +433,7 @@ export function buildTrackLoop(
 
     path.push({ x: nextX, y: nextY });
 
-    const options = getTrackDirectionOptions(grid, gridSize, nextX, nextY);
+    const options = getTrackDirectionOptions(grid, gridSize, nextX, nextY, rideId);
     const opposite = OPPOSITE_DIRECTION[direction];
     const nextOption = options.find((option) => option !== opposite);
     if (!nextOption) {

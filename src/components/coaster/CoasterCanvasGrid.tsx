@@ -11,6 +11,7 @@ import {
   COASTER_RIDE_SPRITES,
   COASTER_STALL_SPRITES,
   COASTER_TRAIN_SPRITE,
+  COASTER_ENTRANCE_SPRITE,
   preloadCoasterSprites,
   SpriteConfig,
 } from '@/components/coaster/coasterSprites';
@@ -97,7 +98,7 @@ export function CoasterCanvasGrid({
   onViewportChange,
 }: CoasterCanvasGridProps) {
   const { state, placeAtTile } = useCoaster();
-  const { grid, gridSize, selectedTool, coasterTrains, guests, staff } = state;
+  const { grid, gridSize, selectedTool, coasterTrains, guests, staff, parkEntrance } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 800 });
@@ -349,6 +350,12 @@ export function CoasterCanvasGrid({
           drawInsetDiamond(ctx, centerX, centerY, TILE_WIDTH * 0.7, TILE_HEIGHT * 0.7, PATH_COLORS[tile.path]);
         }
 
+        if (tile.x === parkEntrance.x && tile.y === parkEntrance.y) {
+          const centerX = screenX + TILE_WIDTH / 2;
+          const centerY = screenY + TILE_HEIGHT / 2;
+          drawSprite(ctx, COASTER_ENTRANCE_SPRITE, centerX, centerY);
+        }
+
         drawRides(ctx, tile, screenX, screenY);
         if (tile.track) {
           drawCoasterTrack(ctx, screenX, screenY, x, y, grid, gridSize, zoom);
@@ -396,7 +403,7 @@ export function CoasterCanvasGrid({
       ctx.closePath();
       ctx.stroke();
     }
-  }, [drawGuests, drawInsetDiamond, drawRides, drawScenery, drawStaff, drawTrains, grid, gridSize, hoveredTile, offset.x, offset.y, selectedTile, zoom]);
+  }, [drawGuests, drawInsetDiamond, drawRides, drawScenery, drawStaff, drawTrains, drawSprite, grid, gridSize, hoveredTile, offset.x, offset.y, parkEntrance.x, parkEntrance.y, selectedTile, zoom]);
 
   useEffect(() => {
     drawGrid();

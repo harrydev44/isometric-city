@@ -49,7 +49,7 @@ export function syncCoasterTrains(state: CoasterGameState): CoasterGameState {
       (tile) => tile.track?.rideId === ride.id && tile.track.special === 'station'
     );
     if (!stationTile) return;
-    const loop = buildTrackLoop(state.grid, state.gridSize, stationTile.x, stationTile.y);
+    const loop = buildTrackLoop(state.grid, state.gridSize, stationTile.x, stationTile.y, ride.id);
     if (!loop) return;
 
     let found = false;

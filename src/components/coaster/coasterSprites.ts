@@ -119,12 +119,20 @@ export const COASTER_TRAIN_SPRITE: SpriteConfig = {
   offsetY: -0.2,
 };
 
+export const COASTER_ENTRANCE_SPRITE: SpriteConfig = {
+  src: '/assets/coaster/park_entrance.png',
+  scale: 1.3,
+  offsetX: 0,
+  offsetY: -0.4,
+};
+
 export function preloadCoasterSprites() {
   const sources = [
     ...Object.values(COASTER_TRACK_SPRITES).map((sprite) => sprite.src),
     ...Object.values(COASTER_RIDE_SPRITES).map((sprite) => sprite.src),
     ...Object.values(COASTER_STALL_SPRITES).map((sprite) => sprite.src),
     COASTER_TRAIN_SPRITE.src,
+    COASTER_ENTRANCE_SPRITE.src,
   ];
 
   sources.forEach((src) => {
