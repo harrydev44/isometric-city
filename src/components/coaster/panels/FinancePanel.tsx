@@ -13,6 +13,8 @@ interface FinancePanelProps {
   shopRevenue: number;
   income: number;
   expenses: number;
+  staffCost: number;
+  maintenanceCost: number;
   loan: number;
   onEntranceFeeChange: (fee: number) => void;
   onClose: () => void;
@@ -26,6 +28,8 @@ export default function FinancePanel({
   shopRevenue,
   income,
   expenses,
+  staffCost,
+  maintenanceCost,
   loan,
   onEntranceFeeChange,
   onClose,
@@ -81,6 +85,14 @@ export default function FinancePanel({
           </div>
           <div className="space-y-2">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Expenses</div>
+            <div className="flex items-center justify-between">
+              <span>Staff Wages</span>
+              <span>${staffCost.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Maintenance</span>
+              <span>${maintenanceCost.toLocaleString()}</span>
+            </div>
             <div className="flex items-center justify-between font-semibold">
               <span>Total Expenses</span>
               <span>${expenses.toLocaleString()}</span>

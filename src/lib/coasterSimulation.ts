@@ -75,6 +75,9 @@ const LEAVE_PARK_HAPPINESS = 70;
 const LEAVE_PARK_NEED = 25;
 const LEAVE_PARK_ENERGY = 20;
 const LEAVE_PARK_MONEY = 2;
+const BREAKDOWN_INTERVAL_TICKS = 180;
+const REPAIR_TICKS = 90;
+const MAINTENANCE_BASE_COST = 120;
 
 function createGuest(id: number, tileX: number, tileY: number): Guest {
   const colors = ['#60a5fa', '#f87171', '#facc15', '#34d399', '#a78bfa'];
@@ -552,16 +555,41 @@ function updateStaff(state: CoasterParkState): CoasterParkState {
   const nextCleanliness = clamp(state.stats.cleanliness - cleanlinessDecay + cleanlinessBoost);
 
   const mechanicBoost = mechanicCount * MECHANIC_UPTIME_BOOST;
+  let maintenanceCost = 0;
   const updatedRides = state.rides.map((ride) => {
-    const wear = ride.status === 'open' ? RIDE_UPTIME_DECAY : RIDE_UPTIME_DECAY * 0.4;
+    const nextAge = ride.age + 1;
+    let status = ride.status;
+    let cycleTimer = ride.cycleTimer;
+    let lastBreakdownTick = ride.stats.lastBreakdownTick;
+
+    if (status === 'broken' && mechanicCount > 0 && lastBreakdownTick !== null) {
+      if (state.tick - lastBreakdownTick >= REPAIR_TICKS) {
+        status = 'open';
+        lastBreakdownTick = state.tick;
+        maintenanceCost += MAINTENANCE_BASE_COST;
+      }
+    }
+
+    if (status === 'open' && nextAge > 0 && nextAge % BREAKDOWN_INTERVAL_TICKS === 0) {
+      status = 'broken';
+      cycleTimer = 0;
+      lastBreakdownTick = state.tick;
+    }
+
+    const wear = status === 'open' ? RIDE_UPTIME_DECAY : RIDE_UPTIME_DECAY * 0.2;
     const uptime = clampFloat(ride.stats.uptime - wear + mechanicBoost, 0.6, 1);
     const reliability = clampFloat(ride.stats.reliability - wear * 0.6 + mechanicBoost * 0.8, 0.6, 1);
+
     return {
       ...ride,
+      age: nextAge,
+      status,
+      cycleTimer,
       stats: {
         ...ride.stats,
         uptime,
         reliability,
+        lastBreakdownTick,
       },
     };
   });
@@ -581,6 +609,14 @@ function updateStaff(state: CoasterParkState): CoasterParkState {
         expenses: state.finance.expenses + payrollTotal,
       };
     }
+  }
+  if (maintenanceCost > 0) {
+    finance = {
+      ...finance,
+      cash: finance.cash - maintenanceCost,
+      maintenanceCost: finance.maintenanceCost + maintenanceCost,
+      expenses: finance.expenses + maintenanceCost,
+    };
   }
 
   return {

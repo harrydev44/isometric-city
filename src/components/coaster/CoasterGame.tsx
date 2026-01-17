@@ -114,6 +114,8 @@ export default function CoasterGame() {
               shopRevenue={state.finance.shopRevenue}
               income={state.finance.income}
               expenses={state.finance.expenses}
+              staffCost={state.finance.staffCost}
+              maintenanceCost={state.finance.maintenanceCost}
               loan={state.finance.loan}
               onEntranceFeeChange={setEntranceFee}
               onClose={handleClosePanel}
