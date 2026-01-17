@@ -800,7 +800,8 @@ export function canPlaceTrackPiece(
     
     // Check direction compatibility
     const expectedEntry = (pieceDef.entryDirection + direction) % 4;
-    if (endPos.direction !== expectedEntry) {
+    const incomingDirection = (endPos.direction + 2) % 4;
+    if (incomingDirection !== expectedEntry) {
       return { valid: false, error: 'Track direction does not match' };
     }
   }
