@@ -9,6 +9,7 @@ import {
   CoasterTool,
   CoasterTile,
   CoasterFinance,
+  FacilityType,
   RideCategory,
   RideType,
   Staff,
@@ -570,7 +571,7 @@ export function CoasterProvider({ children }: { children: React.ReactNode }) {
             rideTile.rideId = nextRideId;
             rideTile.rideType = rideType;
             if (rideCategoryFromType(rideType) !== 'coaster' && rideCategoryFromType(rideType) !== 'flat') {
-              rideTile.facility = rideType;
+              rideTile.facility = rideType as FacilityType;
             }
             grid[pos.y][pos.x] = rideTile;
           });

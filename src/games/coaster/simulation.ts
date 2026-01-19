@@ -77,7 +77,7 @@ export function simulateCoasterTick(
   const trainsUpdated = updateCoasterTrains(synced, deltaSeconds);
   const ridesUpdated = trainsUpdated.rides.map((ride) => {
     if (ride.status === 'testing' && Date.now() - ride.createdAt > 20000) {
-      return { ...ride, status: 'open' };
+      return { ...ride, status: 'open' as const };
     }
     return ride;
   });

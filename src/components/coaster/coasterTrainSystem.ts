@@ -85,13 +85,14 @@ export function updateCoasterTrains(state: CoasterGameState, deltaSeconds: numbe
 
     const rideStatus = rideStatusById[train.rideId] ?? 'closed';
     if (rideStatus === 'closed') {
-      return { ...train, speed: 0, state: 'waiting', stateTimer: 0 };
+      return { ...train, speed: 0, state: 'waiting' as const, stateTimer: 0 };
     }
 
     let { segmentIndex, progress, speed, state: trainState, stateTimer } = train;
+    let newState: CoasterTrain['state'] = trainState;
 
-    if (trainState === 'waiting') {
-      trainState = 'loading';
+    if (newState === 'waiting') {
+      newState = 'loading';
       stateTimer = 0;
     }
 
@@ -101,12 +102,12 @@ export function updateCoasterTrains(state: CoasterGameState, deltaSeconds: numbe
 
     stateTimer += deltaSeconds;
 
-    if (trainState === 'loading') {
+    if (newState === 'loading') {
       if (stateTimer >= LOADING_DURATION) {
-        trainState = 'running';
+        newState = 'running';
         stateTimer = 0;
       } else {
-        return { ...train, state: trainState, stateTimer };
+        return { ...train, state: newState, stateTimer };
       }
     }
 
@@ -125,7 +126,7 @@ export function updateCoasterTrains(state: CoasterGameState, deltaSeconds: numbe
       const nextTile = train.path[segmentIndex];
       const nextTrack = state.grid[nextTile.y]?.[nextTile.x]?.track;
       if (nextTrack?.special === 'station') {
-        trainState = 'loading';
+        newState = 'loading';
         stateTimer = 0;
         break;
       }
@@ -140,7 +141,7 @@ export function updateCoasterTrains(state: CoasterGameState, deltaSeconds: numbe
       progress,
       speed,
       direction,
-      state: trainState,
+      state: newState,
       stateTimer,
     };
   });
