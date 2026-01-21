@@ -15,6 +15,7 @@ import { drawStraightTrack, drawCurvedTrack, drawSlopeTrack, drawLoopTrack, draw
 import { drawGuest } from '@/components/coaster/guests';
 import { useCoasterLightingSystem } from '@/components/coaster/lightingSystem';
 import { useCoasterCloudSystem, Cloud } from '@/components/coaster/cloudSystem';
+import { useParticleSystem, createParticleSystemRefs } from '@/components/coaster/particleSystem';
 import { drawBeachOnWater } from '@/components/game/drawing';
 
 // Track tools that support drag-to-draw
@@ -196,6 +197,11 @@ const WATER_COLORS = {
   stroke: '#0284c7',
 };
 
+// Water animation constants
+const WATER_SHIMMER_SPEED = 0.04;
+const WATER_WAVE_SPEED = 0.025;
+const WATER_SPARKLE_CHANCE = 0.02;
+
 function drawWaterTile(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -205,7 +211,8 @@ function drawWaterTile(
   grid: Tile[][],
   gridSize: number,
   waterImage: HTMLImageElement | null,
-  zoom: number = 1
+  zoom: number = 1,
+  tick: number = 0
 ) {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
@@ -332,6 +339,11 @@ function drawWaterTile(
     
     ctx.globalAlpha = savedAlpha;
     ctx.restore();
+    
+    // Add animated water shimmer effects
+    if (zoom >= 0.5) {
+      drawWaterShimmer(ctx, x, y, w, h, gridX, gridY, tick);
+    }
   } else {
     // Fallback: solid color water if texture not loaded
     ctx.fillStyle = WATER_COLORS.base;
@@ -349,7 +361,115 @@ function drawWaterTile(
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
+    
+    // Add shimmer even on fallback
+    if (zoom >= 0.5) {
+      drawWaterShimmer(ctx, x, y, w, h, gridX, gridY, tick);
+    }
   }
+}
+
+/**
+ * Draw animated water shimmer/sparkle effects
+ * Creates subtle wave patterns and light reflections
+ */
+function drawWaterShimmer(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  gridX: number,
+  gridY: number,
+  tick: number
+) {
+  const centerX = x + w / 2;
+  const centerY = y + h / 2;
+  
+  // Deterministic seed for consistent but varied patterns
+  const seed = gridX * 127 + gridY * 311;
+  const seedNorm = ((seed % 1000) / 1000);
+  
+  // Animated wave phase
+  const wavePhase = tick * WATER_WAVE_SPEED + seedNorm * Math.PI * 2;
+  const shimmerPhase = tick * WATER_SHIMMER_SPEED + seedNorm * Math.PI;
+  
+  // Draw subtle wave highlights
+  const waveIntensity = 0.5 + Math.sin(wavePhase) * 0.3;
+  const numWaves = 2 + Math.floor(seedNorm * 2);
+  
+  ctx.save();
+  
+  // Clip to tile diamond
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y);
+  ctx.lineTo(x + w, y + h / 2);
+  ctx.lineTo(x + w / 2, y + h);
+  ctx.lineTo(x, y + h / 2);
+  ctx.closePath();
+  ctx.clip();
+  
+  // Subtle wave lines
+  for (let i = 0; i < numWaves; i++) {
+    const waveY = centerY - h * 0.2 + (i / numWaves) * h * 0.5;
+    const waveOffset = Math.sin(wavePhase + i * 0.8) * 4;
+    const waveAlpha = 0.08 + Math.sin(shimmerPhase + i) * 0.04;
+    
+    ctx.strokeStyle = `rgba(255, 255, 255, ${waveAlpha * waveIntensity})`;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    
+    // Wavy line across the tile
+    for (let px = -w * 0.4; px <= w * 0.4; px += 4) {
+      const py = waveY + Math.sin((px / w) * 4 + wavePhase) * 2 + waveOffset;
+      if (px === -w * 0.4) {
+        ctx.moveTo(centerX + px, py);
+      } else {
+        ctx.lineTo(centerX + px, py);
+      }
+    }
+    ctx.stroke();
+  }
+  
+  // Sparkle/light reflections
+  const sparkleCount = Math.floor(seedNorm * 3) + 1;
+  for (let i = 0; i < sparkleCount; i++) {
+    const sparklePhase = shimmerPhase * 1.5 + i * 2.1;
+    const sparkleIntensity = Math.max(0, Math.sin(sparklePhase));
+    
+    if (sparkleIntensity > 0.6) {
+      // Sparkle is visible
+      const sparkleX = centerX + Math.cos(seed + i * 1.7) * w * 0.25;
+      const sparkleY = centerY + Math.sin(seed + i * 2.3) * h * 0.2;
+      const sparkleSize = 1.5 + sparkleIntensity * 1.5;
+      const sparkleAlpha = (sparkleIntensity - 0.6) * 0.6;
+      
+      // Draw sparkle (4-pointed star)
+      ctx.fillStyle = `rgba(255, 255, 255, ${sparkleAlpha})`;
+      ctx.beginPath();
+      ctx.arc(sparkleX, sparkleY, sparkleSize * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Cross highlights
+      ctx.strokeStyle = `rgba(255, 255, 255, ${sparkleAlpha * 0.7})`;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sparkleX - sparkleSize, sparkleY);
+      ctx.lineTo(sparkleX + sparkleSize, sparkleY);
+      ctx.moveTo(sparkleX, sparkleY - sparkleSize);
+      ctx.lineTo(sparkleX, sparkleY + sparkleSize);
+      ctx.stroke();
+    }
+  }
+  
+  // Subtle edge foam/reflection
+  const foamAlpha = 0.04 + Math.sin(wavePhase * 0.5) * 0.02;
+  ctx.fillStyle = `rgba(255, 255, 255, ${foamAlpha})`;
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY - h * 0.15, w * 0.35, h * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.restore();
 }
 
 // Path colors (stone/concrete, matching road styling)
@@ -2156,6 +2276,11 @@ export function CoasterGrid({
   const cloudIdRef = useRef(0);
   const cloudSpawnTimerRef = useRef(0);
   
+  // Particle system refs
+  const particlesRef = useRef<import('@/components/coaster/particleSystem').Particle[]>([]);
+  const particleIdRef = useRef(0);
+  const particleSpawnTimersRef = useRef<Record<string, number>>({});
+  
   const [offset, setOffset] = useState({ x: 620, y: 160 });
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -2212,7 +2337,7 @@ export function CoasterGrid({
   }, []);
   
   // Cloud system
-  const { updateClouds, drawClouds } = useCoasterCloudSystem(
+  const { updateClouds, drawClouds, drawCloudShadows } = useCoasterCloudSystem(
     {
       canvasWidth: canvasSize.width,
       canvasHeight: canvasSize.height,
@@ -2225,6 +2350,24 @@ export function CoasterGrid({
       cloudsRef,
       cloudIdRef,
       cloudSpawnTimerRef,
+    }
+  );
+  
+  // Particle system
+  const { updateParticles, drawParticles } = useParticleSystem(
+    {
+      canvasWidth: canvasSize.width,
+      canvasHeight: canvasSize.height,
+      offset,
+      zoom,
+      grid,
+      gridSize,
+      isMobile: false,
+    },
+    {
+      particlesRef,
+      particleIdRef,
+      spawnTimersRef: particleSpawnTimersRef,
     }
   );
   
@@ -2492,7 +2635,7 @@ const tile = grid[y][x];
 
         // Draw based on tile type
         if (tile.terrain === 'water') {
-          drawWaterTile(ctx, screenX, screenY, x, y, grid, gridSize, waterImage, zoom);
+          drawWaterTile(ctx, screenX, screenY, x, y, grid, gridSize, waterImage, zoom, tick);
           
           // Draw beach on water tiles at edges facing land (just like iso city)
           if (zoom >= 0.4) {
@@ -2695,8 +2838,11 @@ const tile = grid[y][x];
       }
     }
     
+    // Draw particles on top of everything
+    drawParticles(ctx);
+    
     ctx.restore();
-  }, [grid, gridSize, offset, zoom, canvasSize, tick, selectedTile, hoveredTile, selectedTool, spriteSheets, waterImage, state.guests, state.coasters, trackDragPreviewTiles, isTrackDragging, coasterInfoMap, incompleteTrackEnds]);
+  }, [grid, gridSize, offset, zoom, canvasSize, tick, selectedTile, hoveredTile, selectedTool, spriteSheets, waterImage, state.guests, state.coasters, trackDragPreviewTiles, isTrackDragging, coasterInfoMap, incompleteTrackEnds, drawParticles]);
   
   // Lighting canvas sizing
   useEffect(() => {
@@ -2737,18 +2883,21 @@ const tile = grid[y][x];
     cloudCanvas.style.height = `${canvasSize.height}px`;
     
     let lastTime = performance.now();
+    let animationTime = 0;
     let animationId: number;
     
     const animate = (currentTime: number) => {
       const delta = (currentTime - lastTime) / 1000; // Convert to seconds
       lastTime = currentTime;
+      animationTime += delta;
       
-      // Update clouds
+      // Update clouds and particles
       updateClouds(delta, state.speed);
+      updateParticles(delta, state.speed);
       
-      // Clear and draw clouds
+      // Clear and draw clouds with animation time for morphing effects
       ctx.clearRect(0, 0, cloudCanvas.width, cloudCanvas.height);
-      drawClouds(ctx);
+      drawClouds(ctx, animationTime);
       
       animationId = requestAnimationFrame(animate);
     };
@@ -2758,7 +2907,7 @@ const tile = grid[y][x];
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [canvasSize, updateClouds, drawClouds, state.speed]);
+  }, [canvasSize, updateClouds, drawClouds, updateParticles, state.speed]);
   
   // Helper to calculate tiles in a line from start to end (with direction locking)
   const calculateLineTiles = useCallback((

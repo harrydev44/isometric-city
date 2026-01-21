@@ -31,7 +31,7 @@ export interface Cloud {
 }
 
 // =============================================================================
-// CLOUD CONSTANTS
+// CLOUD CONSTANTS - Enhanced for visual fidelity
 // =============================================================================
 
 const CLOUD_MIN_ZOOM = 0.2;           // Minimum zoom to show clouds
@@ -57,6 +57,16 @@ const CLOUD_LAYER_OPACITY = [0.85, 1.0, 0.9];
 
 // Night darkening
 const CLOUD_NIGHT_OPACITY_MULT = 0.55;
+
+// Ground shadow configuration
+const CLOUD_SHADOW_OFFSET_X = 60;     // Shadow offset in isometric X
+const CLOUD_SHADOW_OFFSET_Y = 40;     // Shadow offset in isometric Y
+const CLOUD_SHADOW_OPACITY = 0.12;    // Base shadow opacity
+const CLOUD_SHADOW_SCALE = 1.1;       // Shadow is slightly larger than cloud
+
+// Animation enhancements
+const CLOUD_MORPH_SPEED = 0.008;      // Speed of cloud shape morphing
+const CLOUD_DRIFT_VARIANCE = 0.15;    // Subtle vertical drift variance
 
 // Cloud type spawn weights - theme park favors fair weather
 const CLOUD_TYPE_WEIGHTS: [number, number, number] = [7, 3, 5]; // cumulus, cirrus, altocumulus
@@ -400,8 +410,87 @@ export function useCoasterCloudSystem(
     ctx.fill();
   };
 
-  // Draw clouds
-  const drawClouds = useCallback((ctx: CanvasRenderingContext2D) => {
+  /**
+   * Draw cloud shadows on the ground
+   * Creates soft shadows that move with clouds for enhanced visual depth
+   */
+  const drawCloudShadows = useCallback((ctx: CanvasRenderingContext2D) => {
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+    // Skip shadows at night or when zoomed out
+    if (cloudsRef.current.length === 0 || zoom < CLOUD_MIN_ZOOM) return;
+    
+    // No shadows at night
+    const isNight = hour >= 20 || hour < 6;
+    if (isNight) return;
+    
+    // Reduced shadows at dawn/dusk
+    const isDusk = hour >= 18 && hour < 20;
+    const isDawn = hour >= 6 && hour < 8;
+    let shadowStrength = 1.0;
+    if (isDusk) shadowStrength = 1.0 - ((hour - 18) / 2) * 0.7;
+    else if (isDawn) shadowStrength = 0.3 + ((hour - 6) / 2) * 0.7;
+    
+    if (shadowStrength < 0.1) return;
+
+    // Zoom-based fade
+    let zoomOpacity = 1;
+    if (zoom > CLOUD_FADE_ZOOM) {
+      return;
+    } else if (zoom > CLOUD_MAX_ZOOM) {
+      zoomOpacity = 1 - (zoom - CLOUD_MAX_ZOOM) / (CLOUD_FADE_ZOOM - CLOUD_MAX_ZOOM);
+    }
+
+    ctx.save();
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(offset.x / zoom, offset.y / zoom);
+
+    const viewWidth = canvasWidth / (dpr * zoom);
+    const viewHeight = canvasHeight / (dpr * zoom);
+    const viewLeft = -offset.x / zoom - CLOUD_WIDTH - CLOUD_SHADOW_OFFSET_X;
+    const viewTop = -offset.y / zoom - CLOUD_WIDTH;
+    const viewRight = viewWidth - offset.x / zoom + CLOUD_WIDTH + CLOUD_SHADOW_OFFSET_X;
+    const viewBottom = viewHeight - offset.y / zoom + CLOUD_WIDTH + CLOUD_SHADOW_OFFSET_Y;
+
+    for (const cloud of cloudsRef.current) {
+      // Calculate shadow position (offset based on "sun" position)
+      const shadowX = cloud.x + CLOUD_SHADOW_OFFSET_X;
+      const shadowY = cloud.y + CLOUD_SHADOW_OFFSET_Y;
+      
+      if (shadowX < viewLeft || shadowX > viewRight || shadowY < viewTop || shadowY > viewBottom) continue;
+      
+      // Skip cirrus shadows (too high/thin)
+      if (cloud.cloudType === 'cirrus') continue;
+      
+      const baseOpacity = CLOUD_SHADOW_OPACITY * shadowStrength * zoomOpacity * (cloud.opacity * 2);
+      
+      // Draw shadow puffs
+      for (const puff of cloud.puffs) {
+        const puffX = shadowX + puff.offsetX * cloud.scale * CLOUD_SHADOW_SCALE;
+        const puffY = shadowY + puff.offsetY * cloud.scale * CLOUD_SHADOW_SCALE * 0.7; // Flatten for ground
+        const puffSize = puff.size * cloud.scale * CLOUD_SHADOW_SCALE;
+        const stretchX = (puff.stretchX ?? 1) * 1.1;
+        const stretchY = (puff.stretchY ?? 1) * 0.7;
+        const shadowOpacity = baseOpacity * puff.opacity;
+        
+        if (shadowOpacity <= 0.01) continue;
+        
+        const maxRadius = Math.max(puffSize * stretchX, puffSize * stretchY);
+        const gradient = ctx.createRadialGradient(puffX, puffY, 0, puffX, puffY, maxRadius);
+        gradient.addColorStop(0, `rgba(30, 40, 60, ${shadowOpacity * 0.8})`);
+        gradient.addColorStop(0.4, `rgba(40, 50, 70, ${shadowOpacity * 0.5})`);
+        gradient.addColorStop(0.7, `rgba(50, 60, 80, ${shadowOpacity * 0.2})`);
+        gradient.addColorStop(1, 'rgba(60, 70, 90, 0)');
+        
+        drawPuff(ctx, puffX, puffY, puffSize, stretchX, stretchY, gradient);
+      }
+    }
+
+    ctx.restore();
+  }, [cloudsRef, canvasWidth, canvasHeight, offset, zoom, hour]);
+
+  // Draw clouds with enhanced animation
+  const drawClouds = useCallback((ctx: CanvasRenderingContext2D, animationTime: number = 0) => {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
     // Skip if no clouds or zoomed out too far
@@ -462,12 +551,25 @@ export function useCoasterCloudSystem(
       if (cloud.x < viewLeft || cloud.x > viewRight || cloud.y < viewTop || cloud.y > viewBottom) continue;
 
       const finalOpacity = cloud.opacity * nightMult * zoomOpacity * coverageOpacity;
+      
+      // Subtle morphing animation for each puff
+      const morphPhase = animationTime * CLOUD_MORPH_SPEED + cloud.id * 0.5;
+      
+      // Subtle vertical drift variance
+      const driftY = Math.sin(animationTime * 0.01 + cloud.id) * CLOUD_DRIFT_VARIANCE * cloud.scale * 5;
 
-      // Draw each puff
-      for (const puff of cloud.puffs) {
-        const puffX = cloud.x + puff.offsetX * cloud.scale;
-        const puffY = cloud.y + puff.offsetY * cloud.scale;
-        const puffSize = puff.size * cloud.scale;
+      // Draw each puff with animation
+      for (let puffIdx = 0; puffIdx < cloud.puffs.length; puffIdx++) {
+        const puff = cloud.puffs[puffIdx];
+        
+        // Animate puff position subtly
+        const morphOffset = Math.sin(morphPhase + puffIdx * 0.7) * 1.5;
+        const puffX = cloud.x + puff.offsetX * cloud.scale + morphOffset * 0.5;
+        const puffY = cloud.y + puff.offsetY * cloud.scale + driftY + Math.cos(morphPhase + puffIdx) * 0.8;
+        
+        // Animate puff size subtly
+        const sizeAnim = 1 + Math.sin(morphPhase * 0.7 + puffIdx * 1.3) * 0.03;
+        const puffSize = puff.size * cloud.scale * sizeAnim;
         const puffOpacity = finalOpacity * puff.opacity;
         const stretchX = puff.stretchX ?? 1;
         const stretchY = puff.stretchY ?? 1;
@@ -482,14 +584,17 @@ export function useCoasterCloudSystem(
         drawPuff(ctx, puffX, puffY, puffSize, stretchX, stretchY, gradient);
       }
 
-      // Shadow/depth (skip for cirrus)
+      // Shadow/depth (skip for cirrus) - also animated
       const shadowMult = cloud.cloudType === 'cirrus' ? 0 : 0.15;
       if (shadowMult > 0) {
-        const shadowY = cloud.y + 8 * cloud.scale;
-        for (const puff of cloud.puffs) {
-          const puffX = cloud.x + puff.offsetX * cloud.scale;
-          const puffY = shadowY + puff.offsetY * cloud.scale;
-          const puffSize = puff.size * cloud.scale * 0.9;
+        const shadowY = cloud.y + 8 * cloud.scale + driftY;
+        for (let puffIdx = 0; puffIdx < cloud.puffs.length; puffIdx++) {
+          const puff = cloud.puffs[puffIdx];
+          const morphOffset = Math.sin(morphPhase + puffIdx * 0.7) * 1.5;
+          const puffX = cloud.x + puff.offsetX * cloud.scale + morphOffset * 0.5;
+          const puffY = shadowY + puff.offsetY * cloud.scale + Math.cos(morphPhase + puffIdx) * 0.8;
+          const sizeAnim = 1 + Math.sin(morphPhase * 0.7 + puffIdx * 1.3) * 0.03;
+          const puffSize = puff.size * cloud.scale * 0.9 * sizeAnim;
           const stretchX = puff.stretchX ?? 1;
           const stretchY = puff.stretchY ?? 1;
           const shadowOpacity = finalOpacity * puff.opacity * shadowMult;
@@ -510,5 +615,6 @@ export function useCoasterCloudSystem(
   return {
     updateClouds,
     drawClouds,
+    drawCloudShadows,
   };
 }

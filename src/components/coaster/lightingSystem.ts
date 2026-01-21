@@ -1,6 +1,6 @@
 /**
  * IsoCoaster Lighting System
- * Provides day/night cycle lighting effects similar to IsoCity
+ * Provides enhanced day/night cycle lighting effects with dynamic ambiance
  */
 
 import { useEffect } from 'react';
@@ -13,6 +13,10 @@ import { Tile } from '@/games/coaster/types';
 const TILE_WIDTH = 64;
 const HEIGHT_RATIO = 0.60;
 const TILE_HEIGHT = TILE_WIDTH * HEIGHT_RATIO;
+
+// Animation timing
+const LIGHT_FLICKER_SPEED = 0.08;
+const LIGHT_PULSE_SPEED = 0.04;
 
 // =============================================================================
 // LIGHTING UTILITY FUNCTIONS
@@ -33,30 +37,57 @@ export function getDarkness(hour: number): number {
 /**
  * Get ambient color based on time of day
  * Returns RGB values for the ambient lighting overlay
- * Using darker, more saturated colors to avoid the "hazy" look
+ * Using rich, atmospheric colors for enhanced visual appeal
  */
 export function getAmbientColor(hour: number): { r: number; g: number; b: number } {
-  if (hour >= 7 && hour < 18) return { r: 255, g: 255, b: 255 };
+  if (hour >= 7 && hour < 17) return { r: 255, g: 255, b: 255 };
+  if (hour >= 17 && hour < 18) {
+    // Golden hour - warm golden tones
+    const t = hour - 17;
+    return { 
+      r: Math.round(255 - 30 * t), 
+      g: Math.round(245 - 50 * t), 
+      b: Math.round(230 - 80 * t) 
+    };
+  }
   if (hour >= 5 && hour < 7) {
-    // Dawn - warm orange/pink
+    // Dawn - warm orange/pink with more saturation
     const t = (hour - 5) / 2;
     return { 
-      r: Math.round(40 + 30 * t), 
-      g: Math.round(25 + 20 * t), 
-      b: Math.round(50 + 15 * t) 
+      r: Math.round(50 + 40 * t), 
+      g: Math.round(30 + 25 * t), 
+      b: Math.round(60 + 20 * t) 
     };
   }
   if (hour >= 18 && hour < 20) {
-    // Dusk - purple/orange sunset
+    // Dusk - rich purple/magenta sunset
     const t = (hour - 18) / 2;
     return { 
-      r: Math.round(60 - 45 * t), 
-      g: Math.round(40 - 30 * t), 
-      b: Math.round(70 - 30 * t) 
+      r: Math.round(70 - 50 * t), 
+      g: Math.round(35 - 25 * t), 
+      b: Math.round(80 - 35 * t) 
     };
   }
-  // Night - deep blue, not gray
-  return { r: 10, g: 15, b: 40 };
+  // Night - deeper blue with slight purple tint
+  return { r: 8, g: 12, b: 45 };
+}
+
+/**
+ * Calculate smooth animated flicker for lights
+ */
+export function getLightFlicker(seed: number, time: number): number {
+  const phase1 = Math.sin(time * LIGHT_FLICKER_SPEED + seed * 1.7) * 0.5 + 0.5;
+  const phase2 = Math.sin(time * LIGHT_FLICKER_SPEED * 1.3 + seed * 2.3) * 0.5 + 0.5;
+  const phase3 = Math.sin(time * LIGHT_FLICKER_SPEED * 0.7 + seed * 0.9) * 0.5 + 0.5;
+  return 0.85 + (phase1 * 0.08 + phase2 * 0.05 + phase3 * 0.02);
+}
+
+/**
+ * Calculate smooth pulse for ride lights
+ */
+export function getLightPulse(seed: number, time: number): number {
+  const base = Math.sin(time * LIGHT_PULSE_SPEED + seed) * 0.5 + 0.5;
+  return 0.7 + base * 0.3;
 }
 
 /**
@@ -98,6 +129,7 @@ export interface CoasterLightingConfig {
   zoom: number;
   canvasWidth: number;
   canvasHeight: number;
+  animationTime?: number; // For animated lighting effects
 }
 
 // =============================================================================
@@ -206,85 +238,100 @@ const HEIGHT_UNIT = 20;
 
 /**
  * Draw light cutouts to remove darkness around light sources
+ * Includes animated flickering and pulsing effects
  */
 function drawLightCutouts(
   ctx: CanvasRenderingContext2D,
   lights: LightSource[],
-  lightIntensity: number
+  lightIntensity: number,
+  animationTime: number = 0
 ): void {
   for (const light of lights) {
     const { screenX, screenY } = gridToScreen(light.x, light.y);
     const tileCenterX = screenX + TILE_WIDTH / 2;
     const tileCenterY = screenY + TILE_HEIGHT / 2;
     
+    // Calculate animated flicker for this light
+    const seed = light.seed ?? (light.x * 1000 + light.y);
+    const flicker = getLightFlicker(seed, animationTime);
+    const pulse = getLightPulse(seed, animationTime);
+    
     if (light.type === 'path') {
-      // Path lights - warm street lamps - strong cutout
-      const lightRadius = 32;
+      // Path lights - warm street lamps with subtle flicker
+      const lightRadius = 34 * flicker;
       const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 5, 0, tileCenterX, tileCenterY - 5, lightRadius);
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.4, `rgba(255, 255, 255, ${0.7 * lightIntensity})`);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity * flicker})`);
+      gradient.addColorStop(0.35, `rgba(255, 255, 255, ${0.75 * lightIntensity * flicker})`);
+      gradient.addColorStop(0.7, `rgba(255, 255, 255, ${0.35 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(tileCenterX, tileCenterY - 5, lightRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'track') {
-      // Track lights - lights along the top of EVERY track piece - strong cutout
+      // Track lights - animated safety lights along coaster
       const trackHeight = light.trackHeight || 0;
       const elevationOffset = trackHeight * HEIGHT_UNIT;
       const lightY = tileCenterY - elevationOffset - 10;
       
-      // Main track light - bright
-      const lightRadius = 30;
+      const lightRadius = 32 * pulse;
       const gradient = ctx.createRadialGradient(tileCenterX, lightY, 0, tileCenterX, lightY, lightRadius);
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.35, `rgba(255, 255, 255, ${0.6 * lightIntensity})`);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity * pulse})`);
+      gradient.addColorStop(0.3, `rgba(255, 255, 255, ${0.7 * lightIntensity * pulse})`);
+      gradient.addColorStop(0.6, `rgba(255, 255, 255, ${0.35 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(tileCenterX, lightY, lightRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'lamp') {
-      // Lamp lights - bright focused light from street lamps - very strong cutout
-      const lightRadius = 55;
+      // Lamp lights - bright focused with soft flicker
+      const flickerIntensity = 0.95 + (flicker - 1) * 0.15;
+      const lightRadius = 58 * flickerIntensity;
       const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, lightRadius);
       gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.3, `rgba(255, 255, 255, ${0.85 * lightIntensity})`);
-      gradient.addColorStop(0.6, `rgba(255, 255, 255, ${0.5 * lightIntensity})`);
+      gradient.addColorStop(0.25, `rgba(255, 255, 255, ${0.9 * lightIntensity * flickerIntensity})`);
+      gradient.addColorStop(0.55, `rgba(255, 255, 255, ${0.55 * lightIntensity})`);
+      gradient.addColorStop(0.8, `rgba(255, 255, 255, ${0.25 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(tileCenterX, tileCenterY - 20, lightRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'shop') {
-      // Shop lights - bright warm storefront lighting - strong cutout
-      const lightRadius = 60;
+      // Shop lights - warm inviting storefront with subtle pulse
+      const shopPulse = 0.97 + (pulse - 0.85) * 0.1;
+      const lightRadius = 62 * shopPulse;
       const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 18, 0, tileCenterX, tileCenterY - 18, lightRadius);
       gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.35, `rgba(255, 255, 255, ${0.8 * lightIntensity})`);
-      gradient.addColorStop(0.65, `rgba(255, 255, 255, ${0.45 * lightIntensity})`);
+      gradient.addColorStop(0.3, `rgba(255, 255, 255, ${0.85 * lightIntensity * shopPulse})`);
+      gradient.addColorStop(0.6, `rgba(255, 255, 255, ${0.5 * lightIntensity})`);
+      gradient.addColorStop(0.85, `rgba(255, 255, 255, ${0.2 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(tileCenterX, tileCenterY - 18, lightRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'building') {
-      // Building lights - windows and ambient glow - strong cutout
-      const lightRadius = 48;
+      // Building lights - windows with ambient glow
+      const lightRadius = 50 * flicker;
       const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 15, 0, tileCenterX, tileCenterY - 15, lightRadius);
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.4, `rgba(255, 255, 255, ${0.6 * lightIntensity})`);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity * flicker})`);
+      gradient.addColorStop(0.35, `rgba(255, 255, 255, ${0.65 * lightIntensity})`);
+      gradient.addColorStop(0.7, `rgba(255, 255, 255, ${0.3 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(tileCenterX, tileCenterY - 15, lightRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'ride') {
-      // Ride lights - bright and colorful - strong cutout
-      const lightRadius = 55;
+      // Ride lights - animated colorful pulsing lights
+      const ridePulse = pulse;
+      const lightRadius = 58 * ridePulse;
       const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, lightRadius);
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity})`);
-      gradient.addColorStop(0.35, `rgba(255, 255, 255, ${0.65 * lightIntensity})`);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${1.0 * lightIntensity * ridePulse})`);
+      gradient.addColorStop(0.3, `rgba(255, 255, 255, ${0.7 * lightIntensity * ridePulse})`);
+      gradient.addColorStop(0.6, `rgba(255, 255, 255, ${0.35 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -296,77 +343,114 @@ function drawLightCutouts(
 
 /**
  * Draw colored glows for atmosphere (after cutouts)
- * Keep these subtle to avoid washed out look
+ * Enhanced with vibrant animated colors for theme park ambiance
  */
 function drawColoredGlows(
   ctx: CanvasRenderingContext2D,
   lights: LightSource[],
-  lightIntensity: number
+  lightIntensity: number,
+  animationTime: number = 0
 ): void {
   for (const light of lights) {
     const { screenX, screenY } = gridToScreen(light.x, light.y);
     const tileCenterX = screenX + TILE_WIDTH / 2;
     const tileCenterY = screenY + TILE_HEIGHT / 2;
     
+    const seed = light.seed ?? (light.x * 1000 + light.y);
+    const flicker = getLightFlicker(seed, animationTime);
+    const pulse = getLightPulse(seed, animationTime);
+    
     if (light.type === 'path') {
-      // Subtle warm glow - very low opacity
-      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 5, 0, tileCenterX, tileCenterY - 5, 16);
-      gradient.addColorStop(0, `rgba(255, 220, 150, ${0.15 * lightIntensity})`);
+      // Warm golden glow - slightly animated
+      const glowRadius = 18 * flicker;
+      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 5, 0, tileCenterX, tileCenterY - 5, glowRadius);
+      gradient.addColorStop(0, `rgba(255, 225, 160, ${0.22 * lightIntensity * flicker})`);
+      gradient.addColorStop(0.5, `rgba(255, 200, 120, ${0.12 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(tileCenterX, tileCenterY - 5, 16, 0, Math.PI * 2);
+      ctx.arc(tileCenterX, tileCenterY - 5, glowRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'track' && light.seed !== undefined) {
-      // Subtle red safety lights
+      // Animated red/white safety lights alternating
       const trackHeight = light.trackHeight || 0;
       const elevationOffset = trackHeight * HEIGHT_UNIT;
       const lightY = tileCenterY - elevationOffset - 10;
       
-      const gradient = ctx.createRadialGradient(tileCenterX, lightY, 0, tileCenterX, lightY, 12);
-      gradient.addColorStop(0, `rgba(255, 100, 100, ${0.2 * lightIntensity})`);
+      // Alternating red and white based on animation
+      const isRed = Math.sin(animationTime * 0.1 + seed * 0.5) > 0;
+      const color = isRed 
+        ? { r: 255, g: 80, b: 80 } 
+        : { r: 255, g: 255, b: 220 };
+      
+      const glowRadius = 14 * pulse;
+      const gradient = ctx.createRadialGradient(tileCenterX, lightY, 0, tileCenterX, lightY, glowRadius);
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.28 * lightIntensity * pulse})`);
+      gradient.addColorStop(0.6, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.1 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(tileCenterX, lightY, 12, 0, Math.PI * 2);
+      ctx.arc(tileCenterX, lightY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'lamp') {
-      // Warm golden glow from street lamps - bright and inviting
-      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, 30);
-      gradient.addColorStop(0, `rgba(255, 230, 150, ${0.35 * lightIntensity})`);
-      gradient.addColorStop(0.5, `rgba(255, 210, 120, ${0.2 * lightIntensity})`);
+      // Rich warm golden glow from street lamps
+      const glowRadius = 34 * flicker;
+      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, glowRadius);
+      gradient.addColorStop(0, `rgba(255, 235, 170, ${0.4 * lightIntensity * flicker})`);
+      gradient.addColorStop(0.4, `rgba(255, 215, 130, ${0.25 * lightIntensity})`);
+      gradient.addColorStop(0.75, `rgba(255, 195, 100, ${0.1 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(tileCenterX, tileCenterY - 20, 30, 0, Math.PI * 2);
+      ctx.arc(tileCenterX, tileCenterY - 20, glowRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'shop') {
-      // Warm inviting storefront glow - bright and welcoming
-      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 18, 0, tileCenterX, tileCenterY - 18, 35);
-      gradient.addColorStop(0, `rgba(255, 240, 180, ${0.35 * lightIntensity})`);
-      gradient.addColorStop(0.5, `rgba(255, 220, 140, ${0.2 * lightIntensity})`);
+      // Warm inviting storefront glow with subtle pulse
+      const shopPulse = 0.95 + (pulse - 0.85) * 0.15;
+      const glowRadius = 38 * shopPulse;
+      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 18, 0, tileCenterX, tileCenterY - 18, glowRadius);
+      gradient.addColorStop(0, `rgba(255, 245, 190, ${0.4 * lightIntensity * shopPulse})`);
+      gradient.addColorStop(0.35, `rgba(255, 225, 155, ${0.25 * lightIntensity})`);
+      gradient.addColorStop(0.7, `rgba(255, 205, 120, ${0.1 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(tileCenterX, tileCenterY - 18, 35, 0, Math.PI * 2);
+      ctx.arc(tileCenterX, tileCenterY - 18, glowRadius, 0, Math.PI * 2);
       ctx.fill();
     } else if (light.type === 'ride' && light.seed !== undefined) {
-      // Subtle colorful ride lights
+      // Vibrant animated colorful ride lights
       const colors = [
-        { r: 255, g: 100, b: 150 }, // Pink
-        { r: 100, g: 200, b: 255 }, // Cyan
-        { r: 255, g: 200, b: 100 }, // Gold
-        { r: 150, g: 255, b: 150 }, // Green
+        { r: 255, g: 80, b: 140 },  // Hot pink
+        { r: 80, g: 200, b: 255 },  // Electric blue
+        { r: 255, g: 210, b: 80 },  // Gold
+        { r: 120, g: 255, b: 140 }, // Neon green
+        { r: 200, g: 100, b: 255 }, // Purple
+        { r: 255, g: 150, b: 80 },  // Orange
       ];
-      const colorIdx = Math.floor(pseudoRandom(light.seed, 5) * colors.length);
-      const color = colors[colorIdx];
       
-      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, 25);
-      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.2 * lightIntensity})`);
+      // Cycle through colors based on animation time
+      const colorCycle = (animationTime * 0.02 + seed * 0.1) % colors.length;
+      const colorIdx = Math.floor(colorCycle);
+      const nextColorIdx = (colorIdx + 1) % colors.length;
+      const colorBlend = colorCycle - colorIdx;
+      
+      // Blend between colors for smooth transitions
+      const color1 = colors[colorIdx];
+      const color2 = colors[nextColorIdx];
+      const color = {
+        r: Math.round(color1.r + (color2.r - color1.r) * colorBlend),
+        g: Math.round(color1.g + (color2.g - color1.g) * colorBlend),
+        b: Math.round(color1.b + (color2.b - color1.b) * colorBlend),
+      };
+      
+      const glowRadius = 30 * pulse;
+      const gradient = ctx.createRadialGradient(tileCenterX, tileCenterY - 20, 0, tileCenterX, tileCenterY - 20, glowRadius);
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.35 * lightIntensity * pulse})`);
+      gradient.addColorStop(0.5, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.15 * lightIntensity})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(tileCenterX, tileCenterY - 20, 25, 0, Math.PI * 2);
+      ctx.arc(tileCenterX, tileCenterY - 20, glowRadius, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -378,6 +462,7 @@ function drawColoredGlows(
 
 /**
  * Hook for rendering day/night lighting effects in IsoCoaster
+ * Enhanced with animated lighting and atmospheric effects
  */
 export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
   const {
@@ -389,6 +474,7 @@ export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
     zoom,
     canvasWidth,
     canvasHeight,
+    animationTime = 0,
   } = config;
 
   useEffect(() => {
@@ -409,10 +495,16 @@ export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
     
     const ambient = getAmbientColor(hour);
     
-    // Apply darkness overlay - use very low alpha to avoid washed out look
-    // Use pure dark blue with minimal opacity
-    const alpha = darkness * 0.25;
-    ctx.fillStyle = `rgba(0, 5, 20, ${alpha})`;
+    // Apply darkness overlay with gradient from ambient color
+    // Creates more atmospheric night sky effect
+    const alpha = darkness * 0.28;
+    
+    // Create a subtle vertical gradient for sky-like effect
+    const overlayGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    overlayGradient.addColorStop(0, `rgba(${ambient.r * 0.3}, ${ambient.g * 0.3}, ${ambient.b}, ${alpha * 1.1})`);
+    overlayGradient.addColorStop(0.5, `rgba(${Math.floor(ambient.r * 0.2)}, ${Math.floor(ambient.g * 0.2)}, ${Math.floor(ambient.b * 0.8)}, ${alpha})`);
+    overlayGradient.addColorStop(1, `rgba(0, 5, 25, ${alpha * 0.9})`);
+    ctx.fillStyle = overlayGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Calculate viewport bounds
@@ -427,7 +519,7 @@ export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
     const visibleMinSum = Math.max(0, Math.floor((viewTop - TILE_HEIGHT * 6) * 2 / TILE_HEIGHT));
     const visibleMaxSum = Math.min(gridSize * 2 - 2, Math.ceil((viewBottom + TILE_HEIGHT) * 2 / TILE_HEIGHT));
     
-    const lightIntensity = Math.min(1, darkness * 1.3);
+    const lightIntensity = Math.min(1, darkness * 1.35);
     
     // Collect light sources
     const lights = collectLightSources(
@@ -447,7 +539,7 @@ export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
     ctx.scale(dpr * zoom, dpr * zoom);
     ctx.translate(offset.x / zoom, offset.y / zoom);
     
-    drawLightCutouts(ctx, lights, lightIntensity);
+    drawLightCutouts(ctx, lights, lightIntensity, animationTime);
     
     ctx.restore();
     
@@ -457,10 +549,10 @@ export function useCoasterLightingSystem(config: CoasterLightingConfig): void {
     ctx.scale(dpr * zoom, dpr * zoom);
     ctx.translate(offset.x / zoom, offset.y / zoom);
     
-    drawColoredGlows(ctx, lights, lightIntensity);
+    drawColoredGlows(ctx, lights, lightIntensity, animationTime);
     
     ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
     
-  }, [canvasRef, grid, gridSize, hour, offset, zoom, canvasWidth, canvasHeight]);
+  }, [canvasRef, grid, gridSize, hour, offset, zoom, canvasWidth, canvasHeight, animationTime]);
 }

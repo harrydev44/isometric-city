@@ -130,8 +130,16 @@ export function createGuest(entranceX: number, entranceY: number, gridSize: numb
 }
 
 // =============================================================================
-// GUEST RENDERING
+// GUEST RENDERING - Enhanced with smooth animations
 // =============================================================================
+
+// Animation constants for smoother, more natural movement
+const WALK_SPEED_BASE = 0.18;
+const WALK_SPEED_VARIATION = 0.04;
+const BOB_AMPLITUDE = 0.6;
+const ARM_SWING_AMPLITUDE = 0.9;
+const HEAD_BOB_FACTOR = 0.15;
+const BODY_SWAY_FACTOR = 0.08;
 
 function gridToScreen(gridX: number, gridY: number): { x: number; y: number } {
   const x = (gridX - gridY) * (TILE_WIDTH / 2);
@@ -139,39 +147,55 @@ function gridToScreen(gridX: number, gridY: number): { x: number; y: number } {
   return { x, y };
 }
 
+/**
+ * Smooth easing function for natural movement
+ */
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/**
+ * Cubic bezier-like easing for extra smooth transitions
+ */
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
 export function drawGuest(
   ctx: CanvasRenderingContext2D,
   guest: Guest,
   tick: number
 ) {
-  // Calculate interpolated position
+  // Calculate walk speed variation per guest for more natural crowd look
+  const personalWalkSpeed = WALK_SPEED_BASE + (guest.walkOffset / (Math.PI * 2)) * WALK_SPEED_VARIATION;
+  
+  // Calculate interpolated position with smooth easing
   let { x: startX, y: startY } = gridToScreen(guest.tileX, guest.tileY);
   const { x: endX, y: endY } = gridToScreen(guest.targetTileX, guest.targetTileY);
+  
+  // Apply easing to walking progress for smoother acceleration/deceleration
+  const easedProgress = easeInOutQuad(guest.progress);
   
   // For entering guests, offset start position toward outside the map (through the gate)
   // This makes them visually appear to walk in from outside
   if (guest.state === 'entering' && guest.progress < 0.5) {
-    // Determine which edge they're entering from based on tile position
-    // Offset toward the edge by extending the start position outward
     const offsetAmount = TILE_WIDTH * 0.6;
-    
-    // Calculate direction from target back to start (the direction they're coming from)
     const dx = startX - endX;
     const dy = startY - endY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
     if (dist > 0) {
-      // Extend start position outward (beyond the tile edge)
       startX += (dx / dist) * offsetAmount;
       startY += (dy / dist) * offsetAmount;
     }
   }
   
-  let x = startX + (endX - startX) * guest.progress + TILE_WIDTH / 2;
-  let y = startY + (endY - startY) * guest.progress + TILE_HEIGHT / 2;
+  let x = startX + (endX - startX) * easedProgress + TILE_WIDTH / 2;
+  let y = startY + (endY - startY) * easedProgress + TILE_HEIGHT / 2;
   
-  // When eating, shopping, or exiting building - animate position
-  // Use real time for smooth animation independent of game tick rate
+  // When eating, shopping, or exiting building - animate position with smooth easing
   if ((guest.state === 'eating' || guest.state === 'shopping' || guest.state === 'exiting_building') && guest.targetBuildingId) {
     const parts = guest.targetBuildingId.split(',');
     if (parts.length === 2) {
@@ -182,14 +206,12 @@ export function drawGuest(
         const { x: pathX, y: pathY } = gridToScreen(guest.tileX, guest.tileY);
         const { x: buildingScreenX, y: buildingScreenY } = gridToScreen(buildingX, buildingY);
         
-        // Path center and building center
         const pathCenterX = pathX + TILE_WIDTH / 2;
         const pathCenterY = pathY + TILE_HEIGHT / 2;
         const buildingCenterX = buildingScreenX + TILE_WIDTH / 2;
         const buildingCenterY = buildingScreenY + TILE_HEIGHT / 2;
         
-        const walkDurationMs = 800;
-        // If activityStartTime is 0 or undefined, treat as just started
+        const walkDurationMs = 850; // Slightly slower for more natural feel
         const now = Date.now();
         const startTime = guest.activityStartTime && guest.activityStartTime > 0 ? guest.activityStartTime : now;
         const elapsedMs = now - startTime;
@@ -197,65 +219,112 @@ export function drawGuest(
         let progress: number;
         
         if (guest.state === 'exiting_building') {
-          // Walking out: 1 -> 0 over 800ms
           progress = Math.max(0, 1 - elapsedMs / walkDurationMs);
         } else {
-          // Walking in: 0 -> 1 over 800ms, then stay at 1
           progress = Math.min(1, elapsedMs / walkDurationMs);
         }
         
-        // Apply easing for smoother movement
-        const easedProgress = progress < 0.5 
-          ? 2 * progress * progress 
-          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        // Enhanced easing with slight overshoot for more natural arrival
+        const easedBuildingProgress = progress < 0.85 
+          ? easeInOutQuad(progress / 0.85) * 0.95
+          : 0.95 + easeOutBack((progress - 0.85) / 0.15) * 0.05;
         
-        // Walk from path center toward building center
-        x = pathCenterX + (buildingCenterX - pathCenterX) * easedProgress;
-        y = pathCenterY + (buildingCenterY - pathCenterY) * easedProgress;
+        x = pathCenterX + (buildingCenterX - pathCenterX) * Math.min(1, easedBuildingProgress);
+        y = pathCenterY + (buildingCenterY - pathCenterY) * Math.min(1, easedBuildingProgress);
       }
     }
   }
   
-  // Walking animation
-  const walkCycle = Math.sin((tick * 0.2 + guest.walkOffset) * 2);
-  const bobY = Math.abs(walkCycle) * 0.5;
+  // Enhanced walking animation with multiple harmonics for natural movement
+  const walkPhase = tick * personalWalkSpeed + guest.walkOffset;
+  const primaryWalk = Math.sin(walkPhase * 2);
+  const secondaryWalk = Math.sin(walkPhase * 4) * 0.15; // Higher frequency detail
+  const walkCycle = primaryWalk + secondaryWalk;
   
-  // Draw shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  // Determine if guest is moving (for animation intensity)
+  const isMoving = guest.state === 'walking' || guest.state === 'entering' || 
+                   (guest.state === 'eating' && guest.approachProgress !== undefined && guest.approachProgress < 1 && guest.approachProgress > 0) ||
+                   (guest.state === 'shopping' && guest.approachProgress !== undefined && guest.approachProgress < 1 && guest.approachProgress > 0) ||
+                   guest.state === 'exiting_building';
+  
+  const animationIntensity = isMoving ? 1.0 : 0.15; // Idle guests have subtle breathing animation
+  
+  // Body bob - more pronounced when walking
+  const bobY = Math.abs(primaryWalk) * BOB_AMPLITUDE * animationIntensity;
+  
+  // Subtle lateral sway for more natural movement
+  const bodySway = Math.sin(walkPhase) * BODY_SWAY_FACTOR * animationIntensity;
+  
+  // Draw shadow with size variation based on bob
+  const shadowScale = 1 - bobY * 0.05;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
   ctx.beginPath();
-  ctx.ellipse(x, y + 0.5, 1.25, 0.75, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + bodySway * 0.5, y + 0.5, 1.3 * shadowScale, 0.8 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
   
-  // Draw body (simple sprite-like representation) - scaled to 25% of original
+  // Draw body with enhanced animation
   const guestY = y - 3 - bobY;
+  const guestX = x + bodySway;
   
-  // Pants/legs
+  // Legs with alternating movement
   ctx.fillStyle = guest.pantsColor;
-  ctx.fillRect(x - 0.75, guestY + 1.5, 0.5, 1.5);
-  ctx.fillRect(x + 0.25, guestY + 1.5, 0.5, 1.5);
+  const legOffset = walkCycle * 0.35 * animationIntensity;
+  ctx.fillRect(guestX - 0.75, guestY + 1.5 - legOffset * 0.5, 0.55, 1.5 + legOffset * 0.3);
+  ctx.fillRect(guestX + 0.2, guestY + 1.5 + legOffset * 0.5, 0.55, 1.5 - legOffset * 0.3);
   
-  // Torso
+  // Torso with subtle rotation
   ctx.fillStyle = guest.shirtColor;
-  ctx.fillRect(x - 1, guestY - 0.5, 2, 2);
+  ctx.fillRect(guestX - 1, guestY - 0.5, 2, 2);
   
-  // Head
+  // Add subtle shirt highlight for depth
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.fillRect(guestX - 0.8, guestY - 0.3, 0.8, 1.5);
+  
+  // Head with subtle bob
+  const headBob = Math.sin(walkPhase * 2 + 0.5) * HEAD_BOB_FACTOR * animationIntensity;
   ctx.fillStyle = guest.skinColor;
   ctx.beginPath();
-  ctx.arc(x, guestY - 1.5, 1, 0, Math.PI * 2);
+  ctx.arc(guestX, guestY - 1.5 + headBob, 1.05, 0, Math.PI * 2);
   ctx.fill();
   
-  // Hat
+  // Hat with improved styling
   if (guest.hasHat) {
     ctx.fillStyle = guest.hatColor;
-    ctx.fillRect(x - 1.25, guestY - 2.75, 2.5, 0.75);
-    ctx.fillRect(x - 0.75, guestY - 3.5, 1.5, 0.75);
+    // Brim
+    ctx.fillRect(guestX - 1.3, guestY - 2.8 + headBob, 2.6, 0.65);
+    // Crown
+    ctx.fillRect(guestX - 0.8, guestY - 3.55 + headBob, 1.6, 0.85);
+    // Hat highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillRect(guestX - 0.6, guestY - 3.35 + headBob, 0.6, 0.5);
   }
   
-  // Arms (animated)
-  const armSwing = walkCycle * 0.75;
+  // Arms with enhanced swing animation
+  const armSwing = walkCycle * ARM_SWING_AMPLITUDE * animationIntensity;
   ctx.fillStyle = guest.shirtColor;
-  ctx.fillRect(x - 1.5, guestY + armSwing, 0.5, 1.25);
-  ctx.fillRect(x + 1, guestY - armSwing, 0.5, 1.25);
+  
+  // Left arm
+  ctx.save();
+  ctx.translate(guestX - 1.25, guestY);
+  ctx.rotate(armSwing * 0.15);
+  ctx.fillRect(-0.25, 0, 0.55, 1.3);
+  ctx.restore();
+  
+  // Right arm (opposite swing)
+  ctx.save();
+  ctx.translate(guestX + 1.25, guestY);
+  ctx.rotate(-armSwing * 0.15);
+  ctx.fillRect(-0.3, 0, 0.55, 1.3);
+  ctx.restore();
+  
+  // Optional: Draw carried items for eating guests
+  if (guest.state === 'eating' && guest.approachProgress !== undefined && guest.approachProgress >= 0.8) {
+    // Small food item in hand
+    ctx.fillStyle = '#fbbf24'; // Yellow (food color)
+    ctx.beginPath();
+    ctx.arc(guestX + 1.5, guestY + 0.5, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // =============================================================================
