@@ -3,6 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useCoaster } from '@/context/CoasterContext';
 import { Tile, Tool, TOOL_INFO } from '@/games/coaster/types';
+import { getCoasterCategory, CoasterCategory } from '@/games/coaster/types/tracks';
 import { getSpriteInfo, getSpriteRect, COASTER_SPRITE_PACK } from '@/games/coaster/lib/coasterRenderConfig';
 
 // Helper to get building size for a tool (defaults to 1x1)
@@ -1503,7 +1504,8 @@ function drawTrackSegment(
   x: number,
   y: number,
   tick: number,
-  trackColor?: string
+  trackColor?: string,
+  coasterCategory?: CoasterCategory
 ) {
   if (!trackPiece) return;
   
@@ -1514,20 +1516,20 @@ function drawTrackSegment(
   const effectiveTrackColor = trackColor;
   
   if (type === 'straight_flat' || type === 'lift_hill_start' || type === 'lift_hill_middle' || type === 'lift_hill_end') {
-    drawStraightTrack(ctx, x, y, direction, startHeight, effectiveTrackColor, effectiveStrutStyle);
+    drawStraightTrack(ctx, x, y, direction, startHeight, effectiveTrackColor, effectiveStrutStyle, coasterCategory, tick);
   } else if (type === 'turn_left_flat' || type === 'turn_right_flat') {
-    drawCurvedTrack(ctx, x, y, direction, type === 'turn_right_flat', startHeight, effectiveTrackColor, effectiveStrutStyle);
+    drawCurvedTrack(ctx, x, y, direction, type === 'turn_right_flat', startHeight, effectiveTrackColor, effectiveStrutStyle, coasterCategory, tick);
   } else if (type === 'slope_up_small' || type === 'slope_down_small') {
-    drawSlopeTrack(ctx, x, y, direction, startHeight, endHeight, effectiveTrackColor, effectiveStrutStyle);
+    drawSlopeTrack(ctx, x, y, direction, startHeight, endHeight, effectiveTrackColor, effectiveStrutStyle, coasterCategory, tick);
   } else if (type === 'loop_vertical') {
     // Draw loop - the function handles edge connections internally
     const loopHeight = Math.max(3, endHeight + 3);
     // Offset Y for track elevation
     const elevatedY = y - startHeight * HEIGHT_UNIT;
-    drawLoopTrack(ctx, x, elevatedY, direction, loopHeight, effectiveTrackColor, effectiveStrutStyle);
+    drawLoopTrack(ctx, x, elevatedY, direction, loopHeight, effectiveTrackColor, effectiveStrutStyle, coasterCategory, tick);
   } else {
     // Default fallback to straight for unimplemented pieces
-    drawStraightTrack(ctx, x, y, direction, startHeight, effectiveTrackColor, effectiveStrutStyle);
+    drawStraightTrack(ctx, x, y, direction, startHeight, effectiveTrackColor, effectiveStrutStyle, coasterCategory, tick);
   }
   
   // Only draw chain lift on slope_up pieces (never on slope_down)
@@ -1994,11 +1996,17 @@ export function CoasterGrid({
   const { state, latestStateRef, placeAtTile, bulldozeTile, placeTrackLine } = useCoaster();
   const { grid, gridSize, selectedTool, tick, coasters } = state;
   
-  // Create a lookup map from coaster ID to colors for track rendering
-  const coasterColorMap = useMemo(() => {
-    const map = new Map<string, { primary: string; secondary: string; supports: string }>();
+  // Create a lookup map from coaster ID to colors and category for track rendering
+  const coasterInfoMap = useMemo(() => {
+    const map = new Map<string, { 
+      colors: { primary: string; secondary: string; supports: string };
+      category: CoasterCategory;
+    }>();
     for (const coaster of coasters) {
-      map.set(coaster.id, coaster.color);
+      map.set(coaster.id, {
+        colors: coaster.color,
+        category: getCoasterCategory(coaster.type),
+      });
     }
     return map;
   }, [coasters]);
@@ -2385,9 +2393,9 @@ const tile = grid[y][x];
         
         // Draw coaster track if present
         if (tile.trackPiece) {
-          // Look up the coaster's colors for this track
-          const trackColors = tile.coasterTrackId ? coasterColorMap.get(tile.coasterTrackId) : undefined;
-          drawTrackSegment(ctx, tile.trackPiece, screenX, screenY, tick, trackColors?.primary);
+          // Look up the coaster's colors and category for this track
+          const coasterInfo = tile.coasterTrackId ? coasterInfoMap.get(tile.coasterTrackId) : undefined;
+          drawTrackSegment(ctx, tile.trackPiece, screenX, screenY, tick, coasterInfo?.colors?.primary, coasterInfo?.category);
         }
         
         // Draw building sprite if present (skip footprint tiles - they're part of multi-tile buildings)
@@ -2548,7 +2556,7 @@ const tile = grid[y][x];
     }
     
     ctx.restore();
-  }, [grid, gridSize, offset, zoom, canvasSize, tick, selectedTile, hoveredTile, selectedTool, spriteSheets, waterImage, state.guests, state.coasters, trackDragPreviewTiles, isTrackDragging]);
+  }, [grid, gridSize, offset, zoom, canvasSize, tick, selectedTile, hoveredTile, selectedTool, spriteSheets, waterImage, state.guests, state.coasters, trackDragPreviewTiles, isTrackDragging, coasterInfoMap]);
   
   // Lighting canvas sizing
   useEffect(() => {

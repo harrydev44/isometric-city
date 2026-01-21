@@ -4,7 +4,7 @@
  * Inspired by the rail system but with 3D height support
  */
 
-import type { StrutStyle } from '@/games/coaster/types/tracks';
+import type { StrutStyle, CoasterCategory } from '@/games/coaster/types/tracks';
 
 // =============================================================================
 // CONSTANTS
@@ -46,6 +46,12 @@ const COLORS = {
   concreteLeft: '#6b7280',   // Medium gray left face (shadow)
   concreteRight: '#78838f',  // Slightly lighter right face
   concreteEdge: '#52525b',   // Dark edge/outline
+  // Water coaster colors
+  waterLight: '#60c3eb',     // Light blue water surface
+  waterMedium: '#3ba7d9',    // Medium blue water
+  waterDark: '#2980b9',      // Darker blue for depth
+  waterFoam: '#e0f4fc',      // White foam/spray
+  waterShadow: '#1a5276',    // Deep shadow under water
 };
 
 // =============================================================================
@@ -119,6 +125,219 @@ export interface TrackSegment {
 }
 
 // =============================================================================
+// SPECIAL EFFECTS FOR COASTER CATEGORIES
+// =============================================================================
+
+/**
+ * Draw animated water channel around track for water coasters
+ * Creates a trough of water that the boat rides through
+ */
+function drawWaterChannel(
+  ctx: CanvasRenderingContext2D,
+  fromEdge: { x: number; y: number },
+  toEdge: { x: number; y: number },
+  perpX: number,
+  perpY: number,
+  tick: number = 0
+) {
+  const channelWidth = 14; // Wider than the track
+  const waterDepth = 4;
+  
+  // Animate water with tick
+  const waveOffset = (tick % 60) / 60 * Math.PI * 2;
+  
+  // Draw water channel base (dark shadow underneath)
+  ctx.fillStyle = COLORS.waterShadow;
+  ctx.beginPath();
+  ctx.moveTo(fromEdge.x - perpX * channelWidth / 2, fromEdge.y - perpY * channelWidth / 2 + waterDepth);
+  ctx.lineTo(toEdge.x - perpX * channelWidth / 2, toEdge.y - perpY * channelWidth / 2 + waterDepth);
+  ctx.lineTo(toEdge.x + perpX * channelWidth / 2, toEdge.y + perpY * channelWidth / 2 + waterDepth);
+  ctx.lineTo(fromEdge.x + perpX * channelWidth / 2, fromEdge.y + perpY * channelWidth / 2 + waterDepth);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Draw main water surface with gradient
+  const gradient = ctx.createLinearGradient(
+    fromEdge.x - perpX * channelWidth / 2, fromEdge.y,
+    fromEdge.x + perpX * channelWidth / 2, fromEdge.y
+  );
+  gradient.addColorStop(0, COLORS.waterDark);
+  gradient.addColorStop(0.3, COLORS.waterMedium);
+  gradient.addColorStop(0.5, COLORS.waterLight);
+  gradient.addColorStop(0.7, COLORS.waterMedium);
+  gradient.addColorStop(1, COLORS.waterDark);
+  
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(fromEdge.x - perpX * channelWidth / 2, fromEdge.y - perpY * channelWidth / 2);
+  ctx.lineTo(toEdge.x - perpX * channelWidth / 2, toEdge.y - perpY * channelWidth / 2);
+  ctx.lineTo(toEdge.x + perpX * channelWidth / 2, toEdge.y + perpY * channelWidth / 2);
+  ctx.lineTo(fromEdge.x + perpX * channelWidth / 2, fromEdge.y + perpY * channelWidth / 2);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Draw animated wave highlights
+  const length = Math.hypot(toEdge.x - fromEdge.x, toEdge.y - fromEdge.y);
+  const numWaves = Math.floor(length / 10);
+  
+  ctx.strokeStyle = COLORS.waterFoam;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6;
+  
+  for (let i = 0; i < numWaves; i++) {
+    const t = (i / numWaves + waveOffset / (Math.PI * 2)) % 1;
+    const waveX = fromEdge.x + (toEdge.x - fromEdge.x) * t;
+    const waveY = fromEdge.y + (toEdge.y - fromEdge.y) * t;
+    const waveAmplitude = Math.sin(waveOffset + i * 0.5) * 0.5 + 0.5;
+    
+    // Small curved highlight
+    ctx.beginPath();
+    const waveWidth = 4 * waveAmplitude;
+    ctx.moveTo(waveX - perpX * waveWidth, waveY - perpY * waveWidth - 1);
+    ctx.quadraticCurveTo(
+      waveX, waveY - 2,
+      waveX + perpX * waveWidth, waveY + perpY * waveWidth - 1
+    );
+    ctx.stroke();
+  }
+  
+  ctx.globalAlpha = 1;
+  
+  // Draw channel edges (walls)
+  ctx.strokeStyle = COLORS.waterDark;
+  ctx.lineWidth = 2;
+  
+  // Left edge
+  ctx.beginPath();
+  ctx.moveTo(fromEdge.x - perpX * channelWidth / 2, fromEdge.y - perpY * channelWidth / 2);
+  ctx.lineTo(toEdge.x - perpX * channelWidth / 2, toEdge.y - perpY * channelWidth / 2);
+  ctx.stroke();
+  
+  // Right edge
+  ctx.beginPath();
+  ctx.moveTo(fromEdge.x + perpX * channelWidth / 2, fromEdge.y + perpY * channelWidth / 2);
+  ctx.lineTo(toEdge.x + perpX * channelWidth / 2, toEdge.y + perpY * channelWidth / 2);
+  ctx.stroke();
+}
+
+/**
+ * Draw enhanced wooden cross-bracing for wooden coasters
+ * Creates the classic lattice structure of wooden coaster supports
+ */
+function drawWoodenCrossBracing(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  height: number,
+  perpX: number = 0,
+  perpY: number = 0
+) {
+  if (height <= 0) return;
+  
+  const heightPx = height * HEIGHT_UNIT;
+  const baseWidth = 16 + height * 2; // Wider at base for taller structures
+  const topWidth = 8;
+  
+  // Draw from ground up
+  const topY = groundY - heightPx;
+  
+  // Main vertical posts (2 on each side)
+  const postSpacing = baseWidth * 0.4;
+  
+  ctx.strokeStyle = COLORS.woodDark;
+  ctx.lineWidth = 3;
+  
+  // Left posts
+  ctx.beginPath();
+  ctx.moveTo(x - baseWidth / 2, groundY);
+  ctx.lineTo(x - topWidth / 2, topY);
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(x - baseWidth / 2 + postSpacing, groundY);
+  ctx.lineTo(x - topWidth / 2 + postSpacing * 0.3, topY);
+  ctx.stroke();
+  
+  // Right posts
+  ctx.beginPath();
+  ctx.moveTo(x + baseWidth / 2, groundY);
+  ctx.lineTo(x + topWidth / 2, topY);
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(x + baseWidth / 2 - postSpacing, groundY);
+  ctx.lineTo(x + topWidth / 2 - postSpacing * 0.3, topY);
+  ctx.stroke();
+  
+  // Cross braces (X pattern)
+  const numBraces = Math.max(2, Math.floor(height * 1.5));
+  ctx.strokeStyle = COLORS.woodAccent;
+  ctx.lineWidth = 2;
+  
+  for (let i = 0; i < numBraces; i++) {
+    const t1 = i / numBraces;
+    const t2 = (i + 1) / numBraces;
+    
+    const y1 = groundY - heightPx * t1;
+    const y2 = groundY - heightPx * t2;
+    
+    // Width at each height (tapers from base to top)
+    const w1 = baseWidth - (baseWidth - topWidth) * t1;
+    const w2 = baseWidth - (baseWidth - topWidth) * t2;
+    
+    // X brace pattern
+    // Left side X
+    ctx.beginPath();
+    ctx.moveTo(x - w1 / 2, y1);
+    ctx.lineTo(x - w2 / 2 + (w2 * 0.3), y2);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(x - w1 / 2 + (w1 * 0.3), y1);
+    ctx.lineTo(x - w2 / 2, y2);
+    ctx.stroke();
+    
+    // Right side X
+    ctx.beginPath();
+    ctx.moveTo(x + w1 / 2, y1);
+    ctx.lineTo(x + w2 / 2 - (w2 * 0.3), y2);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(x + w1 / 2 - (w1 * 0.3), y1);
+    ctx.lineTo(x + w2 / 2, y2);
+    ctx.stroke();
+    
+    // Horizontal brace
+    ctx.strokeStyle = COLORS.woodMain;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x - w2 / 2, y2);
+    ctx.lineTo(x + w2 / 2, y2);
+    ctx.stroke();
+    ctx.strokeStyle = COLORS.woodAccent;
+    ctx.lineWidth = 2;
+  }
+  
+  // Draw highlight on main posts
+  ctx.strokeStyle = COLORS.woodLight;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.5;
+  
+  ctx.beginPath();
+  ctx.moveTo(x - baseWidth / 2 + 1, groundY);
+  ctx.lineTo(x - topWidth / 2 + 1, topY);
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(x + baseWidth / 2 - 1, groundY);
+  ctx.lineTo(x + topWidth / 2 - 1, topY);
+  ctx.stroke();
+  
+  ctx.globalAlpha = 1;
+}
+
+// =============================================================================
 // DRAWING FUNCTIONS
 // =============================================================================
 
@@ -133,7 +352,9 @@ export function drawStraightTrack(
   direction: TrackDirection,
   height: number,
   trackColor: string = COLORS.rail,
-  strutStyle: StrutStyle = 'metal'
+  strutStyle: StrutStyle = 'metal',
+  coasterCategory?: CoasterCategory,
+  tick: number = 0
 ) {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
@@ -169,17 +390,31 @@ export function drawStraightTrack(
     perpY = (southEdge.y - northEdge.y) / Math.hypot(southEdge.x - northEdge.x, southEdge.y - northEdge.y);
   }
   
+  // Draw water channel FIRST (behind everything) for water coasters
+  if (coasterCategory === 'water') {
+    drawWaterChannel(ctx, fromEdge, toEdge, perpX, perpY, tick);
+  }
+  
   // Draw support column if elevated
   if (height > 0) {
-    drawSupport(ctx, center.x, center.y + heightOffset, height, { x: perpX, y: perpY }, strutStyle);
+    // Use enhanced wooden cross-bracing for wooden coasters
+    if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+      drawWoodenCrossBracing(ctx, center.x, center.y + heightOffset, height, perpX, perpY);
+    } else {
+      drawSupport(ctx, center.x, center.y + heightOffset, height, { x: perpX, y: perpY }, strutStyle);
+    }
   }
   
   // Calculate track length for tie spacing
   const length = Math.hypot(toEdge.x - fromEdge.x, toEdge.y - fromEdge.y);
   const numTies = Math.max(3, Math.floor(length / TIE_SPACING));
   
-  // Draw crossties
-  ctx.strokeStyle = COLORS.tie;
+  // Draw crossties - wooden coasters get wooden ties
+  if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+    ctx.strokeStyle = COLORS.woodAccent;
+  } else {
+    ctx.strokeStyle = COLORS.tie;
+  }
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'butt';
   
@@ -226,7 +461,9 @@ export function drawCurvedTrack(
   turnRight: boolean,
   height: number,
   trackColor: string = COLORS.rail,
-  strutStyle: StrutStyle = 'metal'
+  strutStyle: StrutStyle = 'metal',
+  coasterCategory?: CoasterCategory,
+  _tick: number = 0
 ) {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
@@ -266,12 +503,22 @@ export function drawCurvedTrack(
       x: u * u * fromEdge.x + 2 * u * midT * center.x + midT * midT * toEdge.x,
       y: u * u * fromEdge.y + 2 * u * midT * center.y + midT * midT * toEdge.y,
     };
-    drawSupport(ctx, curveMid.x, curveMid.y + heightOffset, height, undefined, strutStyle);
+    // Use enhanced wooden cross-bracing for wooden coasters
+    if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+      drawWoodenCrossBracing(ctx, curveMid.x, curveMid.y + heightOffset, height, 0, 0);
+    } else {
+      drawSupport(ctx, curveMid.x, curveMid.y + heightOffset, height, undefined, strutStyle);
+    }
   }
   
   // Draw crossties along the quadratic curve (fewer ties - 4 is enough)
   const numTies = 4;
-  ctx.strokeStyle = COLORS.tie;
+  // Wooden coasters get wooden ties
+  if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+    ctx.strokeStyle = COLORS.woodAccent;
+  } else {
+    ctx.strokeStyle = COLORS.tie;
+  }
   ctx.lineWidth = 1.5;
   
   for (let i = 0; i <= numTies; i++) {
@@ -353,7 +600,9 @@ export function drawSlopeTrack(
   startHeight: number,
   endHeight: number,
   trackColor: string = COLORS.rail,
-  strutStyle: StrutStyle = 'metal'
+  strutStyle: StrutStyle = 'metal',
+  coasterCategory?: CoasterCategory,
+  _tick: number = 0
 ) {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
@@ -364,6 +613,7 @@ export function drawSlopeTrack(
   const southEdge = { x: startX + w * 0.75, y: startY + h * 0.75 };
   const westEdge = { x: startX + w * 0.25, y: startY + h * 0.75 };
   const center = { x: startX + w / 2, y: startY + h / 2 };
+  void center; // Unused but kept for symmetry
   
   // Determine endpoints based on direction
   // The direction indicates where the track is GOING (exit direction)
@@ -431,16 +681,29 @@ export function drawSlopeTrack(
   
   // Draw supports at start and end if elevated
   if (fromHeight > 0) {
-    drawSupport(ctx, x1, fromEdge.y, fromHeight, { x: perpX, y: perpY }, strutStyle);
+    if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+      drawWoodenCrossBracing(ctx, x1, fromEdge.y, fromHeight, perpX, perpY);
+    } else {
+      drawSupport(ctx, x1, fromEdge.y, fromHeight, { x: perpX, y: perpY }, strutStyle);
+    }
   }
   if (toHeight > 0) {
-    drawSupport(ctx, x2, toEdge.y, toHeight, { x: perpX, y: perpY }, strutStyle);
+    if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+      drawWoodenCrossBracing(ctx, x2, toEdge.y, toHeight, perpX, perpY);
+    } else {
+      drawSupport(ctx, x2, toEdge.y, toHeight, { x: perpX, y: perpY }, strutStyle);
+    }
   }
   
   // Draw crossties
   const numTies = Math.max(3, Math.floor(trackLen / TIE_SPACING));
   
-  ctx.strokeStyle = COLORS.tie;
+  // Wooden coasters get wooden ties
+  if (coasterCategory === 'wooden' || strutStyle === 'wood') {
+    ctx.strokeStyle = COLORS.woodAccent;
+  } else {
+    ctx.strokeStyle = COLORS.tie;
+  }
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'butt';
   
@@ -834,8 +1097,11 @@ export function drawLoopTrack(
   direction: TrackDirection,
   loopHeight: number,
   trackColor: string = COLORS.rail,
-  strutStyle: StrutStyle = 'metal'
+  strutStyle: StrutStyle = 'metal',
+  coasterCategory?: CoasterCategory,
+  _tick: number = 0
 ) {
+  void coasterCategory; // Category can be used for future loop styling
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
   
