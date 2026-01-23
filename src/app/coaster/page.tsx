@@ -16,6 +16,7 @@ import {
   SavedParkMeta,
   upsertSavedParkMeta,
   writeSavedParksIndex,
+  saveCoasterStateToStorage,
 } from '@/games/coaster/saveUtils';
 import { COASTER_SPRITE_PACK, getSpriteInfo, getSpriteRect } from '@/games/coaster/lib/coasterRenderConfig';
 
@@ -332,6 +333,26 @@ export default function CoasterPage() {
                 New Park
               </Button>
             )}
+            
+            <Button
+              onClick={async () => {
+                try {
+                  const response = await fetch('/example-states-coaster/example_state.json');
+                  const exampleState = await response.json();
+                  saveCoasterStateToStorage(COASTER_AUTOSAVE_KEY, exampleState);
+                  refreshSavedParks();
+                  setStartFresh(false);
+                  setLoadParkId(null);
+                  setShowGame(true);
+                } catch (e) {
+                  console.error('Failed to load example state:', e);
+                }
+              }}
+              variant="outline"
+              className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
+            >
+              Load Example
+            </Button>
             
             <a
               href="/"
