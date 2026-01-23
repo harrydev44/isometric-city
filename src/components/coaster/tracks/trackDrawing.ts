@@ -16,7 +16,7 @@ const TILE_HEIGHT = TILE_WIDTH * HEIGHT_RATIO;
 
 // Track visual parameters
 const TRACK_WIDTH = 5; // Width of the track rails
-const RAIL_WIDTH = 2; // Width of individual rails
+const RAIL_WIDTH = 3; // Width of individual rails (increased for visibility)
 const TIE_LENGTH = 8; // Length of crossties
 const TIE_SPACING = 8; // Space between crossties
 const SUPPORT_WIDTH = 2; // Width of support columns (thinner)
@@ -471,17 +471,6 @@ export function drawCurvedTrack(
 ) {
   const w = TILE_WIDTH;
   const h = TILE_HEIGHT;
-  
-  // DEBUG: Draw a bright green circle at the center of this tile to verify rendering location
-  ctx.save();
-  ctx.fillStyle = '#00ff00';
-  ctx.beginPath();
-  ctx.arc(startX + w / 2, startY + h / 2, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  
-  // DEBUG: Log what color we're using
-  console.log(`CURVE_COLOR: trackColor=${trackColor}, height=${height}`);
   const heightOffset = height * HEIGHT_UNIT;
   
   // Edge midpoints - MUST match where straight tracks end (like city game's rail system)
@@ -563,38 +552,9 @@ export function drawCurvedTrack(
   const railOffset = TRACK_WIDTH / 2;
   const segments = 16;
   
-  // DEBUG: Draw simple lines instead of bezier to test if any stroke works
-  console.log(`BEZIER: from(${fromEdge.x.toFixed(1)},${fromEdge.y.toFixed(1)}) to(${toEdge.x.toFixed(1)},${toEdge.y.toFixed(1)}) center(${center.x.toFixed(1)},${center.y.toFixed(1)})`);
-  
-  // Draw a thick magenta line from fromEdge to center
-  ctx.strokeStyle = '#ff00ff';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(fromEdge.x, fromEdge.y);
-  ctx.lineTo(center.x, center.y);
-  ctx.stroke();
-  
-  // Draw a thick cyan line from center to toEdge
-  ctx.strokeStyle = '#00ffff';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(center.x, center.y);
-  ctx.lineTo(toEdge.x, toEdge.y);
-  ctx.stroke();
-  
-  // DEBUG: Draw circles at the edge points to see where they are
-  ctx.fillStyle = '#ff0000';
-  ctx.beginPath();
-  ctx.arc(fromEdge.x, fromEdge.y, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#0000ff';
-  ctx.beginPath();
-  ctx.arc(toEdge.x, toEdge.y, 5, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // DEBUG: Use original trackColor but with thick width
-  ctx.strokeStyle = trackColor || '#ff0000';  // Original color, fallback to red
-  ctx.lineWidth = 6;  // Thick enough to see
+  // Use track color for rails
+  ctx.strokeStyle = trackColor;
+  ctx.lineWidth = RAIL_WIDTH;
   ctx.lineCap = 'round';
   
   // Left and right rail paths

@@ -2134,25 +2134,8 @@ export function CoasterProvider({
         // Update previous tile for auto-build turns
         // This applies to all track tools when direction changes, not just coaster_build
         const isTrackPlacementTool = trackTools.includes(tool);
-        // DEBUG: Log turn creation conditions
-        console.log('TURN_DEBUG:', {
-          tool,
-          isTrackPlacementTool,
-          lastTile,
-          buildingCoasterLastDirection: prev.buildingCoasterLastDirection,
-          deltaDir,
-          currentTile: { x, y },
-          willCheckTurn: !!(isTrackPlacementTool && lastTile && prev.buildingCoasterLastDirection && deltaDir),
-          directionsDiffer: prev.buildingCoasterLastDirection !== deltaDir,
-        });
         if (isTrackPlacementTool && lastTile && prev.buildingCoasterLastDirection && deltaDir) {
           if (prev.buildingCoasterLastDirection !== deltaDir) {
-            console.log('TURN_CREATE:', {
-              fromDirection: prev.buildingCoasterLastDirection,
-              toDirection: deltaDir,
-              lastTile,
-              currentTile: { x, y },
-            });
             // Determine turn type - need to match getExitDirection semantics
             // getExitDirection uses "clockwise on map" where turn_left_flat from north exits west
             // So if we want to exit to deltaDir, we check which turn type achieves that
@@ -2320,11 +2303,6 @@ export function CoasterProvider({
           updatedCoasters.push(coaster);
         }
         
-        // DEBUG: Log final state before return - showing just the key values as strings
-        if (lastTile) {
-          const finalPrevTile = newGrid[lastTile.y][lastTile.x];
-          console.log(`FINAL_STATE: current(${x},${y})=${tile.trackPiece?.type}/${tile.trackPiece?.direction}, prev(${lastTile.x},${lastTile.y})=${finalPrevTile.trackPiece?.type}/${finalPrevTile.trackPiece?.direction}`);
-        }
         return {
           ...prev,
           grid: newGrid,
