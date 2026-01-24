@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { CoasterProvider } from '@/context/CoasterContext';
 import CoasterGame from '@/components/coaster/Game';
 import { X } from 'lucide-react';
+import Link from 'next/link';
+import { T, Var, useGT } from 'gt-next';
 import {
   buildSavedParkMeta,
   COASTER_AUTOSAVE_KEY,
@@ -219,9 +221,10 @@ function CoasterSpriteGallery({ count = 16, cols: defaultCols = 4, cellSize: def
 
 // Saved Park Card Component
 function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad: () => void; onDelete?: () => void }) {
+  const gt = useGT();
   const savedDate = new Date(park.savedAt);
   const dateLabel = savedDate.toLocaleDateString();
-  
+
   return (
     <div className="relative group">
       <button
@@ -231,11 +234,13 @@ function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad
         <h3 className="text-white font-medium truncate group-hover:text-white/90 text-sm">
           {park.name}
         </h3>
-        <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
-          <span>Guests: {park.guests.toLocaleString()}</span>
-          <span>Rating: {park.rating}</span>
-          <span>{dateLabel}</span>
-        </div>
+        <T>
+          <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
+            <span>Guests: <Var>{park.guests.toLocaleString()}</Var></span>
+            <span>Rating: <Var>{park.rating}</Var></span>
+            <span><Var>{dateLabel}</Var></span>
+          </div>
+        </T>
       </button>
       {onDelete && (
         <button
@@ -244,7 +249,7 @@ function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad
             onDelete();
           }}
           className="absolute top-1/2 -translate-y-1/2 right-1.5 p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-500/20 text-white/40 hover:text-red-400 rounded transition-all duration-200"
-          title="Delete park"
+          title={gt('Delete park')}
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -254,6 +259,7 @@ function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad
 }
 
 export default function CoasterPage() {
+  const gt = useGT();
   const [showGame, setShowGame] = useState(false);
   const [startFresh, setStartFresh] = useState(false);
   const [hasSaved, setHasSaved] = useState(false);
@@ -310,7 +316,9 @@ export default function CoasterPage() {
   if (isChecking) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center">
-        <div className="text-white/60">Loading...</div>
+        <T>
+          <div className="text-white/60">Loading...</div>
+        </T>
       </main>
     );
   }
@@ -322,12 +330,14 @@ export default function CoasterPage() {
         
         {/* Left - Title and Buttons */}
         <div className="flex flex-col items-center lg:items-start justify-center space-y-8 lg:space-y-12">
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-light tracking-wider text-white/90">
-            IsoCoaster
-          </h1>
+          <T>
+            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-light tracking-wider text-white/90">
+              IsoCoaster
+            </h1>
+          </T>
           
           <div className="flex flex-col gap-3 w-full max-w-64">
-            <Button 
+            <Button
               onClick={() => {
                 if (hasSaved && savedParks.length > 0) {
                   setStartFresh(false);
@@ -340,11 +350,11 @@ export default function CoasterPage() {
               }}
               className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
             >
-              {hasSaved ? 'Continue' : 'New Park'}
+              {hasSaved ? gt('Continue') : gt('New Park')}
             </Button>
             
             {hasSaved && (
-              <Button 
+              <Button
                 onClick={() => {
                   setStartFresh(true);
                   setLoadParkId(null);
@@ -353,7 +363,7 @@ export default function CoasterPage() {
                 variant="outline"
                 className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/60 hover:text-white border border-white/20 rounded-none transition-all duration-300"
               >
-                New Park
+                <T>New Park</T>
               </Button>
             )}
             
@@ -374,23 +384,27 @@ export default function CoasterPage() {
               variant="outline"
               className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
             >
-              Load Example
+              <T>Load Example</T>
             </Button>
             
-            <a
-              href="/"
-              className="w-full text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
-            >
-              Back to IsoCity
-            </a>
+            <T>
+              <Link
+                href="/"
+                className="w-full text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
+              >
+                Back to IsoCity
+              </Link>
+            </T>
           </div>
           
           {/* Saved Parks */}
           {savedParks.length > 0 && (
             <div className="w-full max-w-64">
-              <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
-                Saved Parks
-              </h2>
+              <T>
+                <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
+                  Saved Parks
+                </h2>
+              </T>
               <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
                 {savedParks.slice(0, 5).map((park) => (
                   <SavedParkCard
