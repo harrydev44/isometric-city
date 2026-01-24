@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { CoasterProvider } from '@/context/CoasterContext';
+import { CoasterMultiplayerContextProvider } from '@/context/CoasterMultiplayerContext';
 import CoasterGame from '@/components/coaster/Game';
+import { CoasterCoopModal } from '@/components/multiplayer/CoasterCoopModal';
 import { X } from 'lucide-react';
 import {
   buildSavedParkMeta,
@@ -19,6 +21,7 @@ import {
   saveCoasterStateToStorage,
 } from '@/games/coaster/saveUtils';
 import { COASTER_SPRITE_PACK, getSpriteInfo, getSpriteRect } from '@/games/coaster/lib/coasterRenderConfig';
+import { GameState } from '@/games/coaster/types';
 
 // Background color to filter from sprite sheets (red)
 const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
@@ -205,13 +208,21 @@ function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad
         onClick={onLoad}
         className="w-full text-left p-3 pr-8 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-none transition-all duration-200"
       >
-        <h3 className="text-white font-medium truncate group-hover:text-white/90 text-sm">
-          {park.name}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-white font-medium truncate group-hover:text-white/90 text-sm flex-1">
+            {park.name}
+          </h3>
+          {park.roomCode && (
+            <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded shrink-0">
+              Co-op
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
           <span>Guests: {park.guests.toLocaleString()}</span>
           <span>Rating: {park.rating}</span>
           <span>{dateLabel}</span>
+          {park.roomCode && <span className="text-emerald-300/60">{park.roomCode}</span>}
         </div>
       </button>
       {onDelete && (
@@ -237,6 +248,8 @@ export default function CoasterPage() {
   const [isChecking, setIsChecking] = useState(true);
   const [savedParks, setSavedParks] = useState<SavedParkMeta[]>([]);
   const [loadParkId, setLoadParkId] = useState<string | null>(null);
+  const [showCoopModal, setShowCoopModal] = useState(false);
+  const [pendingRoomCode, setPendingRoomCode] = useState<string | null>(null);
 
   const refreshSavedParks = useCallback(() => {
     let parks = readSavedParksIndex();
@@ -259,7 +272,9 @@ export default function CoasterPage() {
     setShowGame(false);
     setStartFresh(false);
     setLoadParkId(null);
+    setPendingRoomCode(null);
     refreshSavedParks();
+    window.history.replaceState({}, '', '/coaster');
   };
 
   const handleDeletePark = (park: SavedParkMeta) => {
@@ -274,28 +289,49 @@ export default function CoasterPage() {
     setHasSaved(updated.length > 0);
   };
 
+  const handleCoopStart = (isHost: boolean, initialState?: GameState, roomCode?: string) => {
+    if (initialState) {
+      saveCoasterStateToStorage(COASTER_AUTOSAVE_KEY, initialState);
+      const meta = buildSavedParkMeta(initialState, Date.now(), roomCode);
+      const updated = upsertSavedParkMeta(meta, readSavedParksIndex());
+      writeSavedParksIndex(updated);
+      setStartFresh(false);
+      setLoadParkId(null);
+    } else if (isHost) {
+      setStartFresh(true);
+      setLoadParkId(null);
+    }
+
+    setShowGame(true);
+  };
+
   if (showGame) {
     return (
-      <CoasterProvider startFresh={startFresh} loadParkId={loadParkId}>
-        <main className="h-screen w-screen overflow-hidden">
-          <CoasterGame onExit={handleExitGame} />
-        </main>
-      </CoasterProvider>
+      <CoasterMultiplayerContextProvider>
+        <CoasterProvider startFresh={startFresh} loadParkId={loadParkId}>
+          <main className="h-screen w-screen overflow-hidden">
+            <CoasterGame onExit={handleExitGame} />
+          </main>
+        </CoasterProvider>
+      </CoasterMultiplayerContextProvider>
     );
   }
 
   if (isChecking) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center">
-        <div className="text-white/60">Loading...</div>
-      </main>
+      <CoasterMultiplayerContextProvider>
+        <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center">
+          <div className="text-white/60">Loading...</div>
+        </main>
+      </CoasterMultiplayerContextProvider>
     );
   }
 
   // Desktop landing page - soft teal/emerald theme
   return (
-    <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-8">
-      <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
+    <CoasterMultiplayerContextProvider>
+      <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-8">
+        <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
         
         {/* Left - Title and Buttons */}
         <div className="flex flex-col items-center lg:items-start justify-center space-y-12">
@@ -333,6 +369,14 @@ export default function CoasterPage() {
                 New Park
               </Button>
             )}
+
+            <Button 
+              onClick={() => setShowCoopModal(true)}
+              variant="outline"
+              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+            >
+              Co-op
+            </Button>
             
             <Button
               onClick={async () => {
@@ -374,6 +418,12 @@ export default function CoasterPage() {
                     key={park.id}
                     park={park}
                     onLoad={() => {
+                      if (park.roomCode) {
+                        window.history.replaceState({}, '', `/coaster/coop/${park.roomCode}`);
+                        setPendingRoomCode(park.roomCode);
+                        setShowCoopModal(true);
+                        return;
+                      }
                       setStartFresh(false);
                       setLoadParkId(park.id);
                       setShowGame(true);
@@ -391,6 +441,14 @@ export default function CoasterPage() {
           <CoasterSpriteGallery count={16} />
         </div>
       </div>
-    </main>
+      
+      <CoasterCoopModal
+        open={showCoopModal}
+        onOpenChange={setShowCoopModal}
+        onStartGame={handleCoopStart}
+        pendingRoomCode={pendingRoomCode}
+      />
+      </main>
+    </CoasterMultiplayerContextProvider>
   );
 }

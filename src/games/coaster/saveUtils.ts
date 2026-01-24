@@ -17,9 +17,14 @@ export type SavedParkMeta = {
   month: number;
   day: number;
   savedAt: number;
+  roomCode?: string;
 };
 
-export function buildSavedParkMeta(state: GameState, savedAt: number = Date.now()): SavedParkMeta {
+export function buildSavedParkMeta(
+  state: GameState,
+  savedAt: number = Date.now(),
+  roomCode?: string
+): SavedParkMeta {
   return {
     id: state.id,
     name: state.settings?.name ?? 'Unnamed Park',
@@ -31,6 +36,7 @@ export function buildSavedParkMeta(state: GameState, savedAt: number = Date.now(
     month: state.month ?? 1,
     day: state.day ?? 1,
     savedAt,
+    roomCode,
   };
 }
 

@@ -222,27 +222,32 @@ interface CoasterContextValue {
   
   // Tools
   setTool: (tool: Tool) => void;
-  setSpeed: (speed: 0 | 1 | 2 | 3) => void;
+  setSpeed: (speed: 0 | 1 | 2 | 3, isRemote?: boolean) => void;
   setActivePanel: (panel: GameState['activePanel']) => void;
   
   // Placement
-  placeAtTile: (x: number, y: number) => void;
-  bulldozeTile: (x: number, y: number) => void;
+  placeAtTile: (x: number, y: number, isRemote?: boolean) => void;
+  bulldozeTile: (x: number, y: number, isRemote?: boolean) => void;
+  setPlaceCallback: (callback: ((args: { x: number; y: number; tool: Tool }) => void) | null) => void;
+  setBulldozeCallback: (callback: ((args: { x: number; y: number }) => void) | null) => void;
   
   // Coaster building
-  startCoasterBuild: (coasterType: string) => void;
+  startCoasterBuild: (coasterType: string, coasterId?: string, isRemote?: boolean) => void;
   addCoasterTrack: (x: number, y: number) => void;
-  finishCoasterBuild: () => void;
-  cancelCoasterBuild: () => void;
+  finishCoasterBuild: (isRemote?: boolean) => void;
+  cancelCoasterBuild: (isRemote?: boolean) => void;
+  setCoasterBuildCallback: (callback: ((action: { type: 'start'; coasterId: string; coasterType: CoasterType } | { type: 'finish' } | { type: 'cancel' }) => void) | null) => void;
   
   // Track line placement (for drag-to-draw)
   placeTrackLine: (tiles: { x: number; y: number }[]) => void;
   
   // Park management
-  setParkSettings: (settings: Partial<ParkSettings>) => void;
+  setParkSettings: (settings: Partial<ParkSettings>, isRemote?: boolean) => void;
   addMoney: (amount: number) => void;
   clearGuests: () => void;
   addNotification: (title: string, description: string, icon: Notification['icon']) => void;
+  setSpeedCallback: (callback: ((speed: 0 | 1 | 2 | 3) => void) | null) => void;
+  setParkSettingsCallback: (callback: ((settings: Partial<ParkSettings>) => void) | null) => void;
   
   // Save/Load
   saveGame: () => void;
@@ -350,7 +355,7 @@ function findStationTile(
   return trackTiles[0];
 }
 
-function createInitialGameState(parkName: string = 'My Theme Park', gridSize: number = DEFAULT_GRID_SIZE): GameState {
+export function createInitialGameState(parkName: string = 'My Theme Park', gridSize: number = DEFAULT_GRID_SIZE): GameState {
   // Create empty grid
   const grid: Tile[][] = [];
   for (let y = 0; y < gridSize; y++) {
@@ -1273,6 +1278,11 @@ export function CoasterProvider({
   const [isStateReady, setIsStateReady] = useState(false);
   const [hasSavedGame, setHasSavedGame] = useState(false);
   const latestStateRef = useRef<GameState>(state);
+  const placeCallbackRef = useRef<((args: { x: number; y: number; tool: Tool }) => void) | null>(null);
+  const bulldozeCallbackRef = useRef<((args: { x: number; y: number }) => void) | null>(null);
+  const coasterBuildCallbackRef = useRef<((action: { type: 'start'; coasterId: string; coasterType: CoasterType } | { type: 'finish' } | { type: 'cancel' }) => void) | null>(null);
+  const speedCallbackRef = useRef<((speed: 0 | 1 | 2 | 3) => void) | null>(null);
+  const parkSettingsCallbackRef = useRef<((settings: Partial<ParkSettings>) => void) | null>(null);
   
   // Keep ref in sync
   useEffect(() => {
@@ -1895,15 +1905,20 @@ export function CoasterProvider({
     setState(prev => ({ ...prev, selectedTool: tool }));
   }, []);
   
-  const setSpeed = useCallback((speed: 0 | 1 | 2 | 3) => {
+  const setSpeed = useCallback((speed: 0 | 1 | 2 | 3, isRemote = false) => {
     setState(prev => ({ ...prev, speed }));
+    if (!isRemote && speedCallbackRef.current) {
+      speedCallbackRef.current(speed);
+    }
   }, []);
   
   const setActivePanel = useCallback((panel: GameState['activePanel']) => {
     setState(prev => ({ ...prev, activePanel: panel }));
   }, []);
   
-  const placeAtTile = useCallback((x: number, y: number) => {
+  const placeAtTile = useCallback((x: number, y: number, isRemote = false) => {
+    const currentTool = latestStateRef.current.selectedTool;
+
     setState(prev => {
       const tool = prev.selectedTool;
       if (tool === 'select' || tool === 'bulldoze') return prev;
@@ -2751,9 +2766,13 @@ export function CoasterProvider({
       
       return prev;
     });
+
+    if (!isRemote && currentTool !== 'select' && currentTool !== 'bulldoze' && placeCallbackRef.current) {
+      placeCallbackRef.current({ x, y, tool: currentTool });
+    }
   }, []);
   
-  const bulldozeTile = useCallback((x: number, y: number) => {
+  const bulldozeTile = useCallback((x: number, y: number, isRemote = false) => {
     setState(prev => {
       const newGrid = prev.grid.map(row => row.map(tile => ({ ...tile })));
       const tile = newGrid[y][x];
@@ -2866,24 +2885,37 @@ export function CoasterProvider({
       
       return { ...prev, grid: newGrid };
     });
+
+    if (!isRemote && bulldozeCallbackRef.current) {
+      bulldozeCallbackRef.current({ x, y });
+    }
   }, []);
   
-  const startCoasterBuild = useCallback((coasterType: string) => {
+  const startCoasterBuild = useCallback((coasterType: string, coasterId?: string, isRemote = false) => {
+    const buildId = coasterId ?? generateUUID();
     setState(prev => ({
       ...prev,
-      buildingCoasterId: generateUUID(),
+      buildingCoasterId: buildId,
       buildingCoasterPath: [],
       buildingCoasterHeight: 0,
       buildingCoasterLastDirection: null,
       buildingCoasterType: coasterType as CoasterType,
     }));
+
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({
+        type: 'start',
+        coasterId: buildId,
+        coasterType: coasterType as CoasterType,
+      });
+    }
   }, []);
   
   const addCoasterTrack = useCallback((x: number, y: number) => {
     placeAtTile(x, y);
   }, [placeAtTile]);
   
-  const finishCoasterBuild = useCallback(() => {
+  const finishCoasterBuild = useCallback((isRemote = false) => {
     setState(prev => ({
       ...prev,
       buildingCoasterId: null,
@@ -2892,9 +2924,13 @@ export function CoasterProvider({
       buildingCoasterLastDirection: null,
       buildingCoasterType: null,
     }));
+
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({ type: 'finish' });
+    }
   }, []);
   
-  const cancelCoasterBuild = useCallback(() => {
+  const cancelCoasterBuild = useCallback((isRemote = false) => {
     setState(prev => ({
       ...prev,
       buildingCoasterId: null,
@@ -2903,6 +2939,10 @@ export function CoasterProvider({
       buildingCoasterLastDirection: null,
       buildingCoasterType: null,
     }));
+
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({ type: 'cancel' });
+    }
   }, []);
   
   // Place a line of track tiles (for drag-to-draw functionality)
@@ -3200,11 +3240,35 @@ export function CoasterProvider({
     });
   }, []);
   
-  const setParkSettings = useCallback((settings: Partial<ParkSettings>) => {
+  const setParkSettings = useCallback((settings: Partial<ParkSettings>, isRemote = false) => {
     setState(prev => ({
       ...prev,
       settings: { ...prev.settings, ...settings },
     }));
+
+    if (!isRemote && parkSettingsCallbackRef.current) {
+      parkSettingsCallbackRef.current(settings);
+    }
+  }, []);
+
+  const setPlaceCallback = useCallback((callback: ((args: { x: number; y: number; tool: Tool }) => void) | null) => {
+    placeCallbackRef.current = callback;
+  }, []);
+
+  const setBulldozeCallback = useCallback((callback: ((args: { x: number; y: number }) => void) | null) => {
+    bulldozeCallbackRef.current = callback;
+  }, []);
+
+  const setCoasterBuildCallback = useCallback((callback: ((action: { type: 'start'; coasterId: string; coasterType: CoasterType } | { type: 'finish' } | { type: 'cancel' }) => void) | null) => {
+    coasterBuildCallbackRef.current = callback;
+  }, []);
+
+  const setSpeedCallback = useCallback((callback: ((speed: 0 | 1 | 2 | 3) => void) | null) => {
+    speedCallbackRef.current = callback;
+  }, []);
+
+  const setParkSettingsCallback = useCallback((callback: ((settings: Partial<ParkSettings>) => void) | null) => {
+    parkSettingsCallbackRef.current = callback;
   }, []);
   
   const addMoney = useCallback((amount: number) => {
@@ -3322,17 +3386,22 @@ export function CoasterProvider({
     
     placeAtTile,
     bulldozeTile,
+    setPlaceCallback,
+    setBulldozeCallback,
     
     startCoasterBuild,
     addCoasterTrack,
     finishCoasterBuild,
     cancelCoasterBuild,
+    setCoasterBuildCallback,
     placeTrackLine,
 
     setParkSettings,
     addMoney,
     clearGuests,
     addNotification,
+    setSpeedCallback,
+    setParkSettingsCallback,
     
     saveGame,
     loadGame,

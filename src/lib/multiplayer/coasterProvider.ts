@@ -1,14 +1,14 @@
-// Supabase Realtime multiplayer provider with database-backed state persistence
+// Supabase Realtime multiplayer provider for IsoCoaster
 
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import {
-  GameAction,
-  GameActionInput,
+  CoasterGameAction,
+  CoasterGameActionInput,
   Player,
   generatePlayerId,
   generatePlayerColor,
   generatePlayerName,
-} from './types';
+} from './coasterTypes';
 import {
   createGameRoom,
   loadGameRoom,
@@ -16,51 +16,51 @@ import {
   updatePlayerCount,
   CitySizeLimitError,
 } from './database';
-import { GameState } from '@/types/game';
+import { GameState } from '@/games/coaster/types';
 import { msg } from 'gt-next';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 // Lazy init: only create client when Supabase is configured
-const supabase = supabaseUrl && supabaseKey 
-  ? createClient(supabaseUrl, supabaseKey) 
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
   : null;
 
 // Throttle state saves to avoid excessive database writes
 const STATE_SAVE_INTERVAL = 3000; // Save state every 3 seconds max
 
-export interface MultiplayerProviderOptions {
+export interface CoasterMultiplayerProviderOptions {
   roomCode: string;
   cityName: string;
   playerName?: string; // Optional - auto-generated if not provided
   initialGameState?: GameState; // If provided, this player is creating the room
   onConnectionChange?: (connected: boolean, peerCount: number) => void;
   onPlayersChange?: (players: Player[]) => void;
-  onAction?: (action: GameAction) => void;
+  onAction?: (action: CoasterGameAction) => void;
   onStateReceived?: (state: GameState) => void;
   onError?: (error: string) => void;
 }
 
-export class MultiplayerProvider {
+export class CoasterMultiplayerProvider {
   public readonly roomCode: string;
   public readonly peerId: string;
   public readonly isCreator: boolean; // Whether this player created the room
 
   private channel: RealtimeChannel;
   private player: Player;
-  private options: MultiplayerProviderOptions;
+  private options: CoasterMultiplayerProviderOptions;
   private players: Map<string, Player> = new Map();
   private gameState: GameState | null = null;
   private destroyed = false;
   private hasReceivedInitialState = false; // Prevent multiple state-sync overwrites
-  
+
   // State save throttling
   private lastStateSave = 0;
   private pendingStateSave: GameState | null = null;
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(options: MultiplayerProviderOptions) {
+  constructor(options: CoasterMultiplayerProviderOptions) {
     if (!supabase) {
       throw new Error('Multiplayer requires Supabase configuration');
     }
@@ -83,7 +83,7 @@ export class MultiplayerProvider {
     this.players.set(this.peerId, this.player);
 
     // Create Supabase Realtime channel
-    this.channel = supabase.channel(`room-${options.roomCode}`, {
+    this.channel = supabase.channel(`coaster-room-${options.roomCode}`, {
       config: {
         presence: { key: this.peerId },
         broadcast: { self: false }, // Don't receive our own broadcasts
@@ -148,7 +148,7 @@ export class MultiplayerProvider {
 
         this.notifyPlayersChange();
         this.updateConnectionStatus();
-        
+
         // Update player count in database
         updatePlayerCount(this.roomCode, this.players.size);
       })
@@ -159,7 +159,7 @@ export class MultiplayerProvider {
             this.players.set(key, presence.player);
             this.notifyPlayersChange();
             this.updateConnectionStatus();
-            
+
             // When a new player joins, send them the current state via broadcast
             // This ensures they get the latest state (database might be stale)
             if (this.gameState) {
@@ -168,10 +168,10 @@ export class MultiplayerProvider {
                   this.channel.send({
                     type: 'broadcast',
                     event: 'state-sync',
-                    payload: { 
-                      state: this.gameState, 
-                      to: key, 
-                      from: this.peerId 
+                    payload: {
+                      state: this.gameState,
+                      to: key,
+                      from: this.peerId,
                     },
                   });
                 }
@@ -184,13 +184,13 @@ export class MultiplayerProvider {
         this.players.delete(key);
         this.notifyPlayersChange();
         this.updateConnectionStatus();
-        
+
         // Update player count in database
         updatePlayerCount(this.roomCode, this.players.size);
       })
       // Broadcast: real-time game actions from other players
       .on('broadcast', { event: 'action' }, ({ payload }) => {
-        const action = payload as GameAction;
+        const action = payload as CoasterGameAction;
         // Guard against malformed payloads
         if (!action || !action.type || !action.playerId) {
           console.warn('[Multiplayer] Received invalid action payload:', payload);
@@ -220,7 +220,7 @@ export class MultiplayerProvider {
     await this.channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await this.channel.track({ player: this.player });
-        
+
         // Notify connected
         if (this.options.onConnectionChange) {
           this.options.onConnectionChange(true, this.players.size);
@@ -230,10 +230,10 @@ export class MultiplayerProvider {
     });
   }
 
-  dispatchAction(action: GameActionInput): void {
+  dispatchAction(action: CoasterGameActionInput): void {
     if (this.destroyed) return;
 
-    const fullAction: GameAction = {
+    const fullAction: CoasterGameAction = {
       ...action,
       timestamp: Date.now(),
       playerId: this.peerId,
@@ -252,17 +252,17 @@ export class MultiplayerProvider {
    */
   updateGameState(state: GameState): void {
     this.gameState = state;
-    
+
     const now = Date.now();
     const timeSinceLastSave = now - this.lastStateSave;
-    
+
     if (timeSinceLastSave >= STATE_SAVE_INTERVAL) {
       // Save immediately
       this.saveStateToDatabase(state);
     } else {
       // Queue the save for later
       this.pendingStateSave = state;
-      
+
       if (!this.saveTimeout) {
         this.saveTimeout = setTimeout(() => {
           this.saveTimeout = null;
@@ -279,7 +279,7 @@ export class MultiplayerProvider {
     this.lastStateSave = Date.now();
     updateGameRoom(this.roomCode, state).catch((e) => {
       if (e instanceof CitySizeLimitError) {
-        console.warn('[Multiplayer] City too large to save:', e.message);
+        console.warn('[Multiplayer] Park too large to save:', e.message);
         this.options.onError?.(e.message);
       } else {
         console.error('[Multiplayer] Failed to save state to database:', e);
@@ -302,29 +302,29 @@ export class MultiplayerProvider {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    
+
     // Save any pending state before disconnecting
     if (this.pendingStateSave) {
       this.saveStateToDatabase(this.pendingStateSave);
       this.pendingStateSave = null;
     }
-    
+
     // Clear save timeout
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
-    
+
     this.channel.unsubscribe();
     supabase?.removeChannel(this.channel);
   }
 }
 
 // Create and connect a multiplayer provider
-export async function createMultiplayerProvider(
-  options: MultiplayerProviderOptions
-): Promise<MultiplayerProvider> {
-  const provider = new MultiplayerProvider(options);
+export async function createCoasterMultiplayerProvider(
+  options: CoasterMultiplayerProviderOptions
+): Promise<CoasterMultiplayerProvider> {
+  const provider = new CoasterMultiplayerProvider(options);
   await provider.connect();
   return provider;
 }
