@@ -264,10 +264,13 @@ function RideIcon({ className }: { className?: string }) {
       className={className}
       aria-hidden="true"
     >
-      <path d="M3 18h5l3-7 3 7h7" />
-      <path d="M9 11h6" />
-      <circle cx="9" cy="18" r="1.3" />
-      <circle cx="17" cy="18" r="1.3" />
+      <circle cx="12" cy="11" r="6" />
+      <circle cx="12" cy="11" r="1.6" />
+      <path d="M12 5v12" />
+      <path d="M6 11h12" />
+      <path d="M8 20h8" />
+      <path d="M10 20l-2-3" />
+      <path d="M14 20l2-3" />
     </svg>
   );
 }
