@@ -14,14 +14,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
             // Get the main window and configure it
+            #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
-                // Window title is set in tauri.conf.json
-                #[cfg(debug_assertions)]
-                {
-                    // Open devtools in debug mode
-                    window.open_devtools();
-                }
+                // Open devtools in debug mode
+                window.open_devtools();
             }
+            let _ = app; // Silence unused warning in release mode
             Ok(())
         })
         .run(tauri::generate_context!())
