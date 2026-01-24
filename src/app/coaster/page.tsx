@@ -292,18 +292,18 @@ export default function CoasterPage() {
     );
   }
 
-  // Desktop landing page - soft teal/emerald theme
+  // Landing page - soft teal/emerald theme (responsive)
   return (
-    <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-8">
-      <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
+    <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-4 sm:p-8">
+      <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
         
         {/* Left - Title and Buttons */}
-        <div className="flex flex-col items-center lg:items-start justify-center space-y-12">
-          <h1 className="text-8xl font-light tracking-wider text-white/90">
+        <div className="flex flex-col items-center lg:items-start justify-center space-y-8 lg:space-y-12">
+          <h1 className="text-5xl sm:text-6xl lg:text-8xl font-light tracking-wider text-white/90">
             IsoCoaster
           </h1>
           
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 w-full max-w-64">
             <Button 
               onClick={() => {
                 if (hasSaved && savedParks.length > 0) {
@@ -315,7 +315,7 @@ export default function CoasterPage() {
                 }
                 setShowGame(true);
               }}
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
+              className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
             >
               {hasSaved ? 'Continue' : 'New Park'}
             </Button>
@@ -328,7 +328,7 @@ export default function CoasterPage() {
                   setShowGame(true);
                 }}
                 variant="outline"
-                className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/60 hover:text-white border border-white/20 rounded-none transition-all duration-300"
+                className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/60 hover:text-white border border-white/20 rounded-none transition-all duration-300"
               >
                 New Park
               </Button>
@@ -349,14 +349,14 @@ export default function CoasterPage() {
                 }
               }}
               variant="outline"
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
+              className="w-full py-6 sm:py-8 text-xl sm:text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
             >
               Load Example
             </Button>
             
             <a
               href="/"
-              className="w-64 text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
+              className="w-full text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
             >
               Back to IsoCity
             </a>
@@ -364,11 +364,11 @@ export default function CoasterPage() {
           
           {/* Saved Parks */}
           {savedParks.length > 0 && (
-            <div className="w-64">
+            <div className="w-full max-w-64">
               <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
                 Saved Parks
               </h2>
-              <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-48 sm:max-h-64 overflow-y-auto">
                 {savedParks.slice(0, 5).map((park) => (
                   <SavedParkCard
                     key={park.id}
@@ -386,9 +386,14 @@ export default function CoasterPage() {
           )}
         </div>
 
-        {/* Right - Sprite Gallery */}
-        <div className="flex justify-center lg:justify-end">
+        {/* Right - Sprite Gallery (hidden on small screens) */}
+        <div className="hidden sm:flex justify-center lg:justify-end">
           <CoasterSpriteGallery count={16} />
+        </div>
+        
+        {/* Mobile Sprite Gallery - smaller version */}
+        <div className="flex sm:hidden justify-center overflow-hidden">
+          <CoasterSpriteGallery count={12} cols={3} cellSize={90} />
         </div>
       </div>
     </main>
