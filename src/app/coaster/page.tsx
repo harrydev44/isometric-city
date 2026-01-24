@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { CoasterProvider } from '@/context/CoasterContext';
+import { CoasterProvider, createInitialGameState } from '@/context/CoasterContext';
+import { CoasterMultiplayerContextProvider } from '@/context/CoasterMultiplayerContext';
 import CoasterGame from '@/components/coaster/Game';
+import { CoopCoasterModal } from '@/components/multiplayer/CoopCoasterModal';
+import { GameState } from '@/games/coaster/types';
+import { compressToUTF16 } from 'lz-string';
 import { X } from 'lucide-react';
 import {
   buildSavedParkMeta,
@@ -237,6 +241,9 @@ export default function CoasterPage() {
   const [isChecking, setIsChecking] = useState(true);
   const [savedParks, setSavedParks] = useState<SavedParkMeta[]>([]);
   const [loadParkId, setLoadParkId] = useState<string | null>(null);
+  const [showCoopModal, setShowCoopModal] = useState(false);
+  const [isMultiplayer, setIsMultiplayer] = useState(false);
+  const [pendingRoomCode, setPendingRoomCode] = useState<string | null>(null);
 
   const refreshSavedParks = useCallback(() => {
     let parks = readSavedParksIndex();
@@ -259,7 +266,39 @@ export default function CoasterPage() {
     setShowGame(false);
     setStartFresh(false);
     setLoadParkId(null);
+    setIsMultiplayer(false);
     refreshSavedParks();
+    // Clear room code from URL
+    window.history.replaceState({}, '', '/coaster');
+  };
+
+  // Handle co-op game start
+  const handleCoopStart = (isHost: boolean, initialState?: GameState, roomCode?: string) => {
+    setIsMultiplayer(true);
+    
+    if (isHost && initialState) {
+      try {
+        const compressed = compressToUTF16(JSON.stringify(initialState));
+        localStorage.setItem(COASTER_AUTOSAVE_KEY, compressed);
+      } catch (e) {
+        console.error('Failed to save co-op state:', e);
+      }
+      setStartFresh(false);
+    } else if (isHost) {
+      setStartFresh(true);
+    } else if (initialState) {
+      try {
+        const compressed = compressToUTF16(JSON.stringify(initialState));
+        localStorage.setItem(COASTER_AUTOSAVE_KEY, compressed);
+      } catch (e) {
+        console.error('Failed to save co-op state:', e);
+      }
+      setStartFresh(false);
+    } else {
+      setStartFresh(true);
+    }
+    
+    setShowGame(true);
   };
 
   const handleDeletePark = (park: SavedParkMeta) => {
@@ -275,12 +314,19 @@ export default function CoasterPage() {
   };
 
   if (showGame) {
+    const gameContent = (
+      <main className="h-screen w-screen overflow-hidden">
+        <CoasterGame onExit={handleExitGame} />
+      </main>
+    );
+
+    // Always wrap in CoasterMultiplayerContextProvider so players can invite others from within the game
     return (
-      <CoasterProvider startFresh={startFresh} loadParkId={loadParkId}>
-        <main className="h-screen w-screen overflow-hidden">
-          <CoasterGame onExit={handleExitGame} />
-        </main>
-      </CoasterProvider>
+      <CoasterMultiplayerContextProvider>
+        <CoasterProvider startFresh={startFresh} loadParkId={loadParkId}>
+          {gameContent}
+        </CoasterProvider>
+      </CoasterMultiplayerContextProvider>
     );
   }
 
@@ -294,103 +340,122 @@ export default function CoasterPage() {
 
   // Desktop landing page - soft teal/emerald theme
   return (
-    <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-8">
-      <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
-        
-        {/* Left - Title and Buttons */}
-        <div className="flex flex-col items-center lg:items-start justify-center space-y-12">
-          <h1 className="text-8xl font-light tracking-wider text-white/90">
-            IsoCoaster
-          </h1>
+    <CoasterMultiplayerContextProvider>
+      <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-emerald-950 flex items-center justify-center p-8">
+        <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-16 items-center">
           
-          <div className="flex flex-col gap-3">
-            <Button 
-              onClick={() => {
-                if (hasSaved && savedParks.length > 0) {
-                  setStartFresh(false);
-                  setLoadParkId(savedParks[0].id);
-                } else {
-                  setStartFresh(true);
-                  setLoadParkId(null);
-                }
-                setShowGame(true);
-              }}
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
-            >
-              {hasSaved ? 'Continue' : 'New Park'}
-            </Button>
+          {/* Left - Title and Buttons */}
+          <div className="flex flex-col items-center lg:items-start justify-center space-y-12">
+            <h1 className="text-8xl font-light tracking-wider text-white/90">
+              IsoCoaster
+            </h1>
             
-            {hasSaved && (
+            <div className="flex flex-col gap-3">
               <Button 
                 onClick={() => {
-                  setStartFresh(true);
-                  setLoadParkId(null);
+                  if (hasSaved && savedParks.length > 0) {
+                    setStartFresh(false);
+                    setLoadParkId(savedParks[0].id);
+                  } else {
+                    setStartFresh(true);
+                    setLoadParkId(null);
+                  }
                   setShowGame(true);
                 }}
-                variant="outline"
-                className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/60 hover:text-white border border-white/20 rounded-none transition-all duration-300"
+                className="w-64 py-8 text-2xl font-light tracking-wide bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-none transition-all duration-300"
               >
-                New Park
+                {hasSaved ? 'Continue' : 'New Park'}
               </Button>
-            )}
-            
-            <Button
-              onClick={async () => {
-                try {
-                  const response = await fetch('/example-states-coaster/example_state.json');
-                  const exampleState = await response.json();
-                  saveCoasterStateToStorage(COASTER_AUTOSAVE_KEY, exampleState);
-                  refreshSavedParks();
-                  setStartFresh(false);
-                  setLoadParkId(null);
-                  setShowGame(true);
-                } catch (e) {
-                  console.error('Failed to load example state:', e);
-                }
-              }}
-              variant="outline"
-              className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
-            >
-              Load Example
-            </Button>
-            
-            <a
-              href="/"
-              className="w-64 text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
-            >
-              Back to IsoCity
-            </a>
-          </div>
-          
-          {/* Saved Parks */}
-          {savedParks.length > 0 && (
-            <div className="w-64">
-              <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
-                Saved Parks
-              </h2>
-              <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
-                {savedParks.slice(0, 5).map((park) => (
-                  <SavedParkCard
-                    key={park.id}
-                    park={park}
-                    onLoad={() => {
-                      setStartFresh(false);
-                      setLoadParkId(park.id);
-                      setShowGame(true);
-                    }}
-                    onDelete={() => handleDeletePark(park)}
-                  />
-                ))}
-              </div>
+              
+              {hasSaved && (
+                <Button 
+                  onClick={() => {
+                    setStartFresh(true);
+                    setLoadParkId(null);
+                    setShowGame(true);
+                  }}
+                  variant="outline"
+                  className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/60 hover:text-white border border-white/20 rounded-none transition-all duration-300"
+                >
+                  New Park
+                </Button>
+              )}
+              
+              <Button 
+                onClick={() => setShowCoopModal(true)}
+                variant="outline"
+                className="w-64 py-8 text-2xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
+              >
+                Co-op
+              </Button>
+              
+              <Button
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/example-states-coaster/example_state.json');
+                    const exampleState = await response.json();
+                    saveCoasterStateToStorage(COASTER_AUTOSAVE_KEY, exampleState);
+                    refreshSavedParks();
+                    setStartFresh(false);
+                    setLoadParkId(null);
+                    setShowGame(true);
+                  } catch (e) {
+                    console.error('Failed to load example state:', e);
+                  }
+                }}
+                variant="outline"
+                className="w-64 py-8 text-2xl font-light tracking-wide bg-transparent hover:bg-white/10 text-white/40 hover:text-white/60 border border-white/10 rounded-none transition-all duration-300"
+              >
+                Load Example
+              </Button>
+              
+              <a
+                href="/"
+                className="w-64 text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
+              >
+                Back to IsoCity
+              </a>
             </div>
-          )}
-        </div>
+            
+            {/* Saved Parks */}
+            {savedParks.length > 0 && (
+              <div className="w-64">
+                <h2 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">
+                  Saved Parks
+                </h2>
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  {savedParks.slice(0, 5).map((park) => (
+                    <SavedParkCard
+                      key={park.id}
+                      park={park}
+                      onLoad={() => {
+                        setStartFresh(false);
+                        setLoadParkId(park.id);
+                        setShowGame(true);
+                      }}
+                      onDelete={() => handleDeletePark(park)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
-        {/* Right - Sprite Gallery */}
-        <div className="flex justify-center lg:justify-end">
-          <CoasterSpriteGallery count={16} />
+          {/* Right - Sprite Gallery */}
+          <div className="flex justify-center lg:justify-end">
+            <CoasterSpriteGallery count={16} />
+          </div>
         </div>
-      </div>
-    </main>
+        
+        {/* Co-op Modal */}
+        <CoopCoasterModal
+          open={showCoopModal}
+          onOpenChange={setShowCoopModal}
+          onStartGame={handleCoopStart}
+          createInitialState={createInitialGameState}
+          pendingRoomCode={pendingRoomCode}
+        />
+      </main>
+    </CoasterMultiplayerContextProvider>
   );
 }

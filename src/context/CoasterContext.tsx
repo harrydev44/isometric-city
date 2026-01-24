@@ -30,7 +30,7 @@ import {
 // CONSTANTS
 // =============================================================================
 
-const DEFAULT_GRID_SIZE = 60;
+export const DEFAULT_GRID_SIZE = 60;
 
 // Weather change interval in ticks (roughly every 2-4 in-game hours)
 const WEATHER_CHANGE_MIN_TICKS = 120; // ~2 hours at normal speed
@@ -350,7 +350,7 @@ function findStationTile(
   return trackTiles[0];
 }
 
-function createInitialGameState(parkName: string = 'My Theme Park', gridSize: number = DEFAULT_GRID_SIZE): GameState {
+export function createInitialGameState(parkName: string = 'My Theme Park', gridSize: number = DEFAULT_GRID_SIZE): GameState {
   // Create empty grid
   const grid: Tile[][] = [];
   for (let y = 0; y < gridSize; y++) {

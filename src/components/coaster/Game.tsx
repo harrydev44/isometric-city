@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useCoaster } from '@/context/CoasterContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CoasterGrid } from './CoasterGrid';
@@ -9,6 +9,10 @@ import { TopBar } from './TopBar';
 import { MiniMap } from './MiniMap';
 import { Panels } from './panels/Panels';
 import { CoasterCommandMenu } from '@/components/coaster/CommandMenu';
+import { useCoasterMultiplayerSync } from '@/hooks/useCoasterMultiplayerSync';
+import { useCoasterMultiplayerOptional } from '@/context/CoasterMultiplayerContext';
+import { ShareCoasterModal } from '@/components/multiplayer/ShareCoasterModal';
+import { Copy, Check } from 'lucide-react';
 
 interface GameProps {
   onExit?: () => void;
@@ -23,6 +27,30 @@ export default function CoasterGame({ onExit }: GameProps) {
     canvasSize: { width: number; height: number };
   } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const multiplayer = useCoasterMultiplayerOptional();
+  
+  // Multiplayer sync
+  const {
+    isMultiplayer,
+    isHost,
+    playerCount,
+    roomCode,
+    players,
+    broadcastPlace,
+    leaveRoom,
+  } = useCoasterMultiplayerSync();
+  
+  // Copy room link state
+  const [copiedRoomLink, setCopiedRoomLink] = useState(false);
+  
+  const handleCopyRoomLink = useCallback(() => {
+    if (!roomCode) return;
+    const url = `${window.location.origin}/coop-coaster/${roomCode}`;
+    navigator.clipboard.writeText(url);
+    setCopiedRoomLink(true);
+    setTimeout(() => setCopiedRoomLink(false), 2000);
+  }, [roomCode]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -89,6 +117,42 @@ export default function CoasterGame({ onExit }: GameProps) {
 
             {/* Panels */}
             <Panels />
+            
+            {/* Multiplayer Players Indicator */}
+            {isMultiplayer && (
+              <div className="absolute top-4 right-4 z-20">
+                <div className="bg-emerald-950/90 border border-emerald-700 rounded-lg px-3 py-2 shadow-lg min-w-[120px]">
+                  <div className="flex items-center gap-2 text-sm text-white">
+                    {roomCode && (
+                      <>
+                        <span className="font-mono font-medium tracking-wider">{roomCode}</span>
+                        <button
+                          onClick={handleCopyRoomLink}
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Copy invite link"
+                        >
+                          {copiedRoomLink ? (
+                            <Check className="w-3.5 h-3.5 text-green-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-emerald-400 hover:text-white" />
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {players.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {players.map((player) => (
+                        <div key={player.id} className="flex items-center gap-1.5 text-xs text-emerald-300/70">
+                          <span className="w-2 h-2 rounded-full bg-green-500" />
+                          {player.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <CoasterCommandMenu />
