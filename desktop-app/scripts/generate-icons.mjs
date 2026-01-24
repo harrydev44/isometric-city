@@ -24,6 +24,12 @@ const sizes = [
 async function generateIcons() {
   console.log('Generating icons from:', sourceIcon);
   
+  // Check if source icon exists
+  if (!fs.existsSync(sourceIcon)) {
+    console.error(`Error: Source icon not found at ${sourceIcon}`);
+    process.exit(1);
+  }
+  
   for (const { name, size } of sizes) {
     const outputPath = path.join(iconsDir, name);
     await sharp(sourceIcon)
@@ -40,14 +46,23 @@ async function generateIcons() {
   // For macOS .icns and Windows .ico, we'll create placeholder files
   // In production, you'd use proper tools to generate these
   const icon512 = path.join(iconsDir, 'icon.png');
+  const icon256 = path.join(iconsDir, '128x128@2x.png');
   
   // Copy 512 as a placeholder for icns (macOS uses folder-based icons in dev)
-  fs.copyFileSync(icon512, path.join(iconsDir, 'icon.icns'));
-  console.log('Created placeholder: icon.icns');
+  if (fs.existsSync(icon512)) {
+    fs.copyFileSync(icon512, path.join(iconsDir, 'icon.icns'));
+    console.log('Created placeholder: icon.icns');
+  } else {
+    console.warn('Warning: icon.png not found, skipping icon.icns');
+  }
   
   // For .ico, we'll use the 256 version as a placeholder
-  fs.copyFileSync(path.join(iconsDir, '128x128@2x.png'), path.join(iconsDir, 'icon.ico'));
-  console.log('Created placeholder: icon.ico');
+  if (fs.existsSync(icon256)) {
+    fs.copyFileSync(icon256, path.join(iconsDir, 'icon.ico'));
+    console.log('Created placeholder: icon.ico');
+  } else {
+    console.warn('Warning: 128x128@2x.png not found, skipping icon.ico');
+  }
   
   console.log('Done!');
 }
