@@ -1762,44 +1762,31 @@ const DIRECTION_ANGLES: Record<string, number> = {
 
 /**
  * Get the travel direction for a car at parameter t along a track piece.
- * Uses the geometry of the track to derive a stable forward direction.
+ * Uses local track geometry only to avoid tile-order flip artifacts.
  */
 function getCarTravelDirection(
   trackPiece: NonNullable<Tile['trackPiece']>,
-  trackTiles: { x: number; y: number }[],
-  trackIndex: number,
-  t: number,
-  grid: Tile[][]
+  centerX: number,
+  centerY: number,
+  t: number
 ): string {
-  if (trackTiles.length === 0) return trackPiece.direction;
-
-  const currentTile = trackTiles[trackIndex];
-  if (!currentTile) return trackPiece.direction;
-
-  const { screenX, screenY } = gridToScreen(currentTile.x, currentTile.y, 0, 0);
-  const centerX = screenX + TILE_WIDTH / 2;
-  const centerY = screenY + TILE_HEIGHT / 2;
-  const currentPoint = getTrackPoint(trackPiece, centerX, centerY, t);
-
   const epsilon = 0.02;
-  let nextT = t + epsilon;
-  let nextIndex = trackIndex;
-  if (nextT > 1) {
-    nextT -= 1;
-    nextIndex = (trackIndex + 1) % trackTiles.length;
+  const tClamped = Math.max(0, Math.min(1, t));
+
+  let dx = 0;
+  let dy = 0;
+
+  if (tClamped <= 1 - epsilon) {
+    const p1 = getTrackPoint(trackPiece, centerX, centerY, tClamped);
+    const p2 = getTrackPoint(trackPiece, centerX, centerY, tClamped + epsilon);
+    dx = p2.x - p1.x;
+    dy = p2.y - p1.y;
+  } else {
+    const p1 = getTrackPoint(trackPiece, centerX, centerY, tClamped - epsilon);
+    const p2 = getTrackPoint(trackPiece, centerX, centerY, tClamped);
+    dx = p2.x - p1.x;
+    dy = p2.y - p1.y;
   }
-
-  const nextTile = trackTiles[nextIndex];
-  const nextGridTile = grid[nextTile.y]?.[nextTile.x];
-  if (!nextGridTile?.trackPiece) return trackPiece.direction;
-
-  const { screenX: nextScreenX, screenY: nextScreenY } = gridToScreen(nextTile.x, nextTile.y, 0, 0);
-  const nextCenterX = nextScreenX + TILE_WIDTH / 2;
-  const nextCenterY = nextScreenY + TILE_HEIGHT / 2;
-  const nextPoint = getTrackPoint(nextGridTile.trackPiece, nextCenterX, nextCenterY, nextT);
-
-  const dx = nextPoint.x - currentPoint.x;
-  const dy = nextPoint.y - currentPoint.y;
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return trackPiece.direction;
 
   const angle = Math.atan2(dy, dx);
@@ -2781,13 +2768,7 @@ export function CoasterGrid({
           const pos = getTrackPoint(actualTrackPiece, centerX, centerY, t);
           
           // Calculate actual travel direction based on track piece type and position
-          const travelDirection = getCarTravelDirection(
-            actualTrackPiece,
-            coaster.trackTiles,
-            trackIndex,
-            t,
-            grid
-          );
+          const travelDirection = getCarTravelDirection(actualTrackPiece, centerX, centerY, t);
 
           const key = `${trackTile.x},${trackTile.y}`;
           const existing = carsByTile.get(key);
