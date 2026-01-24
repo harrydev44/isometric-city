@@ -17,6 +17,7 @@ export type SavedParkMeta = {
   month: number;
   day: number;
   savedAt: number;
+  roomCode?: string; // For multiplayer coop rooms
 };
 
 export function buildSavedParkMeta(state: GameState, savedAt: number = Date.now()): SavedParkMeta {

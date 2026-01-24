@@ -226,20 +226,20 @@ interface CoasterContextValue {
   setActivePanel: (panel: GameState['activePanel']) => void;
   
   // Placement
-  placeAtTile: (x: number, y: number) => void;
-  bulldozeTile: (x: number, y: number) => void;
+  placeAtTile: (x: number, y: number, isRemote?: boolean) => void;
+  bulldozeTile: (x: number, y: number, isRemote?: boolean) => void;
   
   // Coaster building
-  startCoasterBuild: (coasterType: string) => void;
+  startCoasterBuild: (coasterType: string, isRemote?: boolean) => void;
   addCoasterTrack: (x: number, y: number) => void;
-  finishCoasterBuild: () => void;
-  cancelCoasterBuild: () => void;
+  finishCoasterBuild: (isRemote?: boolean) => void;
+  cancelCoasterBuild: (isRemote?: boolean) => void;
   
   // Track line placement (for drag-to-draw)
-  placeTrackLine: (tiles: { x: number; y: number }[]) => void;
+  placeTrackLine: (tiles: { x: number; y: number }[], isRemote?: boolean) => void;
   
   // Park management
-  setParkSettings: (settings: Partial<ParkSettings>) => void;
+  setParkSettings: (settings: Partial<ParkSettings>, isRemote?: boolean) => void;
   addMoney: (amount: number) => void;
   clearGuests: () => void;
   addNotification: (title: string, description: string, icon: Notification['icon']) => void;
@@ -256,6 +256,11 @@ interface CoasterContextValue {
   
   // State flags
   isStateReady: boolean;
+  
+  // Multiplayer callbacks
+  setPlaceCallback: (callback: ((args: { x: number; y: number; tool: Tool }) => void) | null) => void;
+  setTrackLineCallback: (callback: ((args: { tiles: { x: number; y: number }[] }) => void) | null) => void;
+  setCoasterBuildCallback: (callback: ((args: { action: 'start' | 'finish' | 'cancel'; coasterType?: string }) => void) | null) => void;
 }
 
 const CoasterContext = createContext<CoasterContextValue | null>(null);
@@ -1274,6 +1279,11 @@ export function CoasterProvider({
   const [hasSavedGame, setHasSavedGame] = useState(false);
   const latestStateRef = useRef<GameState>(state);
   
+  // Multiplayer callback refs
+  const placeCallbackRef = useRef<((args: { x: number; y: number; tool: Tool }) => void) | null>(null);
+  const trackLineCallbackRef = useRef<((args: { tiles: { x: number; y: number }[] }) => void) | null>(null);
+  const coasterBuildCallbackRef = useRef<((args: { action: 'start' | 'finish' | 'cancel'; coasterType?: string }) => void) | null>(null);
+  
   // Keep ref in sync
   useEffect(() => {
     latestStateRef.current = state;
@@ -1903,7 +1913,10 @@ export function CoasterProvider({
     setState(prev => ({ ...prev, activePanel: panel }));
   }, []);
   
-  const placeAtTile = useCallback((x: number, y: number) => {
+  const placeAtTile = useCallback((x: number, y: number, isRemote: boolean = false) => {
+    // Get the current tool before setState to use in callback
+    const currentTool = latestStateRef.current.selectedTool;
+    
     setState(prev => {
       const tool = prev.selectedTool;
       if (tool === 'select' || tool === 'bulldoze') return prev;
@@ -2751,9 +2764,14 @@ export function CoasterProvider({
       
       return prev;
     });
+    
+    // Broadcast to multiplayer if this is a local action
+    if (!isRemote && currentTool !== 'select' && placeCallbackRef.current) {
+      placeCallbackRef.current({ x, y, tool: currentTool });
+    }
   }, []);
   
-  const bulldozeTile = useCallback((x: number, y: number) => {
+  const bulldozeTile = useCallback((x: number, y: number, isRemote: boolean = false) => {
     setState(prev => {
       const newGrid = prev.grid.map(row => row.map(tile => ({ ...tile })));
       const tile = newGrid[y][x];
@@ -2866,9 +2884,14 @@ export function CoasterProvider({
       
       return { ...prev, grid: newGrid };
     });
+    
+    // Broadcast to multiplayer if this is a local action
+    if (!isRemote && placeCallbackRef.current) {
+      placeCallbackRef.current({ x, y, tool: 'bulldoze' });
+    }
   }, []);
   
-  const startCoasterBuild = useCallback((coasterType: string) => {
+  const startCoasterBuild = useCallback((coasterType: string, isRemote: boolean = false) => {
     setState(prev => ({
       ...prev,
       buildingCoasterId: generateUUID(),
@@ -2877,13 +2900,18 @@ export function CoasterProvider({
       buildingCoasterLastDirection: null,
       buildingCoasterType: coasterType as CoasterType,
     }));
+    
+    // Broadcast to multiplayer if this is a local action
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({ action: 'start', coasterType });
+    }
   }, []);
   
   const addCoasterTrack = useCallback((x: number, y: number) => {
     placeAtTile(x, y);
   }, [placeAtTile]);
   
-  const finishCoasterBuild = useCallback(() => {
+  const finishCoasterBuild = useCallback((isRemote: boolean = false) => {
     setState(prev => ({
       ...prev,
       buildingCoasterId: null,
@@ -2892,9 +2920,13 @@ export function CoasterProvider({
       buildingCoasterLastDirection: null,
       buildingCoasterType: null,
     }));
+    
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({ action: 'finish' });
+    }
   }, []);
   
-  const cancelCoasterBuild = useCallback(() => {
+  const cancelCoasterBuild = useCallback((isRemote: boolean = false) => {
     setState(prev => ({
       ...prev,
       buildingCoasterId: null,
@@ -2903,10 +2935,14 @@ export function CoasterProvider({
       buildingCoasterLastDirection: null,
       buildingCoasterType: null,
     }));
+    
+    if (!isRemote && coasterBuildCallbackRef.current) {
+      coasterBuildCallbackRef.current({ action: 'cancel' });
+    }
   }, []);
   
   // Place a line of track tiles (for drag-to-draw functionality)
-  const placeTrackLine = useCallback((tiles: { x: number; y: number }[]) => {
+  const placeTrackLine = useCallback((tiles: { x: number; y: number }[], isRemote: boolean = false) => {
     if (tiles.length === 0) return;
     
     setState(prev => {
@@ -3198,13 +3234,19 @@ export function CoasterProvider({
         coasters: updatedCoasters,
       };
     });
+    
+    // Broadcast to multiplayer if this is a local action
+    if (!isRemote && trackLineCallbackRef.current) {
+      trackLineCallbackRef.current({ tiles });
+    }
   }, []);
   
-  const setParkSettings = useCallback((settings: Partial<ParkSettings>) => {
+  const setParkSettings = useCallback((settings: Partial<ParkSettings>, _isRemote: boolean = false) => {
     setState(prev => ({
       ...prev,
       settings: { ...prev.settings, ...settings },
     }));
+    // Note: Park settings are synced via full state sync, not individual actions
   }, []);
   
   const addMoney = useCallback((amount: number) => {
@@ -3309,6 +3351,22 @@ export function CoasterProvider({
   }, [persistCoasterSave]);
   
   // =============================================================================
+  // MULTIPLAYER CALLBACK SETTERS
+  // =============================================================================
+  
+  const setPlaceCallback = useCallback((callback: ((args: { x: number; y: number; tool: Tool }) => void) | null) => {
+    placeCallbackRef.current = callback;
+  }, []);
+  
+  const setTrackLineCallback = useCallback((callback: ((args: { tiles: { x: number; y: number }[] }) => void) | null) => {
+    trackLineCallbackRef.current = callback;
+  }, []);
+  
+  const setCoasterBuildCallback = useCallback((callback: ((args: { action: 'start' | 'finish' | 'cancel'; coasterType?: string }) => void) | null) => {
+    coasterBuildCallbackRef.current = callback;
+  }, []);
+  
+  // =============================================================================
   // CONTEXT VALUE
   // =============================================================================
   
@@ -3343,6 +3401,11 @@ export function CoasterProvider({
     loadState,
     
     isStateReady,
+    
+    // Multiplayer callbacks
+    setPlaceCallback,
+    setTrackLineCallback,
+    setCoasterBuildCallback,
   };
   
   return (
