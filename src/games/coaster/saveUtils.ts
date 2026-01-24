@@ -1,10 +1,13 @@
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import { GameState } from '@/games/coaster/types';
 import { serializeAndCompressAsync } from '@/lib/saveWorkerManager';
+import { CoasterStorageKeys, buildCoasterStorageKeys } from '@/lib/storageKeys';
 
-export const COASTER_AUTOSAVE_KEY = 'coaster-tycoon-state';
-export const COASTER_SAVED_PARKS_INDEX_KEY = 'coaster-saved-parks-index';
-export const COASTER_SAVED_PARK_PREFIX = 'coaster-park-';
+const DEFAULT_COASTER_STORAGE_KEYS = buildCoasterStorageKeys('');
+
+export const COASTER_AUTOSAVE_KEY = DEFAULT_COASTER_STORAGE_KEYS.autosave;
+export const COASTER_SAVED_PARKS_INDEX_KEY = DEFAULT_COASTER_STORAGE_KEYS.savedParksIndex;
+export const COASTER_SAVED_PARK_PREFIX = DEFAULT_COASTER_STORAGE_KEYS.savedParkPrefix;
 
 export type SavedParkMeta = {
   id: string;
@@ -34,10 +37,10 @@ export function buildSavedParkMeta(state: GameState, savedAt: number = Date.now(
   };
 }
 
-export function readSavedParksIndex(): SavedParkMeta[] {
+export function readSavedParksIndex(storageKeys: CoasterStorageKeys = DEFAULT_COASTER_STORAGE_KEYS): SavedParkMeta[] {
   if (typeof window === 'undefined') return [];
   try {
-    const saved = localStorage.getItem(COASTER_SAVED_PARKS_INDEX_KEY);
+    const saved = localStorage.getItem(storageKeys.savedParksIndex);
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed) ? (parsed as SavedParkMeta[]) : [];
@@ -46,17 +49,21 @@ export function readSavedParksIndex(): SavedParkMeta[] {
   }
 }
 
-export function writeSavedParksIndex(parks: SavedParkMeta[]): void {
+export function writeSavedParksIndex(parks: SavedParkMeta[], storageKeys: CoasterStorageKeys = DEFAULT_COASTER_STORAGE_KEYS): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(COASTER_SAVED_PARKS_INDEX_KEY, JSON.stringify(parks));
+    localStorage.setItem(storageKeys.savedParksIndex, JSON.stringify(parks));
   } catch {
     // Ignore storage failures (quota, privacy mode, etc.)
   }
 }
 
-export function upsertSavedParkMeta(meta: SavedParkMeta, parks?: SavedParkMeta[]): SavedParkMeta[] {
-  const list = parks ? [...parks] : readSavedParksIndex();
+export function upsertSavedParkMeta(
+  meta: SavedParkMeta,
+  parks?: SavedParkMeta[],
+  storageKeys: CoasterStorageKeys = DEFAULT_COASTER_STORAGE_KEYS
+): SavedParkMeta[] {
+  const list = parks ? [...parks] : readSavedParksIndex(storageKeys);
   const existingIndex = list.findIndex((park) => park.id === meta.id);
   if (existingIndex >= 0) {
     list[existingIndex] = meta;
@@ -67,8 +74,12 @@ export function upsertSavedParkMeta(meta: SavedParkMeta, parks?: SavedParkMeta[]
   return list;
 }
 
-export function removeSavedParkMeta(id: string, parks?: SavedParkMeta[]): SavedParkMeta[] {
-  const list = parks ? [...parks] : readSavedParksIndex();
+export function removeSavedParkMeta(
+  id: string,
+  parks?: SavedParkMeta[],
+  storageKeys: CoasterStorageKeys = DEFAULT_COASTER_STORAGE_KEYS
+): SavedParkMeta[] {
+  const list = parks ? [...parks] : readSavedParksIndex(storageKeys);
   return list.filter((park) => park.id !== id);
 }
 

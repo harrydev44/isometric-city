@@ -7,14 +7,13 @@ import { MultiplayerContextProvider } from '@/context/MultiplayerContext';
 import Game from '@/components/Game';
 import { CoopModal } from '@/components/multiplayer/CoopModal';
 import { useMobile } from '@/hooks/useMobile';
+import { useStorageNamespace } from '@/hooks/useStorageNamespace';
 import { getSpritePack, getSpriteCoords, DEFAULT_SPRITE_PACK_ID } from '@/lib/renderConfig';
 import { SavedCityMeta, GameState } from '@/types/game';
 import { decompressFromUTF16, compressToUTF16 } from 'lz-string';
 import { LanguageSelector } from '@/components/ui/LanguageSelector';
+import { CityStorageKeys, buildCityStorageKeys, buildStoragePrefix, withPaneParam } from '@/lib/storageKeys';
 import { Users, X } from 'lucide-react';
-
-const STORAGE_KEY = 'isocity-game-state';
-const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
 
 // Background color to filter from sprite sheets (red)
 const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
@@ -65,10 +64,10 @@ function shuffleArray<T>(array: T[]): T[] {
 
 // Check if there's a saved game in localStorage
 // Supports both compressed (lz-string) and uncompressed (legacy) formats
-function hasSavedGame(): boolean {
+function hasSavedGame(storageKeys: CityStorageKeys): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.state);
     if (saved) {
       // Try to decompress first (new format)
       // lz-string can return garbage when given invalid input, so check for valid JSON start
@@ -95,10 +94,10 @@ function hasSavedGame(): boolean {
 }
 
 // Load saved cities index from localStorage
-function loadSavedCities(): SavedCityMeta[] {
+function loadSavedCities(storageKeys: CityStorageKeys): SavedCityMeta[] {
   if (typeof window === 'undefined') return [];
   try {
-    const saved = localStorage.getItem(SAVED_CITIES_INDEX_KEY);
+    const saved = localStorage.getItem(storageKeys.savedCitiesIndex);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -112,10 +111,10 @@ function loadSavedCities(): SavedCityMeta[] {
 }
 
 // Save a city to the saved cities index (for multiplayer cities)
-function saveCityToIndex(state: GameState, roomCode?: string): void {
+function saveCityToIndex(storageKeys: CityStorageKeys, state: GameState, roomCode?: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const cities = loadSavedCities();
+    const cities = loadSavedCities(storageKeys);
     
     // Create city meta
     const cityMeta: SavedCityMeta = {
@@ -146,7 +145,7 @@ function saveCityToIndex(state: GameState, roomCode?: string): void {
     // Keep only the last 20 cities
     const trimmed = cities.slice(0, 20);
     
-    localStorage.setItem(SAVED_CITIES_INDEX_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(storageKeys.savedCitiesIndex, JSON.stringify(trimmed));
   } catch (e) {
     console.error('Failed to save city to index:', e);
   }
@@ -313,9 +312,11 @@ function SavedCityCard({ city, onLoad, onDelete }: { city: SavedCityMeta; onLoad
   );
 }
 
-const SAVED_CITY_PREFIX = 'isocity-city-';
-
 export default function HomePage() {
+  const storageNamespace = useStorageNamespace();
+  const storagePrefix = useMemo(() => buildStoragePrefix(storageNamespace), [storageNamespace]);
+  const storageKeys = useMemo(() => buildCityStorageKeys(storagePrefix), [storagePrefix]);
+  const panePath = useMemo(() => withPaneParam('/', storageNamespace), [storageNamespace]);
   const [showGame, setShowGame] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [savedCities, setSavedCities] = useState<SavedCityMeta[]>([]);
@@ -331,15 +332,15 @@ export default function HomePage() {
   useEffect(() => {
     const checkSavedGame = () => {
       setIsChecking(false);
-      setSavedCities(loadSavedCities());
-      setHasSaved(hasSavedGame());
+      setSavedCities(loadSavedCities(storageKeys));
+      setHasSaved(hasSavedGame(storageKeys));
       
       // Check for room code in URL (legacy format) - redirect to new format
       const params = new URLSearchParams(window.location.search);
       const roomCode = params.get('room');
       if (roomCode && roomCode.length === 5) {
         // Redirect to new /coop/XXXXX format
-        window.location.replace(`/coop/${roomCode.toUpperCase()}`);
+        window.location.replace(withPaneParam(`/coop/${roomCode.toUpperCase()}`, storageNamespace));
         return;
       }
       // Always show landing page - don't auto-load into game
@@ -347,24 +348,24 @@ export default function HomePage() {
     };
     // Use requestAnimationFrame to avoid synchronous setState in effect
     requestAnimationFrame(checkSavedGame);
-  }, []);
+  }, [storageKeys, storageNamespace]);
 
   // Handle exit from game - refresh saved cities list
   const handleExitGame = () => {
     setShowGame(false);
     setIsMultiplayer(false);
     setStartFreshGame(false);
-    setSavedCities(loadSavedCities());
-    setHasSaved(hasSavedGame());
+    setSavedCities(loadSavedCities(storageKeys));
+    setHasSaved(hasSavedGame(storageKeys));
     // Clear room code from URL
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, '', panePath);
   };
 
   // Load a saved city
   const loadSavedCity = (city: SavedCityMeta) => {
     // If it's a multiplayer city, navigate to the room
     if (city.roomCode) {
-      window.history.replaceState({}, '', `/coop/${city.roomCode}`);
+      window.history.replaceState({}, '', withPaneParam(`/coop/${city.roomCode}`, storageNamespace));
       setPendingRoomCode(city.roomCode);
       setShowCoopModal(true);
       return;
@@ -372,9 +373,9 @@ export default function HomePage() {
     
     // Otherwise load from local storage
     try {
-      const saved = localStorage.getItem(SAVED_CITY_PREFIX + city.id);
+      const saved = localStorage.getItem(storageKeys.savedCityPrefix + city.id);
       if (saved) {
-        localStorage.setItem(STORAGE_KEY, saved);
+        localStorage.setItem(storageKeys.state, saved);
         setShowGame(true);
       }
     } catch {
@@ -387,12 +388,12 @@ export default function HomePage() {
     try {
       // Remove from saved cities index
       const updatedCities = savedCities.filter(c => c.id !== city.id);
-      localStorage.setItem(SAVED_CITIES_INDEX_KEY, JSON.stringify(updatedCities));
+      localStorage.setItem(storageKeys.savedCitiesIndex, JSON.stringify(updatedCities));
       setSavedCities(updatedCities);
       
       // Also remove the city state data if it exists
       if (!city.roomCode) {
-        localStorage.removeItem(SAVED_CITY_PREFIX + city.id);
+        localStorage.removeItem(storageKeys.savedCityPrefix + city.id);
       }
     } catch {
       console.error('Failed to delete saved city');
@@ -407,11 +408,11 @@ export default function HomePage() {
       // Host starts with the state they created - save it so GameProvider loads it
       try {
         const compressed = compressToUTF16(JSON.stringify(initialState));
-        localStorage.setItem(STORAGE_KEY, compressed);
+        localStorage.setItem(storageKeys.state, compressed);
         
         // Also save to saved cities index so it appears on homepage
         if (roomCode) {
-          saveCityToIndex(initialState, roomCode);
+          saveCityToIndex(storageKeys, initialState, roomCode);
         }
       } catch (e) {
         console.error('Failed to save co-op state:', e);
@@ -424,11 +425,11 @@ export default function HomePage() {
       // Guest received state from host - save it so GameProvider loads it
       try {
         const compressed = compressToUTF16(JSON.stringify(initialState));
-        localStorage.setItem(STORAGE_KEY, compressed);
+        localStorage.setItem(storageKeys.state, compressed);
         
         // Also save to saved cities index so it appears on homepage
         if (roomCode) {
-          saveCityToIndex(initialState, roomCode);
+          saveCityToIndex(storageKeys, initialState, roomCode);
         }
       } catch (e) {
         console.error('Failed to save co-op state:', e);
@@ -460,7 +461,7 @@ export default function HomePage() {
     // Always wrap in MultiplayerContextProvider so players can invite others from within the game
     return (
       <MultiplayerContextProvider>
-        <GameProvider startFresh={startFreshGame}>
+        <GameProvider startFresh={startFreshGame} storageNamespace={storageNamespace}>
           {gameContent}
         </GameProvider>
       </MultiplayerContextProvider>
@@ -506,14 +507,14 @@ export default function HomePage() {
               onClick={async () => {
                 // Clear any room code from URL to prevent multiplayer conflicts
                 if (window.location.search.includes('room=')) {
-                  window.history.replaceState({}, '', '/');
+                  window.history.replaceState({}, '', panePath);
                   setPendingRoomCode(null);
                 }
                 const response = await fetch('/example-states/example_state_9.json');
                 const exampleState = await response.json();
                 try {
                   const compressed = compressToUTF16(JSON.stringify(exampleState));
-                  localStorage.setItem(STORAGE_KEY, compressed);
+                  localStorage.setItem(storageKeys.state, compressed);
                 } catch (e) {
                   console.error('Failed to save example state:', e);
                 }
@@ -613,14 +614,14 @@ export default function HomePage() {
                 onClick={async () => {
                   // Clear any room code from URL to prevent multiplayer conflicts
                   if (window.location.search.includes('room=')) {
-                    window.history.replaceState({}, '', '/');
+                  window.history.replaceState({}, '', panePath);
                     setPendingRoomCode(null);
                   }
                   const response = await fetch('/example-states/example_state_9.json');
                   const exampleState = await response.json();
                   try {
                     const compressed = compressToUTF16(JSON.stringify(exampleState));
-                    localStorage.setItem(STORAGE_KEY, compressed);
+                  localStorage.setItem(storageKeys.state, compressed);
                   } catch (e) {
                     console.error('Failed to save example state:', e);
                   }

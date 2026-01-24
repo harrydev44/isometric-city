@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { CoasterProvider } from '@/context/CoasterContext';
 import CoasterGame from '@/components/coaster/Game';
 import { X } from 'lucide-react';
+import { useStorageNamespace } from '@/hooks/useStorageNamespace';
 import {
   buildSavedParkMeta,
-  COASTER_AUTOSAVE_KEY,
-  COASTER_SAVED_PARK_PREFIX,
   deleteCoasterStateFromStorage,
   loadCoasterStateFromStorage,
   readSavedParksIndex,
@@ -19,6 +18,7 @@ import {
   saveCoasterStateToStorage,
 } from '@/games/coaster/saveUtils';
 import { COASTER_SPRITE_PACK, getSpriteInfo, getSpriteRect } from '@/games/coaster/lib/coasterRenderConfig';
+import { buildCoasterStorageKeys, buildStoragePrefix, withPaneParam } from '@/lib/storageKeys';
 
 // Background color to filter from sprite sheets (red)
 const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
@@ -231,6 +231,9 @@ function SavedParkCard({ park, onLoad, onDelete }: { park: SavedParkMeta; onLoad
 }
 
 export default function CoasterPage() {
+  const storageNamespace = useStorageNamespace();
+  const storagePrefix = buildStoragePrefix(storageNamespace);
+  const storageKeys = buildCoasterStorageKeys(storagePrefix);
   const [showGame, setShowGame] = useState(false);
   const [startFresh, setStartFresh] = useState(false);
   const [hasSaved, setHasSaved] = useState(false);
@@ -239,17 +242,17 @@ export default function CoasterPage() {
   const [loadParkId, setLoadParkId] = useState<string | null>(null);
 
   const refreshSavedParks = useCallback(() => {
-    let parks = readSavedParksIndex();
-    const autosaveState = loadCoasterStateFromStorage(COASTER_AUTOSAVE_KEY);
+    let parks = readSavedParksIndex(storageKeys);
+    const autosaveState = loadCoasterStateFromStorage(storageKeys.autosave);
     if (autosaveState) {
       const autosaveMeta = buildSavedParkMeta(autosaveState);
-      parks = upsertSavedParkMeta(autosaveMeta, parks);
-      writeSavedParksIndex(parks);
+      parks = upsertSavedParkMeta(autosaveMeta, parks, storageKeys);
+      writeSavedParksIndex(parks, storageKeys);
     }
     setSavedParks(parks);
     setHasSaved(parks.length > 0);
     setIsChecking(false);
-  }, []);
+  }, [storageKeys]);
 
   useEffect(() => {
     refreshSavedParks();
@@ -263,20 +266,20 @@ export default function CoasterPage() {
   };
 
   const handleDeletePark = (park: SavedParkMeta) => {
-    const autosaveState = loadCoasterStateFromStorage(COASTER_AUTOSAVE_KEY);
+    const autosaveState = loadCoasterStateFromStorage(storageKeys.autosave);
     if (autosaveState?.id === park.id) {
-      deleteCoasterStateFromStorage(COASTER_AUTOSAVE_KEY);
+      deleteCoasterStateFromStorage(storageKeys.autosave);
     }
-    deleteCoasterStateFromStorage(`${COASTER_SAVED_PARK_PREFIX}${park.id}`);
-    const updated = removeSavedParkMeta(park.id, savedParks);
-    writeSavedParksIndex(updated);
+    deleteCoasterStateFromStorage(`${storageKeys.savedParkPrefix}${park.id}`);
+    const updated = removeSavedParkMeta(park.id, savedParks, storageKeys);
+    writeSavedParksIndex(updated, storageKeys);
     setSavedParks(updated);
     setHasSaved(updated.length > 0);
   };
 
   if (showGame) {
     return (
-      <CoasterProvider startFresh={startFresh} loadParkId={loadParkId}>
+      <CoasterProvider startFresh={startFresh} loadParkId={loadParkId} storageNamespace={storageNamespace}>
         <main className="h-screen w-screen overflow-hidden">
           <CoasterGame onExit={handleExitGame} />
         </main>
@@ -339,7 +342,7 @@ export default function CoasterPage() {
                 try {
                   const response = await fetch('/example-states-coaster/example_state.json');
                   const exampleState = await response.json();
-                  saveCoasterStateToStorage(COASTER_AUTOSAVE_KEY, exampleState);
+                  saveCoasterStateToStorage(storageKeys.autosave, exampleState);
                   refreshSavedParks();
                   setStartFresh(false);
                   setLoadParkId(null);
@@ -355,7 +358,7 @@ export default function CoasterPage() {
             </Button>
             
             <a
-              href="/"
+              href={withPaneParam('/', storageNamespace)}
               className="w-64 text-center py-2 text-sm font-light tracking-wide text-white/40 hover:text-white/70 transition-colors duration-200"
             >
               Back to IsoCity

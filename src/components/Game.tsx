@@ -41,7 +41,7 @@ const CARGO_TYPE_NAMES = [msg('containers'), msg('bulk materials'), msg('oil')];
 export default function Game({ onExit }: { onExit?: () => void }) {
   const gt = useGT();
   const m = useMessages();
-  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed } = useGame();
+  const { state, setTool, setActivePanel, addMoney, addNotification, setSpeed, storageKeys } = useGame();
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('none');
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
@@ -66,7 +66,7 @@ export default function Game({ onExit }: { onExit?: () => void }) {
     isVisible: isTipVisible,
     onContinue: onTipContinue,
     onSkipAll: onTipSkipAll,
-  } = useTipSystem(state);
+  } = useTipSystem(state, storageKeys);
   
   // Multiplayer sync
   const {

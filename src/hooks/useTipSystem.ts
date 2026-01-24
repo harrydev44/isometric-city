@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState } from '@/types/game';
 import { msg } from 'gt-next';
+import { CityStorageKeys } from '@/lib/storageKeys';
 
 // Tip definitions with their conditions and messages
 export type TipId = 
@@ -147,8 +148,6 @@ const TIP_DEFINITIONS: TipDefinition[] = [
   },
 ];
 
-const STORAGE_KEY = 'isocity-tips-disabled';
-const SHOWN_TIPS_KEY = 'isocity-tips-shown';
 const MIN_TIP_INTERVAL_MS = 15000; // Minimum 15 seconds between tips
 const TIP_CHECK_INTERVAL_MS = 5000; // Check for tip conditions every 5 seconds
 const INITIAL_TIP_DELAY_MS = 3000; // Wait 3 seconds before first tip
@@ -162,7 +161,7 @@ interface UseTipSystemReturn {
   setTipsEnabled: (enabled: boolean) => void;
 }
 
-export function useTipSystem(state: GameState): UseTipSystemReturn {
+export function useTipSystem(state: GameState, storageKeys: CityStorageKeys): UseTipSystemReturn {
   const [tipsEnabled, setTipsEnabledState] = useState(true);
   const [currentTip, setCurrentTip] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -180,12 +179,12 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
     if (typeof window === 'undefined') return;
     
     try {
-      const disabled = localStorage.getItem(STORAGE_KEY);
+      const disabled = localStorage.getItem(storageKeys.tipsDisabled);
       if (disabled === 'true') {
         setTipsEnabledState(false);
       }
       
-      const shown = localStorage.getItem(SHOWN_TIPS_KEY);
+      const shown = localStorage.getItem(storageKeys.tipsShown);
       if (shown) {
         const parsed = JSON.parse(shown);
         if (Array.isArray(parsed)) {
@@ -197,7 +196,7 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
     }
     
     hasLoadedRef.current = true;
-  }, []);
+  }, [storageKeys]);
 
   // Save shown tips to localStorage when they change
   useEffect(() => {
@@ -205,18 +204,18 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
     if (typeof window === 'undefined') return;
     
     try {
-      localStorage.setItem(SHOWN_TIPS_KEY, JSON.stringify(Array.from(shownTips)));
+      localStorage.setItem(storageKeys.tipsShown, JSON.stringify(Array.from(shownTips)));
     } catch (e) {
       console.error('Failed to save shown tips:', e);
     }
-  }, [shownTips]);
+  }, [shownTips, storageKeys]);
 
   // Set tips enabled preference
   const setTipsEnabled = useCallback((enabled: boolean) => {
     setTipsEnabledState(enabled);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(STORAGE_KEY, enabled ? 'false' : 'true');
+        localStorage.setItem(storageKeys.tipsDisabled, enabled ? 'false' : 'true');
       } catch (e) {
         console.error('Failed to save tip preference:', e);
       }
@@ -225,7 +224,7 @@ export function useTipSystem(state: GameState): UseTipSystemReturn {
       setIsVisible(false);
       setCurrentTip(null);
     }
-  }, []);
+  }, [storageKeys]);
 
   // Track shown tips in a ref as well for synchronous access
   const shownTipsRef = useRef<Set<TipId>>(new Set());

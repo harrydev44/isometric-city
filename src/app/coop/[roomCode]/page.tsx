@@ -8,15 +8,14 @@ import { CoopModal } from '@/components/multiplayer/CoopModal';
 import { GameState } from '@/types/game';
 import { compressToUTF16 } from 'lz-string';
 import { useParams, useRouter } from 'next/navigation';
-
-const STORAGE_KEY = 'isocity-game-state';
-const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
+import { useStorageNamespace } from '@/hooks/useStorageNamespace';
+import { CityStorageKeys, buildCityStorageKeys, buildStoragePrefix, withPaneParam } from '@/lib/storageKeys';
 
 // Save a city to the saved cities index (for multiplayer cities)
-function saveCityToIndex(state: GameState, roomCode?: string): void {
+function saveCityToIndex(storageKeys: CityStorageKeys, state: GameState, roomCode?: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const saved = localStorage.getItem(SAVED_CITIES_INDEX_KEY);
+    const saved = localStorage.getItem(storageKeys.savedCitiesIndex);
     const cities = saved ? JSON.parse(saved) : [];
     
     const cityMeta = {
@@ -41,13 +40,16 @@ function saveCityToIndex(state: GameState, roomCode?: string): void {
       cities.unshift(cityMeta);
     }
     
-    localStorage.setItem(SAVED_CITIES_INDEX_KEY, JSON.stringify(cities.slice(0, 20)));
+    localStorage.setItem(storageKeys.savedCitiesIndex, JSON.stringify(cities.slice(0, 20)));
   } catch (e) {
     console.error('Failed to save city to index:', e);
   }
 }
 
 export default function CoopPage() {
+  const storageNamespace = useStorageNamespace();
+  const storagePrefix = buildStoragePrefix(storageNamespace);
+  const storageKeys = buildCityStorageKeys(storagePrefix);
   const params = useParams();
   const router = useRouter();
   const roomCode = (params.roomCode as string)?.toUpperCase();
@@ -61,7 +63,7 @@ export default function CoopPage() {
 
   // Handle exit from game - navigate back to homepage
   const handleExitGame = () => {
-    router.push('/');
+    router.push(withPaneParam('/', storageNamespace));
   };
 
   // Handle co-op game start
@@ -72,9 +74,9 @@ export default function CoopPage() {
     if (isHost && initialState) {
       try {
         const compressed = compressToUTF16(JSON.stringify(initialState));
-        localStorage.setItem(STORAGE_KEY, compressed);
+        localStorage.setItem(storageKeys.state, compressed);
         if (code) {
-          saveCityToIndex(initialState, code);
+          saveCityToIndex(storageKeys, initialState, code);
         }
       } catch (e) {
         console.error('Failed to save co-op state:', e);
@@ -85,9 +87,9 @@ export default function CoopPage() {
     } else if (initialState) {
       try {
         const compressed = compressToUTF16(JSON.stringify(initialState));
-        localStorage.setItem(STORAGE_KEY, compressed);
+        localStorage.setItem(storageKeys.state, compressed);
         if (code) {
-          saveCityToIndex(initialState, code);
+          saveCityToIndex(storageKeys, initialState, code);
         }
       } catch (e) {
         console.error('Failed to save co-op state:', e);
@@ -105,7 +107,7 @@ export default function CoopPage() {
   const handleModalClose = (open: boolean) => {
     // Don't redirect if we're intentionally starting the game
     if (!open && !showGame && !isStartingGameRef.current) {
-      router.push('/');
+      router.push(withPaneParam('/', storageNamespace));
     }
     setShowCoopModal(open);
   };
@@ -113,7 +115,7 @@ export default function CoopPage() {
   if (showGame) {
     return (
       <MultiplayerContextProvider>
-        <GameProvider startFresh={startFreshGame}>
+        <GameProvider startFresh={startFreshGame} storageNamespace={storageNamespace}>
           <main className="h-screen w-screen overflow-hidden">
             <Game onExit={handleExitGame} />
           </main>

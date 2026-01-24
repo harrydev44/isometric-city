@@ -10,15 +10,12 @@ import { Tool, Budget, GameState, SavedCityMeta } from '@/types/game';
 const BATCH_FLUSH_INTERVAL = 100; // ms - flush every 100ms during drag
 const BATCH_MAX_SIZE = 100; // Max placements before force flush
 
-// Storage key for saved cities index (matches page.tsx)
-const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
-
 // Update the saved cities index with the current multiplayer city state
-function updateSavedCitiesIndex(state: GameState, roomCode: string): void {
+function updateSavedCitiesIndex(state: GameState, storageKey: string, roomCode: string): void {
   if (typeof window === 'undefined') return;
   try {
     // Load existing cities
-    const saved = localStorage.getItem(SAVED_CITIES_INDEX_KEY);
+    const saved = localStorage.getItem(storageKey);
     const cities: SavedCityMeta[] = saved ? JSON.parse(saved) : [];
     
     // Create updated city meta
@@ -43,7 +40,7 @@ function updateSavedCitiesIndex(state: GameState, roomCode: string): void {
     }
     
     // Keep only the last 20 cities and save
-    localStorage.setItem(SAVED_CITIES_INDEX_KEY, JSON.stringify(cities.slice(0, 20)));
+    localStorage.setItem(storageKey, JSON.stringify(cities.slice(0, 20)));
   } catch (e) {
     console.error('Failed to update saved cities index:', e);
   }
@@ -278,9 +275,9 @@ export function useMultiplayerSync() {
     // Also update the local saved cities index (less frequently - every 10 seconds)
     if (multiplayer.roomCode && now - lastIndexUpdateRef.current > 10000) {
       lastIndexUpdateRef.current = now;
-      updateSavedCitiesIndex(game.state, multiplayer.roomCode);
+      updateSavedCitiesIndex(game.state, game.storageKeys.savedCitiesIndex, multiplayer.roomCode);
     }
-  }, [multiplayer, game.state]);
+  }, [multiplayer, game.state, game.storageKeys.savedCitiesIndex]);
 
   // Broadcast a local action to peers
   const broadcastAction = useCallback((action: GameActionInput) => {

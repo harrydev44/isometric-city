@@ -1,7 +1,7 @@
 // Consolidated GameContext for the SimCity-like game
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import { serializeAndCompressAsync } from '@/lib/saveWorkerManager';
 import { simulateTick } from '@/lib/simulation';
@@ -36,13 +36,7 @@ import {
   setActiveSpritePack,
   SpritePack,
 } from '@/lib/renderConfig';
-
-const STORAGE_KEY = 'isocity-game-state';
-const SAVED_CITY_STORAGE_KEY = 'isocity-saved-city'; // For restoring after viewing shared city
-const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index'; // Index of all saved cities
-const SAVED_CITY_PREFIX = 'isocity-city-'; // Prefix for individual saved city states
-const SPRITE_PACK_STORAGE_KEY = 'isocity-sprite-pack';
-const DAY_NIGHT_MODE_STORAGE_KEY = 'isocity-day-night-mode';
+import { CityStorageKeys, buildCityStorageKeys, buildStoragePrefix } from '@/lib/storageKeys';
 
 export type DayNightMode = 'auto' | 'day' | 'night';
 
@@ -103,6 +97,7 @@ type GameContextValue = {
   loadSavedCity: (cityId: string) => boolean;
   deleteSavedCity: (cityId: string) => void;
   renameSavedCity: (cityId: string, newName: string) => void;
+  storageKeys: CityStorageKeys;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -172,10 +167,10 @@ const toolZoneMap: Partial<Record<Tool, ZoneType>> = {
 
 // Load game state from localStorage
 // Supports both compressed (lz-string) and uncompressed (legacy) formats
-function loadGameState(): GameState | null {
+function loadGameState(storageKeys: CityStorageKeys): GameState | null {
   if (typeof window === 'undefined') return null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.state);
     if (saved) {
       // Try to decompress first (new format)
       // If it fails or returns null/garbage, fall back to parsing as plain JSON (legacy format)
@@ -190,7 +185,7 @@ function loadGameState(): GameState | null {
         } else {
           // Data is corrupted - clear it and return null
           console.error('Corrupted save data detected, clearing...');
-          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(storageKeys.state);
           return null;
         }
       }
@@ -288,14 +283,14 @@ function loadGameState(): GameState | null {
         }
         return parsed as GameState;
       } else {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(storageKeys.state);
       }
     }
   } catch (e) {
     console.error('Failed to load game state:', e);
     // Clear corrupted data
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKeys.state);
     } catch (clearError) {
       console.error('Failed to clear corrupted game state:', clearError);
     }
@@ -323,10 +318,10 @@ function optimizeStateForSave(state: GameState): GameState {
 }
 
 // Try to free up localStorage space by clearing old/unused data
-function tryFreeLocalStorageSpace(): void {
+function tryFreeLocalStorageSpace(storageKeys: CityStorageKeys): void {
   try {
     // Clear any old saved city restore data
-    localStorage.removeItem(SAVED_CITY_STORAGE_KEY);
+    localStorage.removeItem(storageKeys.savedCity);
     
     // Clear sprite test data if any
     localStorage.removeItem('isocity_sprite_test');
@@ -335,7 +330,7 @@ function tryFreeLocalStorageSpace(): void {
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('isocity_temp_')) {
+      if (key && key.startsWith(storageKeys.tempPrefix)) {
         keysToRemove.push(key);
       }
     }
@@ -348,7 +343,7 @@ function tryFreeLocalStorageSpace(): void {
 // Save game state to localStorage with lz-string compression
 // Compression typically reduces size by 60-80%, allowing much larger cities
 // PERF: Uses Web Worker for BOTH serialization and compression - no main thread blocking!
-async function saveGameStateAsync(state: GameState): Promise<void> {
+async function saveGameStateAsync(storageKeys: CityStorageKeys, state: GameState): Promise<void> {
   if (typeof window === 'undefined') return;
   
   // Validate state before saving
@@ -372,13 +367,13 @@ async function saveGameStateAsync(state: GameState): Promise<void> {
     
     // Step 3: Write to localStorage (fast)
     try {
-      localStorage.setItem(STORAGE_KEY, compressed);
+      localStorage.setItem(storageKeys.state, compressed);
     } catch (quotaError) {
       if (quotaError instanceof DOMException && (quotaError.code === 22 || quotaError.code === 1014)) {
         console.warn('localStorage quota exceeded, trying to free space...');
-        tryFreeLocalStorageSpace();
+        tryFreeLocalStorageSpace(storageKeys);
         try {
-          localStorage.setItem(STORAGE_KEY, compressed);
+          localStorage.setItem(storageKeys.state, compressed);
         } catch {
           console.error('localStorage still full after cleanup');
         }
@@ -390,27 +385,27 @@ async function saveGameStateAsync(state: GameState): Promise<void> {
 }
 
 // Wrapper that takes a callback for compatibility with existing code
-function saveGameState(state: GameState, callback?: () => void): void {
-  saveGameStateAsync(state).finally(() => {
+function saveGameState(storageKeys: CityStorageKeys, state: GameState, callback?: () => void): void {
+  saveGameStateAsync(storageKeys, state).finally(() => {
     callback?.();
   });
 }
 
 // Clear saved game state
-function clearGameState(): void {
+function clearGameState(storageKeys: CityStorageKeys): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKeys.state);
   } catch (e) {
     console.error('Failed to clear game state:', e);
   }
 }
 
 // Load sprite pack from localStorage
-function loadSpritePackId(): string {
+function loadSpritePackId(storageKeys: CityStorageKeys): string {
   if (typeof window === 'undefined') return DEFAULT_SPRITE_PACK_ID;
   try {
-    const saved = localStorage.getItem(SPRITE_PACK_STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.spritePack);
     if (saved && SPRITE_PACKS.some(p => p.id === saved)) {
       return saved;
     }
@@ -421,20 +416,20 @@ function loadSpritePackId(): string {
 }
 
 // Save sprite pack to localStorage
-function saveSpritePackId(packId: string): void {
+function saveSpritePackId(storageKeys: CityStorageKeys, packId: string): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(SPRITE_PACK_STORAGE_KEY, packId);
+    localStorage.setItem(storageKeys.spritePack, packId);
   } catch (e) {
     console.error('Failed to save sprite pack preference:', e);
   }
 }
 
 // Load day/night mode from localStorage
-function loadDayNightMode(): DayNightMode {
+function loadDayNightMode(storageKeys: CityStorageKeys): DayNightMode {
   if (typeof window === 'undefined') return 'auto';
   try {
-    const saved = localStorage.getItem(DAY_NIGHT_MODE_STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.dayNightMode);
     if (saved === 'auto' || saved === 'day' || saved === 'night') {
       return saved;
     }
@@ -445,17 +440,17 @@ function loadDayNightMode(): DayNightMode {
 }
 
 // Save day/night mode to localStorage
-function saveDayNightMode(mode: DayNightMode): void {
+function saveDayNightMode(storageKeys: CityStorageKeys, mode: DayNightMode): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(DAY_NIGHT_MODE_STORAGE_KEY, mode);
+    localStorage.setItem(storageKeys.dayNightMode, mode);
   } catch (e) {
     console.error('Failed to save day/night mode preference:', e);
   }
 }
 
 // Save current city for later restoration (when viewing shared cities)
-function saveCityForRestore(state: GameState): void {
+function saveCityForRestore(storageKeys: CityStorageKeys, state: GameState): void {
   if (typeof window === 'undefined') return;
   try {
     const savedData = {
@@ -468,7 +463,7 @@ function saveCityForRestore(state: GameState): void {
       },
     };
     const compressed = compressToUTF16(JSON.stringify(savedData));
-    localStorage.setItem(SAVED_CITY_STORAGE_KEY, compressed);
+    localStorage.setItem(storageKeys.savedCity, compressed);
   } catch (e) {
     console.error('Failed to save city for restore:', e);
   }
@@ -490,10 +485,10 @@ function decompressSavedCity(saved: string): { state?: GameState; info?: SavedCi
 }
 
 // Load saved city info (just metadata, not full state)
-function loadSavedCityInfo(): SavedCityInfo {
+function loadSavedCityInfo(storageKeys: CityStorageKeys): SavedCityInfo {
   if (typeof window === 'undefined') return null;
   try {
-    const saved = localStorage.getItem(SAVED_CITY_STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.savedCity);
     if (saved) {
       const parsed = decompressSavedCity(saved);
       if (parsed?.info) {
@@ -507,10 +502,10 @@ function loadSavedCityInfo(): SavedCityInfo {
 }
 
 // Load full saved city state
-function loadSavedCityState(): GameState | null {
+function loadSavedCityState(storageKeys: CityStorageKeys): GameState | null {
   if (typeof window === 'undefined') return null;
   try {
-    const saved = localStorage.getItem(SAVED_CITY_STORAGE_KEY);
+    const saved = localStorage.getItem(storageKeys.savedCity);
     if (saved) {
       const parsed = decompressSavedCity(saved);
       if (parsed?.state && parsed.state.grid && parsed.state.gridSize && parsed.state.stats) {
@@ -524,10 +519,10 @@ function loadSavedCityState(): GameState | null {
 }
 
 // Clear saved city
-function clearSavedCityStorage(): void {
+function clearSavedCityStorage(storageKeys: CityStorageKeys): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(SAVED_CITY_STORAGE_KEY);
+    localStorage.removeItem(storageKeys.savedCity);
   } catch (e) {
     console.error('Failed to clear saved city:', e);
   }
@@ -547,10 +542,10 @@ function generateUUID(): string {
 }
 
 // Load saved cities index from localStorage
-function loadSavedCitiesIndex(): SavedCityMeta[] {
+function loadSavedCitiesIndex(storageKeys: CityStorageKeys): SavedCityMeta[] {
   if (typeof window === 'undefined') return [];
   try {
-    const saved = localStorage.getItem(SAVED_CITIES_INDEX_KEY);
+    const saved = localStorage.getItem(storageKeys.savedCitiesIndex);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -564,10 +559,10 @@ function loadSavedCitiesIndex(): SavedCityMeta[] {
 }
 
 // Save saved cities index to localStorage
-function saveSavedCitiesIndex(cities: SavedCityMeta[]): void {
+function saveSavedCitiesIndex(storageKeys: CityStorageKeys, cities: SavedCityMeta[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(SAVED_CITIES_INDEX_KEY, JSON.stringify(cities));
+    localStorage.setItem(storageKeys.savedCitiesIndex, JSON.stringify(cities));
   } catch (e) {
     console.error('Failed to save cities index:', e);
   }
@@ -575,7 +570,7 @@ function saveSavedCitiesIndex(cities: SavedCityMeta[]): void {
 
 // Save a city state to localStorage with compression
 // PERF: Uses Web Worker for BOTH serialization and compression - no main thread blocking!
-async function saveCityStateAsync(cityId: string, state: GameState): Promise<void> {
+async function saveCityStateAsync(storageKeys: CityStorageKeys, cityId: string, state: GameState): Promise<void> {
   if (typeof window === 'undefined') return;
   
   try {
@@ -587,7 +582,7 @@ async function saveCityStateAsync(cityId: string, state: GameState): Promise<voi
       return;
     }
     
-    localStorage.setItem(SAVED_CITY_PREFIX + cityId, compressed);
+    localStorage.setItem(storageKeys.savedCityPrefix + cityId, compressed);
   } catch (e) {
     if (e instanceof DOMException && (e.code === 22 || e.code === 1014)) {
       console.error('localStorage quota exceeded');
@@ -598,15 +593,15 @@ async function saveCityStateAsync(cityId: string, state: GameState): Promise<voi
 }
 
 // Wrapper for compatibility
-function saveCityState(cityId: string, state: GameState): void {
-  saveCityStateAsync(cityId, state);
+function saveCityState(storageKeys: CityStorageKeys, cityId: string, state: GameState): void {
+  saveCityStateAsync(storageKeys, cityId, state);
 }
 
 // Load a saved city state from localStorage (supports compressed and legacy formats)
-function loadCityState(cityId: string): GameState | null {
+function loadCityState(storageKeys: CityStorageKeys, cityId: string): GameState | null {
   if (typeof window === 'undefined') return null;
   try {
-    const saved = localStorage.getItem(SAVED_CITY_PREFIX + cityId);
+    const saved = localStorage.getItem(storageKeys.savedCityPrefix + cityId);
     if (saved) {
       // Try to decompress first (new format)
       // lz-string can return garbage when given invalid input, so check for valid JSON start
@@ -636,16 +631,26 @@ function loadCityState(cityId: string): GameState | null {
 }
 
 // Delete a saved city from localStorage
-function deleteCityState(cityId: string): void {
+function deleteCityState(storageKeys: CityStorageKeys, cityId: string): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(SAVED_CITY_PREFIX + cityId);
+    localStorage.removeItem(storageKeys.savedCityPrefix + cityId);
   } catch (e) {
     console.error('Failed to delete city state:', e);
   }
 }
 
-export function GameProvider({ children, startFresh = false }: { children: React.ReactNode; startFresh?: boolean }) {
+export function GameProvider({
+  children,
+  startFresh = false,
+  storageNamespace = null,
+}: {
+  children: React.ReactNode;
+  startFresh?: boolean;
+  storageNamespace?: string | null;
+}) {
+  const storagePrefix = useMemo(() => buildStoragePrefix(storageNamespace), [storageNamespace]);
+  const storageKeys = useMemo(() => buildCityStorageKeys(storagePrefix), [storagePrefix]);
   // Start with a default state, we'll load from localStorage after mount (unless startFresh is true)
   const [state, setState] = useState<GameState>(() => createInitialGameState(DEFAULT_GRID_SIZE, 'IsoCity'));
   
@@ -672,22 +677,22 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // Load game state and sprite pack from localStorage on mount (client-side only)
   useEffect(() => {
     // Load sprite pack preference
-    const savedPackId = loadSpritePackId();
+    const savedPackId = loadSpritePackId(storageKeys);
     const pack = getSpritePack(savedPackId);
     setCurrentSpritePack(pack);
     setActiveSpritePack(pack);
     
     // Load day/night mode preference
-    const savedDayNightMode = loadDayNightMode();
+    const savedDayNightMode = loadDayNightMode(storageKeys);
     setDayNightModeState(savedDayNightMode);
     
     // Load saved cities index
-    const cities = loadSavedCitiesIndex();
+    const cities = loadSavedCitiesIndex(storageKeys);
     setSavedCities(cities);
     
     // Load game state (unless startFresh is true - used for co-op to start with a new city)
     if (!startFresh) {
-      const saved = loadGameState();
+      const saved = loadGameState(storageKeys);
       if (saved) {
         skipNextSaveRef.current = true; // Set skip flag BEFORE updating state
         setState(saved);
@@ -702,7 +707,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     hasLoadedRef.current = true;
     // Mark state as ready - consumers should wait for this before using state
     setIsStateReady(true);
-  }, [startFresh]);
+  }, [startFresh, storageKeys]);
   
   // Track the state that needs to be saved
   const lastSaveTimeRef = useRef<number>(0);
@@ -771,7 +776,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         
         // PERF: No need for structuredClone here - the worker handles everything
         // postMessage internally clones the data when sending to the worker
-        saveGameState(latestStateRef.current, () => {
+        saveGameState(storageKeys, latestStateRef.current, () => {
           lastSaveTimeRef.current = Date.now();
           setHasExistingGame(true);
           setIsSaving(false);
@@ -786,7 +791,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         clearInterval(saveIntervalRef.current);
       }
     };
-  }, []);
+  }, [storageKeys]);
 
   // PERF: Track tick count to only sync UI-visible changes to React periodically
   const tickCountRef = useRef(0);
@@ -1109,13 +1114,13 @@ export function GameProvider({ children, startFresh = false }: { children: React
     const pack = getSpritePack(packId);
     setCurrentSpritePack(pack);
     setActiveSpritePack(pack);
-    saveSpritePackId(packId);
-  }, []);
+    saveSpritePackId(storageKeys, packId);
+  }, [storageKeys]);
 
   const setDayNightMode = useCallback((mode: DayNightMode) => {
     setDayNightModeState(mode);
-    saveDayNightMode(mode);
-  }, []);
+    saveDayNightMode(storageKeys, mode);
+  }, [storageKeys]);
 
   // Compute the visual hour based on the day/night mode override
   // This doesn't affect time progression, just the rendering
@@ -1126,14 +1131,14 @@ export function GameProvider({ children, startFresh = false }: { children: React
       : 22; // Night time
 
   const newGame = useCallback((name?: string, size?: number) => {
-    clearGameState(); // Clear saved state when starting fresh
+    clearGameState(storageKeys); // Clear saved state when starting fresh
     const fresh = createInitialGameState(size ?? DEFAULT_GRID_SIZE, name || 'IsoCity');
     // Increment gameVersion from current state to ensure vehicles/entities are cleared
     setState((prev) => ({
       ...fresh,
       gameVersion: (prev.gameVersion ?? 0) + 1,
     }));
-  }, []);
+  }, [storageKeys]);
 
   const loadState = useCallback((stateString: string): boolean => {
     try {
@@ -1219,14 +1224,14 @@ export function GameProvider({ children, startFresh = false }: { children: React
   }, [state]);
 
   const generateRandomCity = useCallback(() => {
-    clearGameState(); // Clear saved state when generating a new city
+    clearGameState(storageKeys); // Clear saved state when generating a new city
     const randomCity = generateRandomAdvancedCity(DEFAULT_GRID_SIZE);
     // Increment gameVersion to ensure vehicles/entities are cleared
     setState((prev) => ({
       ...randomCity,
       gameVersion: (prev.gameVersion ?? 0) + 1,
     }));
-  }, []);
+  }, [storageKeys]);
 
   // Expand the city grid by 15 tiles on each side (30x30 total increase)
   const expandCity = useCallback(() => {
@@ -1453,30 +1458,30 @@ export function GameProvider({ children, startFresh = false }: { children: React
 
   // Save current city for restore (when viewing shared cities)
   const saveCurrentCityForRestore = useCallback(() => {
-    saveCityForRestore(state);
-  }, [state]);
+    saveCityForRestore(storageKeys, state);
+  }, [state, storageKeys]);
 
   // Restore saved city
   const restoreSavedCity = useCallback((): boolean => {
-    const savedState = loadSavedCityState();
+    const savedState = loadSavedCityState(storageKeys);
     if (savedState) {
       skipNextSaveRef.current = true;
       setState(savedState);
-      clearSavedCityStorage();
+      clearSavedCityStorage(storageKeys);
       return true;
     }
     return false;
-  }, []);
+  }, [storageKeys]);
 
   // Get saved city info
   const getSavedCityInfo = useCallback((): SavedCityInfo => {
-    return loadSavedCityInfo();
-  }, []);
+    return loadSavedCityInfo(storageKeys);
+  }, [storageKeys]);
 
   // Clear saved city
   const clearSavedCity = useCallback(() => {
-    clearSavedCityStorage();
-  }, []);
+    clearSavedCityStorage(storageKeys);
+  }, [storageKeys]);
 
   // Save current city to the multi-save system
   const saveCity = useCallback(() => {
@@ -1492,7 +1497,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     };
     
     // Save the city state
-    saveCityState(state.id, state);
+    saveCityState(storageKeys, state.id, state);
     
     // Update the index
     setSavedCities((prev) => {
@@ -1513,15 +1518,15 @@ export function GameProvider({ children, startFresh = false }: { children: React
       newCities.sort((a, b) => b.savedAt - a.savedAt);
       
       // Persist to localStorage
-      saveSavedCitiesIndex(newCities);
+      saveSavedCitiesIndex(storageKeys, newCities);
       
       return newCities;
     });
-  }, [state]);
+  }, [state, storageKeys]);
 
   // Load a saved city from the multi-save system
   const loadSavedCity = useCallback((cityId: string): boolean => {
-    const cityState = loadCityState(cityId);
+    const cityState = loadCityState(storageKeys, cityId);
     if (!cityState) return false;
     
     // Ensure the loaded state has an ID
@@ -1586,31 +1591,31 @@ export function GameProvider({ children, startFresh = false }: { children: React
     }));
     
     // Also update the current game in local storage
-    saveGameState(cityState);
+    saveGameState(storageKeys, cityState);
     
     return true;
-  }, []);
+  }, [storageKeys]);
 
   // Delete a saved city from the multi-save system
   const deleteSavedCity = useCallback((cityId: string) => {
     // Delete the city state
-    deleteCityState(cityId);
+    deleteCityState(storageKeys, cityId);
     
     // Update the index
     setSavedCities((prev) => {
       const newCities = prev.filter((c) => c.id !== cityId);
-      saveSavedCitiesIndex(newCities);
+      saveSavedCitiesIndex(storageKeys, newCities);
       return newCities;
     });
-  }, []);
+  }, [storageKeys]);
 
   // Rename a saved city
   const renameSavedCity = useCallback((cityId: string, newName: string) => {
     // Load the city state, update the name, and save it back
-    const cityState = loadCityState(cityId);
+    const cityState = loadCityState(storageKeys, cityId);
     if (cityState) {
       cityState.cityName = newName;
-      saveCityState(cityId, cityState);
+      saveCityState(storageKeys, cityId, cityState);
     }
     
     // Update the index
@@ -1618,7 +1623,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
       const newCities = prev.map((c) =>
         c.id === cityId ? { ...c, cityName: newName } : c
       );
-      saveSavedCitiesIndex(newCities);
+      saveSavedCitiesIndex(storageKeys, newCities);
       return newCities;
     });
     
@@ -1626,7 +1631,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     if (state.id === cityId) {
       setState((prev) => ({ ...prev, cityName: newName }));
     }
-  }, [state.id]);
+  }, [state.id, storageKeys]);
 
   const value: GameContextValue = {
     state,
@@ -1675,6 +1680,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     loadSavedCity,
     deleteSavedCity,
     renameSavedCity,
+    storageKeys,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

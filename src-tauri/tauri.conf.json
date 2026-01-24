@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "IsoGames Desktop",
+  "version": "0.1.0",
+  "identifier": "com.isogames.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:3000/desktop",
+    "frontendDist": "../.next"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "IsoCity + IsoCoaster",
+        "width": 1440,
+        "height": 900
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "../src/app/icon.png"
+    ]
+  }
+}
