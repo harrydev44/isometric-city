@@ -1361,7 +1361,8 @@ export function CoasterProvider({
   // Fix disconnected tracks after state is ready (handles existing sessions)
   useEffect(() => {
     if (!isStateReady) return;
-    
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(prev => {
       const { grid: fixedGrid, coasters: fixedCoasters, changed } = ensureAllTracksHaveCoasters(
         prev.grid,

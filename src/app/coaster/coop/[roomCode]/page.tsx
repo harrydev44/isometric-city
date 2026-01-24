@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
+import { useGT } from 'gt-next';
 import { useParams, useRouter } from 'next/navigation';
 import { MultiplayerContextProvider } from '@/context/MultiplayerContext';
 import { CoasterProvider, createInitialGameState as createInitialCoasterGameState } from '@/context/CoasterContext';
@@ -26,6 +27,7 @@ function resolveCoasterState(state?: MultiplayerState): CoasterGameState | null 
 }
 
 export default function CoasterCoopPage() {
+  const gt = useGT();
   const params = useParams();
   const router = useRouter();
   const roomCode = (params.roomCode as string)?.toUpperCase();
@@ -88,9 +90,9 @@ export default function CoasterCoopPage() {
           pendingRoomCode={roomCode}
           basePath="/coaster/coop"
           homePath="/coaster"
-          defaultRoomName="My Co-op Park"
-          locationLabel="Park"
-          locationLabelLower="park"
+          defaultRoomName={gt('My Co-op Park')}
+          locationLabel={gt('Park')}
+          locationLabelLower={gt('park')}
           createInitialState={(name) => createInitialCoasterGameState(name)}
           applyNameToState={(state, name) => {
             if (!state || typeof state !== 'object' || !('settings' in state)) return state;

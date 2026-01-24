@@ -404,7 +404,7 @@ export function CoopModal({
               {error && (
                 <div className="flex items-center gap-2 text-red-400 text-sm">
                   <AlertCircle className="w-4 h-4" />
-                  <T><Var>{error}</Var></T>
+                  {error}
                 </div>
               )}
 
@@ -438,7 +438,7 @@ export function CoopModal({
               <div className="bg-slate-800 rounded-lg p-6 text-center">
                 <T><p className="text-slate-400 text-sm mb-2">Invite Code</p></T>
                 <p className="text-4xl font-mono font-bold tracking-widest text-white">
-                  <T><Var>{roomCode}</Var></T>
+                  {roomCode}
                 </p>
               </div>
 
@@ -476,7 +476,7 @@ export function CoopModal({
                   <div className="space-y-1">
                     {players.map((player) => (
                       <div key={player.id} className="text-sm text-white">
-                        <T><Var>{player.name}</Var></T>
+                        {player.name}
                       </div>
                     ))}
                   </div>
@@ -528,7 +528,7 @@ export function CoopModal({
           {error && (
             <div className="flex items-center gap-2 text-red-400 text-sm">
               <AlertCircle className="w-4 h-4" />
-              <T><Var>{error}</Var></T>
+              {error}
             </div>
           )}
 
