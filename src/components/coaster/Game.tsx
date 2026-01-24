@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCoaster } from '@/context/CoasterContext';
+import { useMobile } from '@/hooks/useMobile';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CoasterGrid } from './CoasterGrid';
 import { Sidebar } from './Sidebar';
@@ -9,13 +10,15 @@ import { TopBar } from './TopBar';
 import { MiniMap } from './MiniMap';
 import { Panels } from './panels/Panels';
 import { CoasterCommandMenu } from '@/components/coaster/CommandMenu';
+import { MobileCoasterTopBar } from './MobileTopBar';
+import { MobileCoasterToolbar } from './MobileToolbar';
 
 interface GameProps {
   onExit?: () => void;
 }
 
 export default function CoasterGame({ onExit }: GameProps) {
-  const { state, isStateReady, setTool, setSpeed } = useCoaster();
+  const { state, isStateReady, setTool, setSpeed, setActivePanel } = useCoaster();
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{
     offset: { x: number; y: number };
@@ -23,6 +26,10 @@ export default function CoasterGame({ onExit }: GameProps) {
     canvasSize: { width: number; height: number };
   } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
+  
+  // Mobile detection
+  const { isMobileDevice, isSmallScreen } = useMobile();
+  const isMobile = isMobileDevice || isSmallScreen;
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -60,6 +67,40 @@ export default function CoasterGame({ onExit }: GameProps) {
     );
   }
   
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <TooltipProvider>
+        <div className="w-full h-full overflow-hidden bg-background flex flex-col">
+          {/* Mobile Top Bar */}
+          <MobileCoasterTopBar
+            selectedTile={selectedTile && state.selectedTool === 'select' ? state.grid[selectedTile.y][selectedTile.x] : null}
+            onCloseTile={() => setSelectedTile(null)}
+            onExit={onExit}
+          />
+          
+          {/* Main canvas area - fills remaining space, with padding for top/bottom bars */}
+          <div className="flex-1 relative overflow-hidden" style={{ paddingTop: '72px', paddingBottom: '76px' }}>
+            <CoasterGrid
+              selectedTile={selectedTile}
+              setSelectedTile={setSelectedTile}
+              isMobile={true}
+            />
+          </div>
+          
+          {/* Mobile Bottom Toolbar */}
+          <MobileCoasterToolbar
+            onOpenPanel={(panel) => setActivePanel(panel)}
+          />
+          
+          {/* Panels - render as fullscreen modals on mobile */}
+          <Panels />
+        </div>
+      </TooltipProvider>
+    );
+  }
+  
+  // Desktop layout
   return (
     <TooltipProvider>
       <div className="w-full h-full min-h-[720px] overflow-hidden bg-background flex">
