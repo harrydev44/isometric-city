@@ -229,6 +229,9 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Drag region for moving window */}
+      <div className="drag-region" />
+      
       {/* Sidebar */}
       <div className="sidebar">
         {Object.values(GAMES).map((game) => (
@@ -462,9 +465,7 @@ function StableIframe({ pane, position }: StableIframeProps) {
     >
       {isLoading && (
         <div className="pane-loading">
-          {game.icon}
-          <div className="pane-loading-text">Loading {game.name}...</div>
-          <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite' }} />
+          <Loader2 style={{ width: 32, height: 32, animation: 'spin 1s linear infinite' }} />
         </div>
       )}
       <iframe

@@ -1,5 +1,5 @@
 :root {
-  --sidebar-width: 52px;
+  --sidebar-width: 68px;
   --sidebar-bg: #1a1a1a;
   --sidebar-hover: #2a2a2a;
   --sidebar-active: #333333;
@@ -9,6 +9,7 @@
   --split-button-hover: rgba(255, 255, 255, 0.2);
   --icon-color: #888;
   --icon-active: #fff;
+  --titlebar-height: 28px;
 }
 
 * {
@@ -44,9 +45,31 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 12px 0;
+  padding-top: calc(var(--titlebar-height) + 12px); /* Space for traffic lights */
   gap: 4px;
   flex-shrink: 0;
   border-right: 1px solid var(--pane-border);
+}
+
+/* Drag region for moving window - sits at the top */
+.drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height);
+  -webkit-app-region: drag;
+  app-region: drag;
+  z-index: 100;
+}
+
+/* Ensure interactive elements are not draggable */
+.sidebar-icon,
+.pane-control-btn,
+button,
+a {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .sidebar-icon {
@@ -103,6 +126,7 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  padding-top: var(--titlebar-height); /* Space for drag region */
 }
 
 /* Pane Container */
