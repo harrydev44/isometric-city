@@ -46,7 +46,14 @@ function SuperFastIcon() {
 // TOPBAR COMPONENT
 // =============================================================================
 
-export function TopBar() {
+interface TopBarProps {
+  onShare?: () => void;
+  roomCode?: string | null;
+  playerCount?: number;
+  showMultiplayerBadge?: boolean;
+}
+
+export function TopBar({ onShare, roomCode, playerCount, showMultiplayerBadge = false }: TopBarProps) {
   const { state, setSpeed, setActivePanel, setParkSettings } = useCoaster();
   const { settings, stats, finances, year, month, day, hour, minute, speed } = state;
   
@@ -157,6 +164,28 @@ export function TopBar() {
       
       {/* Spacer */}
       <div className="flex-1" />
+
+      {showMultiplayerBadge && roomCode && (
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <span className="font-mono tracking-wider">{roomCode}</span>
+          {typeof playerCount === 'number' && (
+            <span className="text-slate-500">
+              {playerCount} {playerCount === 1 ? 'player' : 'players'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {onShare && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onShare}
+          className="text-white/70 hover:text-white"
+        >
+          Invite
+        </Button>
+      )}
       
       {/* Panel buttons */}
       <div className="flex items-center gap-2">

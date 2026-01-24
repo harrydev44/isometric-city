@@ -18,8 +18,8 @@ import {
   Player,
   ConnectionState,
   RoomData,
+  MultiplayerGameState,
 } from '@/lib/multiplayer/types';
-import { GameState } from '@/types/game';
 import { useGT } from 'gt-next';
 
 // Generate a random 5-character room code
@@ -40,7 +40,7 @@ interface MultiplayerContextValue {
   error: string | null;
 
   // Actions
-  createRoom: (cityName: string, initialState: GameState) => Promise<string>;
+  createRoom: (cityName: string, initialState: MultiplayerGameState) => Promise<string>;
   joinRoom: (roomCode: string) => Promise<RoomData>;
   leaveRoom: () => void;
   
@@ -48,14 +48,14 @@ interface MultiplayerContextValue {
   dispatchAction: (action: GameActionInput) => void;
   
   // Initial state for new players
-  initialState: GameState | null;
+  initialState: MultiplayerGameState | null;
   
   // Callback for when remote actions are received
   onRemoteAction: ((action: GameAction) => void) | null;
   setOnRemoteAction: (callback: ((action: GameAction) => void) | null) => void;
   
   // Update the game state (any player can do this now)
-  updateGameState: (state: GameState) => void;
+  updateGameState: (state: MultiplayerGameState) => void;
   
   // Provider instance (for advanced usage)
   provider: MultiplayerProvider | null;
@@ -68,15 +68,18 @@ const MultiplayerContext = createContext<MultiplayerContextValue | null>(null);
 
 export function MultiplayerContextProvider({
   children,
+  defaultRoomName,
 }: {
   children: React.ReactNode;
+  defaultRoomName?: string;
 }) {
   const gt = useGT();
+  const fallbackRoomName = defaultRoomName ?? gt('Co-op City');
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [initialState, setInitialState] = useState<GameState | null>(null);
+  const [initialState, setInitialState] = useState<MultiplayerGameState | null>(null);
   const [provider, setProvider] = useState<MultiplayerProvider | null>(null);
   const [onRemoteAction, setOnRemoteAction] = useState<((action: GameAction) => void) | null>(null);
 
@@ -94,7 +97,7 @@ export function MultiplayerContextProvider({
 
   // Create a room (first player to start a session)
   const createRoom = useCallback(
-    async (cityName: string, gameState: GameState): Promise<string> => {
+    async (cityName: string, gameState: MultiplayerGameState): Promise<string> => {
       setConnectionState('connecting');
       setError(null);
 
@@ -152,7 +155,7 @@ export function MultiplayerContextProvider({
         // Create multiplayer provider - state will be loaded from Supabase database
         const provider = await createMultiplayerProvider({
           roomCode: normalizedCode,
-          cityName: gt('Co-op City'),
+          cityName: fallbackRoomName,
           // No initialGameState - we'll load from database
           onConnectionChange: (connected) => {
             setConnectionState(connected ? 'connected' : 'disconnected');
@@ -184,7 +187,7 @@ export function MultiplayerContextProvider({
         const room: RoomData = {
           code: normalizedCode,
           hostId: '',
-          cityName: gt('Co-op City'),
+          cityName: fallbackRoomName,
           createdAt: Date.now(),
           playerCount: 1,
         };
@@ -196,7 +199,7 @@ export function MultiplayerContextProvider({
         throw err;
       }
     },
-    [gt]
+    [fallbackRoomName, gt]
   );
 
   // Leave the current room
@@ -226,7 +229,7 @@ export function MultiplayerContextProvider({
 
   // Update the game state (any player can do this)
   const updateGameState = useCallback(
-    (state: GameState) => {
+    (state: MultiplayerGameState) => {
       if (providerRef.current) {
         providerRef.current.updateGameState(state);
       }

@@ -1,6 +1,9 @@
 // Multiplayer types for co-op gameplay
 
-import { Tool, GameState, Budget } from '@/types/game';
+import { Tool as CityTool, GameState as CityGameState, Budget } from '@/types/game';
+import { Tool as CoasterTool, GameState as CoasterGameState } from '@/games/coaster/types';
+import { ParkSettings } from '@/games/coaster/types/economy';
+import { BuildingType } from '@/games/coaster/types/buildings';
 
 // Base action properties
 interface BaseAction {
@@ -8,30 +11,54 @@ interface BaseAction {
   playerId: string;
 }
 
+export type MultiplayerGameState = CityGameState | CoasterGameState;
+export type MultiplayerTool = CityTool | CoasterTool;
+
 // Game actions that get synced via Supabase Realtime
 export type GameAction =
-  | (BaseAction & { type: 'place'; x: number; y: number; tool: Tool })
-  | (BaseAction & { type: 'placeBatch'; placements: Array<{ x: number; y: number; tool: Tool }> })
+  | (BaseAction & { type: 'place'; x: number; y: number; tool: CityTool })
+  | (BaseAction & { type: 'placeBatch'; placements: Array<{ x: number; y: number; tool: CityTool }> })
   | (BaseAction & { type: 'bulldoze'; x: number; y: number })
   | (BaseAction & { type: 'setTaxRate'; rate: number })
   | (BaseAction & { type: 'setBudget'; key: keyof Budget; funding: number })
   | (BaseAction & { type: 'setSpeed'; speed: 0 | 1 | 2 | 3 })
   | (BaseAction & { type: 'setDisasters'; enabled: boolean })
   | (BaseAction & { type: 'createBridges'; pathTiles: Array<{ x: number; y: number }>; trackType: 'road' | 'rail' })
-  | (BaseAction & { type: 'fullState'; state: GameState })
-  | (BaseAction & { type: 'tick'; tickData: TickData });
+  | (BaseAction & { type: 'fullState'; state: MultiplayerGameState })
+  | (BaseAction & { type: 'tick'; tickData: TickData })
+  | (BaseAction & { type: 'coasterPlace'; x: number; y: number; tool: CoasterTool; coasterId?: string; buildingType?: BuildingType })
+  | (BaseAction & { type: 'coasterPlaceBatch'; placements: Array<{ x: number; y: number; tool: CoasterTool; coasterId?: string; buildingType?: BuildingType }> })
+  | (BaseAction & { type: 'coasterBulldoze'; x: number; y: number })
+  | (BaseAction & { type: 'coasterBuildStart'; coasterType: string; coasterId: string })
+  | (BaseAction & { type: 'coasterBuildFinish' })
+  | (BaseAction & { type: 'coasterBuildCancel' })
+  | (BaseAction & { type: 'coasterSetSpeed'; speed: 0 | 1 | 2 | 3 })
+  | (BaseAction & { type: 'coasterSetParkSettings'; settings: Partial<ParkSettings> })
+  | (BaseAction & { type: 'coasterAddMoney'; amount: number })
+  | (BaseAction & { type: 'coasterClearGuests' });
 
 // Action input types (without timestamp and playerId, which are added automatically)
-export type PlaceAction = { type: 'place'; x: number; y: number; tool: Tool };
-export type PlaceBatchAction = { type: 'placeBatch'; placements: Array<{ x: number; y: number; tool: Tool }> };
+export type PlaceAction = { type: 'place'; x: number; y: number; tool: CityTool };
+export type PlaceBatchAction = { type: 'placeBatch'; placements: Array<{ x: number; y: number; tool: CityTool }> };
 export type BulldozeAction = { type: 'bulldoze'; x: number; y: number };
 export type SetTaxRateAction = { type: 'setTaxRate'; rate: number };
 export type SetBudgetAction = { type: 'setBudget'; key: keyof Budget; funding: number };
 export type SetSpeedAction = { type: 'setSpeed'; speed: 0 | 1 | 2 | 3 };
 export type SetDisastersAction = { type: 'setDisasters'; enabled: boolean };
 export type CreateBridgesAction = { type: 'createBridges'; pathTiles: Array<{ x: number; y: number }>; trackType: 'road' | 'rail' };
-export type FullStateAction = { type: 'fullState'; state: GameState };
+export type FullStateAction = { type: 'fullState'; state: MultiplayerGameState };
 export type TickAction = { type: 'tick'; tickData: TickData };
+
+export type CoasterPlaceAction = { type: 'coasterPlace'; x: number; y: number; tool: CoasterTool; coasterId?: string; buildingType?: BuildingType };
+export type CoasterPlaceBatchAction = { type: 'coasterPlaceBatch'; placements: Array<{ x: number; y: number; tool: CoasterTool; coasterId?: string; buildingType?: BuildingType }> };
+export type CoasterBulldozeAction = { type: 'coasterBulldoze'; x: number; y: number };
+export type CoasterBuildStartAction = { type: 'coasterBuildStart'; coasterType: string; coasterId: string };
+export type CoasterBuildFinishAction = { type: 'coasterBuildFinish' };
+export type CoasterBuildCancelAction = { type: 'coasterBuildCancel' };
+export type CoasterSetSpeedAction = { type: 'coasterSetSpeed'; speed: 0 | 1 | 2 | 3 };
+export type CoasterSetParkSettingsAction = { type: 'coasterSetParkSettings'; settings: Partial<ParkSettings> };
+export type CoasterAddMoneyAction = { type: 'coasterAddMoney'; amount: number };
+export type CoasterClearGuestsAction = { type: 'coasterClearGuests' };
 
 export type GameActionInput = 
   | PlaceAction
@@ -43,7 +70,17 @@ export type GameActionInput =
   | SetDisastersAction
   | CreateBridgesAction
   | FullStateAction
-  | TickAction;
+  | TickAction
+  | CoasterPlaceAction
+  | CoasterPlaceBatchAction
+  | CoasterBulldozeAction
+  | CoasterBuildStartAction
+  | CoasterBuildFinishAction
+  | CoasterBuildCancelAction
+  | CoasterSetSpeedAction
+  | CoasterSetParkSettingsAction
+  | CoasterAddMoneyAction
+  | CoasterClearGuestsAction;
 
 // Minimal tick data sent from host to guests
 export interface TickData {
@@ -52,12 +89,12 @@ export interface TickData {
   day: number;
   hour: number;
   tick: number;
-  stats: GameState['stats'];
+  stats: CityGameState['stats'];
   // Only send changed tiles to minimize bandwidth
   changedTiles?: Array<{
     x: number;
     y: number;
-    tile: GameState['grid'][0][0];
+    tile: CityGameState['grid'][0][0];
   }>;
 }
 
@@ -89,7 +126,7 @@ export interface RoomData {
 export interface AwarenessState {
   player: Player;
   cursor?: { x: number; y: number };
-  selectedTool?: Tool;
+  selectedTool?: MultiplayerTool;
 }
 
 // Word lists for random name generation

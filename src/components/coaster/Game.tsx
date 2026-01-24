@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCoaster } from '@/context/CoasterContext';
+import { useCoasterMultiplayerSync } from '@/hooks/useCoasterMultiplayerSync';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CoasterGrid } from './CoasterGrid';
 import { Sidebar } from './Sidebar';
@@ -9,6 +10,7 @@ import { TopBar } from './TopBar';
 import { MiniMap } from './MiniMap';
 import { Panels } from './panels/Panels';
 import { CoasterCommandMenu } from '@/components/coaster/CommandMenu';
+import { CoasterShareModal } from '@/components/multiplayer/CoasterShareModal';
 
 interface GameProps {
   onExit?: () => void;
@@ -16,6 +18,7 @@ interface GameProps {
 
 export default function CoasterGame({ onExit }: GameProps) {
   const { state, isStateReady, setTool, setSpeed } = useCoaster();
+  const { isMultiplayer, roomCode, playerCount } = useCoasterMultiplayerSync();
   const [selectedTile, setSelectedTile] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState<{
     offset: { x: number; y: number };
@@ -23,6 +26,7 @@ export default function CoasterGame({ onExit }: GameProps) {
     canvasSize: { width: number; height: number };
   } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<{ x: number; y: number } | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -69,7 +73,17 @@ export default function CoasterGame({ onExit }: GameProps) {
         {/* Main content */}
         <div className="flex-1 flex flex-col ml-56">
           {/* Top bar */}
-          <TopBar />
+          <TopBar
+            onShare={() => setShowShareModal(true)}
+            roomCode={roomCode}
+            playerCount={playerCount}
+            showMultiplayerBadge={isMultiplayer}
+          />
+
+          <CoasterShareModal
+            open={showShareModal}
+            onOpenChange={setShowShareModal}
+          />
           
           {/* Canvas area */}
           <div className="flex-1 relative overflow-visible">
