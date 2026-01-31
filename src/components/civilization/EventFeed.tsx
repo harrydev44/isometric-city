@@ -2,6 +2,7 @@
 
 /**
  * Event Feed - Shows live events and milestones
+ * Compact design showing only the most important recent events
  */
 
 import React, { useEffect, useState } from 'react';
@@ -15,9 +16,13 @@ interface EventFeedProps {
 export function EventFeed({ events, onEventClick }: EventFeedProps) {
   const [visibleEvents, setVisibleEvents] = useState<CivilizationEvent[]>([]);
 
-  // Animate new events in
+  // Show only 4 most recent events, and only important ones
   useEffect(() => {
-    setVisibleEvents(events.slice(0, 8));
+    // Filter to only show new_leader and population milestones (skip rank jumps which are noisy)
+    const importantEvents = events.filter(e =>
+      e.type === 'new_leader' || e.type === 'population_milestone'
+    );
+    setVisibleEvents(importantEvents.slice(0, 4));
   }, [events]);
 
   if (visibleEvents.length === 0) {
@@ -25,34 +30,31 @@ export function EventFeed({ events, onEventClick }: EventFeedProps) {
   }
 
   return (
-    <div className="absolute bottom-20 left-4 w-72 pointer-events-none">
-      <div className="space-y-1">
+    <div className="absolute bottom-24 left-4 w-64 pointer-events-none">
+      <div className="space-y-1.5">
         {visibleEvents.map((event, index) => (
           <div
             key={event.id}
             className={`
-              bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2
+              bg-black/80 backdrop-blur-sm rounded px-3 py-2
               pointer-events-auto cursor-pointer
               transform transition-all duration-300 ease-out
-              hover:bg-black/80 hover:scale-102
+              hover:bg-black/90 hover:translate-x-1
               animate-slide-in-left
+              border-l-2
+              ${event.type === 'new_leader' ? 'border-yellow-500' : 'border-blue-500'}
             `}
             style={{
               animationDelay: `${index * 50}ms`,
-              opacity: 1 - (index * 0.1),
+              opacity: 1 - (index * 0.15),
             }}
             onClick={() => onEventClick?.(event.agentId)}
           >
-            <div className="flex items-start gap-2">
-              <span className="text-lg flex-shrink-0">{event.emoji}</span>
-              <div className="min-w-0">
-                <p className="text-white text-sm font-medium leading-tight">
-                  {event.message}
-                </p>
-                <p className="text-white/40 text-xs">
-                  Turn {event.turn}
-                </p>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base flex-shrink-0">{event.emoji}</span>
+              <p className="text-white text-xs font-medium leading-tight truncate">
+                {event.message}
+              </p>
             </div>
           </div>
         ))}

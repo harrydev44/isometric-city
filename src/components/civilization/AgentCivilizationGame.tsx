@@ -88,27 +88,34 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
       {/* Main content area */}
       <div className="flex-1 flex min-h-0">
         {/* City view with overlays */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative overflow-hidden">
           {/* Grid renderer - uses the real game renderer */}
           {currentAgent && (
             <CityViewer
               state={currentAgent.state}
-              key={`city-${currentAgent.agentId}`}
             />
           )}
+
+          {/* Vignette overlay for game aesthetic */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%)',
+            }}
+          />
 
           {/* Agent info overlay - top left */}
           {currentAgent && <AgentInfoPanel agent={currentAgent} />}
 
-          {/* Global stats overlay - top right */}
-          <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white text-sm">
-            <div className="text-xs text-white/50 mb-1">Global Stats</div>
+          {/* Global stats overlay - top right (moved to avoid overlap with sidebar) */}
+          <div className="absolute top-4 right-[340px] bg-black/70 backdrop-blur-sm rounded-lg p-3 text-white text-sm border border-white/10">
+            <div className="text-xs text-white/50 mb-1 uppercase tracking-wider">Global</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              <span className="text-white/70">Total Pop:</span>
-              <span className="font-medium">{stats.totalPopulation.toLocaleString()}</span>
-              <span className="text-white/70">Average:</span>
+              <span className="text-white/60">Population:</span>
+              <span className="font-bold text-cyan-400">{stats.totalPopulation.toLocaleString()}</span>
+              <span className="text-white/60">Average:</span>
               <span className="font-medium">{stats.averagePopulation.toLocaleString()}</span>
-              <span className="text-white/70">Buildings:</span>
+              <span className="text-white/60">Buildings:</span>
               <span className="font-medium">{stats.totalBuildingsPlaced.toLocaleString()}</span>
             </div>
           </div>
@@ -116,10 +123,10 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
           {/* Exit button - top center */}
           <button
             onClick={onExit}
-            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm rounded-lg px-4 py-2 text-white/80 hover:text-white hover:bg-black/80 transition-colors flex items-center gap-2"
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-lg px-4 py-2 text-white/80 hover:text-white hover:bg-red-900/50 transition-colors flex items-center gap-2 border border-white/10"
           >
             <X className="w-4 h-4" />
-            <span className="text-sm">Exit</span>
+            <span className="text-sm font-medium">Exit Simulation</span>
           </button>
 
           {/* Event Feed - bottom left */}
@@ -170,8 +177,8 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
         </div>
       </div>
 
-      {/* Bottom control bar */}
-      <div className="h-20 border-t border-white/10 px-4 flex items-center gap-4">
+      {/* Bottom control bar - game UI style */}
+      <div className="h-20 bg-gradient-to-t from-black/90 to-black/60 backdrop-blur-sm border-t border-white/10 px-4 flex items-center gap-4">
         <TurnProgress
           currentTurn={currentTurn}
           turnPhase={turnPhase}

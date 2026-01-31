@@ -121,13 +121,15 @@ export interface CanvasIsometricGridProps {
   onNavigationComplete?: () => void;
   onViewportChange?: (viewport: { offset: { x: number; y: number }; zoom: number; canvasSize: { width: number; height: number } }) => void;
   onBargeDelivery?: (cargoValue: number, cargoType: number) => void;
+  initialOffset?: { x: number; y: number }; // Override initial camera position
+  initialZoom?: number; // Override initial zoom level
 }
 
 // Canvas-based Isometric Grid - HIGH PERFORMANCE
-export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false, navigationTarget, onNavigationComplete, onViewportChange, onBargeDelivery }: CanvasIsometricGridProps) {
+export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile, isMobile = false, navigationTarget, onNavigationComplete, onViewportChange, onBargeDelivery, initialOffset, initialZoom }: CanvasIsometricGridProps) {
   const { state, latestStateRef, placeAtTile, finishTrackDrag, connectToCity, checkAndDiscoverCities, currentSpritePack, visualHour } = useGame();
   const { grid, gridSize, selectedTool, speed, adjacentCities, waterBodies, gameVersion } = state;
-  
+
   // PERF: Use latestStateRef for real-time grid access in animation loops
   // This avoids waiting for React state sync which is throttled for performance
   const m = useMessages();
@@ -141,7 +143,10 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const containerRef = useRef<HTMLDivElement>(null);
   const renderPendingRef = useRef<number | null>(null); // PERF: Track pending render frame
   const lastMainRenderTimeRef = useRef<number>(0); // PERF: Throttle main renders at high speed
-  const [offset, setOffset] = useState({ x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 });
+
+  // Calculate default offset - use provided initialOffset or default values
+  const defaultOffset = initialOffset ?? { x: isMobile ? 200 : 620, y: isMobile ? 100 : 160 };
+  const [offset, setOffset] = useState(defaultOffset);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [isWheelZooming, setIsWheelZooming] = useState(false); // State to trigger re-render when wheel zooming stops
@@ -149,7 +154,8 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
   const isPinchZoomingRef = useRef(false); // Ref for animation loop to check pinch zoom state
   const isWheelZoomingRef = useRef(false); // Ref for animation loop to check desktop wheel zoom state
   const wheelZoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timeout to detect end of wheel zoom
-  const zoomRef = useRef(isMobile ? 0.6 : 1); // Ref for animation loop to check zoom level
+  const defaultZoom = initialZoom ?? (isMobile ? 0.6 : 1);
+  const zoomRef = useRef(defaultZoom); // Ref for animation loop to check zoom level
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const panCandidateRef = useRef<{ startX: number; startY: number; gridX: number; gridY: number } | null>(null);
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
@@ -161,7 +167,7 @@ export function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile
     screenX: number;
     screenY: number;
   } | null>(null);
-  const [zoom, setZoom] = useState(isMobile ? 0.6 : 1);
+  const [zoom, setZoom] = useState(defaultZoom);
   const carsRef = useRef<Car[]>([]);
   const carIdRef = useRef(0);
   const carSpawnTimerRef = useRef(0);
