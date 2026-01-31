@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * Turn Progress - Shows turn counter, timer, and processing progress
+ * Turn Progress - Shows turn counter, timer, speed control, and processing progress
  */
 
 import React from 'react';
 import { TurnPhase, CIVILIZATION_CONSTANTS } from '@/types/civilization';
+import { SpeedControl } from './SpeedControl';
 
 const { TURN_DURATION_MS } = CIVILIZATION_CONSTANTS;
 
@@ -15,8 +16,10 @@ interface TurnProgressProps {
   timeRemaining: number;
   processingProgress: number;
   autoAdvance: boolean;
+  speedMultiplier: number;
   onToggleAutoAdvance: () => void;
   onAdvanceTurn: () => void;
+  onSpeedChange: (speed: number) => void;
 }
 
 export function TurnProgress({
@@ -25,36 +28,58 @@ export function TurnProgress({
   timeRemaining,
   processingProgress,
   autoAdvance,
+  speedMultiplier,
   onToggleAutoAdvance,
   onAdvanceTurn,
+  onSpeedChange,
 }: TurnProgressProps) {
-  const progressPercent = ((TURN_DURATION_MS - timeRemaining) / TURN_DURATION_MS) * 100;
+  const effectiveDuration = TURN_DURATION_MS / speedMultiplier;
+  const progressPercent = ((effectiveDuration - timeRemaining) / effectiveDuration) * 100;
   const secondsRemaining = Math.ceil(timeRemaining / 1000);
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
+    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white flex-1">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-bold">Turn {currentTurn}</span>
+        {/* Turn counter - more prominent */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-white">Turn {currentTurn}</span>
+            <span className="text-white/40">/ ∞</span>
+          </div>
+
           {turnPhase === 'thinking' && (
-            <span className="text-xs text-yellow-400 animate-pulse">
-              Processing... {processingProgress}%
-            </span>
+            <div className="flex items-center gap-2 text-yellow-400 animate-pulse">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
+              <span className="text-sm font-medium">
+                Processing {processingProgress}%
+              </span>
+            </div>
           )}
+
           {turnPhase === 'idle' && autoAdvance && (
-            <span className="text-xs text-white/50">
-              Next turn in {secondsRemaining}s
-            </span>
+            <div className="flex items-center gap-2 text-white/60">
+              <div className="w-2 h-2 bg-blue-400 rounded-full" />
+              <span className="text-sm">
+                {secondsRemaining}s until next turn
+              </span>
+            </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Controls */}
+        <div className="flex items-center gap-3">
+          {/* Speed control */}
+          <SpeedControl
+            currentSpeed={speedMultiplier}
+            onSpeedChange={onSpeedChange}
+          />
+
           <button
             onClick={onToggleAutoAdvance}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
+            className={`text-xs px-3 py-1.5 rounded transition-colors font-medium ${
               autoAdvance
-                ? 'bg-green-500/30 text-green-300'
-                : 'bg-white/10 text-white/60 hover:bg-white/20'
+                ? 'bg-green-500/30 text-green-300 border border-green-500/50'
+                : 'bg-white/10 text-white/60 hover:bg-white/20 border border-white/20'
             }`}
           >
             Auto {autoAdvance ? 'ON' : 'OFF'}
@@ -63,24 +88,24 @@ export function TurnProgress({
           {!autoAdvance && turnPhase === 'idle' && (
             <button
               onClick={onAdvanceTurn}
-              className="text-xs px-3 py-1 bg-blue-500/30 text-blue-300 rounded hover:bg-blue-500/50 transition-colors"
+              className="text-xs px-4 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-medium"
             >
-              Next Turn
+              Next Turn →
             </button>
           )}
         </div>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
         {turnPhase === 'thinking' ? (
           <div
-            className="h-full bg-yellow-400 transition-all duration-100"
+            className="h-full bg-gradient-to-r from-yellow-400 to-orange-400 transition-all duration-100"
             style={{ width: `${processingProgress}%` }}
           />
         ) : (
           <div
-            className="h-full bg-blue-400 transition-all duration-1000"
+            className="h-full bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-1000"
             style={{ width: `${progressPercent}%` }}
           />
         )}

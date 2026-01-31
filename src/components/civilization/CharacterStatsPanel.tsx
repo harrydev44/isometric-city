@@ -1,0 +1,67 @@
+'use client';
+
+/**
+ * Character Stats Panel - Shows character type vs character type comparison
+ */
+
+import React from 'react';
+import { CHARACTER_INFO } from '@/types/civilization';
+import { CharacterStats } from '@/lib/turnManager';
+
+interface CharacterStatsPanelProps {
+  stats: CharacterStats[];
+}
+
+export function CharacterStatsPanel({ stats }: CharacterStatsPanelProps) {
+  if (stats.length === 0) {
+    return null;
+  }
+
+  const maxAvgPop = Math.max(...stats.map(s => s.avgPopulation));
+
+  return (
+    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
+      <h3 className="text-sm font-bold mb-2 text-white/80">
+        Character Rankings
+      </h3>
+
+      <div className="space-y-2">
+        {stats.map((stat, index) => {
+          const info = CHARACTER_INFO[stat.character];
+          const barWidth = maxAvgPop > 0 ? (stat.avgPopulation / maxAvgPop) * 100 : 0;
+
+          return (
+            <div key={stat.character} className="relative">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-bold text-white/50 w-4">
+                  {index + 1}
+                </span>
+                <span className="text-sm">{info.emoji}</span>
+                <span className="text-xs text-white/80 flex-1">
+                  {info.name}
+                </span>
+                <span className="text-xs font-medium">
+                  {stat.avgPopulation.toLocaleString()}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="ml-6 h-1 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-500"
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+
+              <div className="ml-6 text-[10px] text-white/40 mt-0.5">
+                {stat.count} cities | ${stat.avgMoney.toLocaleString()} avg
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default CharacterStatsPanel;

@@ -4,7 +4,7 @@
  * Context Provider for AI Civilization Mode
  *
  * Manages state for 200 AI agent cities, turn processing,
- * camera cycling, and leaderboard.
+ * camera cycling, leaderboard, events, and awards.
  */
 
 import React, {
@@ -20,6 +20,8 @@ import {
   CivilizationState,
   TurnPhase,
   CIVILIZATION_CONSTANTS,
+  CivilizationEvent,
+  CharacterAward,
 } from '@/types/civilization';
 import {
   initializeAgents,
@@ -27,10 +29,14 @@ import {
   updateRankings,
   getTopAgents,
   calculateStats,
+  calculateCharacterStats,
+  calculateAwards,
+  generateEvents,
   CivilizationStats,
+  CharacterStats,
 } from '@/lib/turnManager';
 
-const { TURN_DURATION_MS, CAMERA_CYCLE_MS, TOP_LEADERBOARD_COUNT } = CIVILIZATION_CONSTANTS;
+const { TURN_DURATION_MS, CAMERA_CYCLE_MS, TOP_LEADERBOARD_COUNT, SPEED_OPTIONS } = CIVILIZATION_CONSTANTS;
 
 // ============================================================================
 // CONTEXT TYPES
@@ -46,6 +52,12 @@ interface AgentCivilizationContextValue {
   autoCycleCamera: boolean;
   timeRemaining: number;
   processingProgress: number;
+  speedMultiplier: number;
+
+  // Events & Awards
+  events: CivilizationEvent[];
+  awards: CharacterAward[];
+  characterStats: CharacterStats[];
 
   // Derived
   currentAgent: AgentCity | null;
@@ -58,8 +70,11 @@ interface AgentCivilizationContextValue {
   setViewIndex: (index: number) => void;
   setAutoAdvance: (auto: boolean) => void;
   setAutoCycleCamera: (auto: boolean) => void;
+  setSpeedMultiplier: (speed: number) => void;
   nextCity: () => void;
   prevCity: () => void;
+  clearEvents: () => void;
+  goToCity: (agentId: number) => void;
 }
 
 const defaultStats: CivilizationStats = {
@@ -87,11 +102,18 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
   const [autoCycleCamera, setAutoCycleCamera] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState<number>(TURN_DURATION_MS);
   const [processingProgress, setProcessingProgress] = useState(0);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+
+  // Events & Awards
+  const [events, setEvents] = useState<CivilizationEvent[]>([]);
+  const [awards, setAwards] = useState<CharacterAward[]>([]);
+  const [characterStats, setCharacterStats] = useState<CharacterStats[]>([]);
 
   // Refs for intervals
   const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
   const cameraTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
+  const previousAgentsRef = useRef<AgentCity[]>([]);
 
   // Derived state
   const currentAgent = agents.length > 0 ? agents[currentViewIndex] : null;
@@ -124,6 +146,9 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     setTurnPhase('thinking');
     setProcessingProgress(0);
 
+    // Store previous state for event comparison
+    previousAgentsRef.current = agents;
+
     try {
       // Process turn with progress callback
       const updatedAgents = await processTurn(agents, {
@@ -135,10 +160,26 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       // Update rankings
       const rankedAgents = updateRankings(updatedAgents);
 
+      // Generate events by comparing old and new state
+      const newTurn = currentTurn + 1;
+      const newEvents = generateEvents(previousAgentsRef.current, rankedAgents, newTurn);
+
+      // Calculate awards and character stats
+      const newAwards = calculateAwards(rankedAgents);
+      const newCharacterStats = calculateCharacterStats(rankedAgents);
+
+      // Update state
       setAgents(rankedAgents);
-      setCurrentTurn(prev => prev + 1);
-      setTimeRemaining(TURN_DURATION_MS);
+      setCurrentTurn(newTurn);
+      setTimeRemaining(TURN_DURATION_MS / speedMultiplier);
       setTurnPhase('idle');
+
+      // Add new events (keep last 20)
+      if (newEvents.length > 0) {
+        setEvents(prev => [...newEvents, ...prev].slice(0, 20));
+      }
+      setAwards(newAwards);
+      setCharacterStats(newCharacterStats);
     } catch (error) {
       console.error('Turn processing error:', error);
       setTurnPhase('idle');
@@ -146,7 +187,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       isProcessingRef.current = false;
       setProcessingProgress(0);
     }
-  }, [agents]);
+  }, [agents, currentTurn, speedMultiplier]);
 
   // ============================================================================
   // CAMERA CONTROLS
@@ -166,6 +207,17 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     setCurrentViewIndex(prev => (prev - 1 + agents.length) % Math.max(1, agents.length));
   }, [agents.length]);
 
+  const clearEvents = useCallback(() => {
+    setEvents([]);
+  }, []);
+
+  const goToCity = useCallback((agentId: number) => {
+    const index = agents.findIndex(a => a.agentId === agentId);
+    if (index !== -1) {
+      setCurrentViewIndex(index);
+    }
+  }, [agents]);
+
   // ============================================================================
   // AUTO-ADVANCE TIMER
   // ============================================================================
@@ -175,13 +227,16 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       return;
     }
 
-    // Countdown timer (updates every second)
+    const effectiveDuration = TURN_DURATION_MS / speedMultiplier;
+
+    // Countdown timer (updates every second, adjusted for speed)
     const countdownInterval = setInterval(() => {
       setTimeRemaining(prev => {
-        const next = prev - 1000;
+        const decrement = 1000 * speedMultiplier;
+        const next = prev - decrement;
         if (next <= 0) {
           advanceTurn();
-          return TURN_DURATION_MS;
+          return effectiveDuration;
         }
         return next;
       });
@@ -190,7 +245,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     return () => {
       clearInterval(countdownInterval);
     };
-  }, [autoAdvance, agents.length, turnPhase, advanceTurn]);
+  }, [autoAdvance, agents.length, turnPhase, advanceTurn, speedMultiplier]);
 
   // ============================================================================
   // AUTO-CYCLE CAMERA
@@ -245,6 +300,10 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     autoCycleCamera,
     timeRemaining,
     processingProgress,
+    speedMultiplier,
+    events,
+    awards,
+    characterStats,
     currentAgent,
     topAgents,
     stats,
@@ -253,8 +312,11 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     setViewIndex,
     setAutoAdvance,
     setAutoCycleCamera,
+    setSpeedMultiplier,
     nextCity,
     prevCity,
+    clearEvents,
+    goToCity,
   };
 
   return (

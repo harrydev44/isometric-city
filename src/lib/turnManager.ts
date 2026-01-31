@@ -192,6 +192,16 @@ export interface CivilizationStats {
   totalBuildingsPlaced: number;
 }
 
+export interface CharacterStats {
+  character: AgentCharacter;
+  count: number;
+  avgPopulation: number;
+  avgMoney: number;
+  totalPopulation: number;
+}
+
+import { AgentCharacter, CHARACTER_INFO, CivilizationEvent, CharacterAward, AwardCategory } from '@/types/civilization';
+
 /**
  * Calculate aggregate statistics across all agents
  */
@@ -230,4 +240,235 @@ export function calculateStats(agents: AgentCity[]): CivilizationStats {
     minPopulation: minPopulation === Infinity ? 0 : minPopulation,
     totalBuildingsPlaced,
   };
+}
+
+// ============================================================================
+// CHARACTER STATS
+// ============================================================================
+
+/**
+ * Calculate statistics grouped by character type
+ */
+export function calculateCharacterStats(agents: AgentCity[]): CharacterStats[] {
+  const characterGroups: Record<AgentCharacter, AgentCity[]> = {
+    industrialist: [],
+    environmentalist: [],
+    capitalist: [],
+    expansionist: [],
+    planner: [],
+    gambler: [],
+  };
+
+  // Group agents by character
+  for (const agent of agents) {
+    characterGroups[agent.personality.character].push(agent);
+  }
+
+  // Calculate stats for each character type
+  const stats: CharacterStats[] = [];
+  for (const [character, group] of Object.entries(characterGroups) as [AgentCharacter, AgentCity[]][]) {
+    if (group.length === 0) continue;
+
+    const totalPop = group.reduce((sum, a) => sum + a.performance.totalPopulation, 0);
+    const totalMoney = group.reduce((sum, a) => sum + a.performance.totalMoney, 0);
+
+    stats.push({
+      character,
+      count: group.length,
+      avgPopulation: Math.round(totalPop / group.length),
+      avgMoney: Math.round(totalMoney / group.length),
+      totalPopulation: totalPop,
+    });
+  }
+
+  // Sort by average population
+  return stats.sort((a, b) => b.avgPopulation - a.avgPopulation);
+}
+
+// ============================================================================
+// AWARDS
+// ============================================================================
+
+/**
+ * Calculate character awards based on city performance
+ */
+export function calculateAwards(agents: AgentCity[]): CharacterAward[] {
+  // Count specific metrics per city
+  const cityMetrics = agents.map(agent => {
+    const grid = agent.state.grid;
+    let parks = 0;
+    let industrial = 0;
+    let roads = 0;
+
+    for (const row of grid) {
+      for (const tile of row) {
+        const type = tile.building.type;
+        if (type === 'park') parks++;
+        if (type === 'road') roads++;
+        if (tile.zone === 'industrial' && type !== 'grass' && type !== 'tree') industrial++;
+      }
+    }
+
+    return {
+      agent,
+      parks,
+      industrial,
+      roads,
+      money: agent.performance.totalMoney,
+      happiness: agent.state.stats.happiness,
+      population: agent.performance.totalPopulation,
+    };
+  });
+
+  const awards: CharacterAward[] = [];
+
+  // Greenest City (most parks)
+  const greenest = [...cityMetrics].sort((a, b) => b.parks - a.parks)[0];
+  awards.push({
+    id: 'greenest',
+    name: 'Greenest City',
+    emoji: '🌲',
+    description: 'Most parks',
+    winnerId: greenest?.agent.agentId ?? null,
+    winnerName: greenest?.agent.name ?? 'None',
+    value: greenest?.parks ?? 0,
+  });
+
+  // Industrial Powerhouse (most industrial buildings)
+  const industrial = [...cityMetrics].sort((a, b) => b.industrial - a.industrial)[0];
+  awards.push({
+    id: 'industrial',
+    name: 'Industrial Powerhouse',
+    emoji: '🏭',
+    description: 'Most factories',
+    winnerId: industrial?.agent.agentId ?? null,
+    winnerName: industrial?.agent.name ?? 'None',
+    value: industrial?.industrial ?? 0,
+  });
+
+  // Richest City (most money)
+  const richest = [...cityMetrics].sort((a, b) => b.money - a.money)[0];
+  awards.push({
+    id: 'richest',
+    name: 'Richest City',
+    emoji: '💰',
+    description: 'Highest treasury',
+    winnerId: richest?.agent.agentId ?? null,
+    winnerName: richest?.agent.name ?? 'None',
+    value: richest?.money ?? 0,
+  });
+
+  // Largest Network (most roads)
+  const largest = [...cityMetrics].sort((a, b) => b.roads - a.roads)[0];
+  awards.push({
+    id: 'largest',
+    name: 'Largest Network',
+    emoji: '🛣️',
+    description: 'Most road tiles',
+    winnerId: largest?.agent.agentId ?? null,
+    winnerName: largest?.agent.name ?? 'None',
+    value: largest?.roads ?? 0,
+  });
+
+  // Happiest Citizens (highest happiness)
+  const happiest = [...cityMetrics].sort((a, b) => b.happiness - a.happiness)[0];
+  awards.push({
+    id: 'balanced',
+    name: 'Happiest Citizens',
+    emoji: '😊',
+    description: 'Best quality of life',
+    winnerId: happiest?.agent.agentId ?? null,
+    winnerName: happiest?.agent.name ?? 'None',
+    value: Math.round(happiest?.happiness ?? 0),
+  });
+
+  // Most Populous (highest population)
+  const populous = [...cityMetrics].sort((a, b) => b.population - a.population)[0];
+  awards.push({
+    id: 'populous',
+    name: 'Most Populous',
+    emoji: '👥',
+    description: 'Highest population',
+    winnerId: populous?.agent.agentId ?? null,
+    winnerName: populous?.agent.name ?? 'None',
+    value: populous?.population ?? 0,
+  });
+
+  return awards;
+}
+
+// ============================================================================
+// EVENTS
+// ============================================================================
+
+const POPULATION_MILESTONES = [100, 250, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000];
+
+/**
+ * Generate events by comparing old and new agent states
+ */
+export function generateEvents(
+  oldAgents: AgentCity[],
+  newAgents: AgentCity[],
+  currentTurn: number
+): CivilizationEvent[] {
+  const events: CivilizationEvent[] = [];
+  const timestamp = Date.now();
+
+  // Create lookup for old agents
+  const oldAgentMap = new Map(oldAgents.map(a => [a.agentId, a]));
+
+  for (const newAgent of newAgents) {
+    const oldAgent = oldAgentMap.get(newAgent.agentId);
+    if (!oldAgent) continue;
+
+    const oldPop = oldAgent.performance.totalPopulation;
+    const newPop = newAgent.performance.totalPopulation;
+
+    // Check population milestones
+    for (const milestone of POPULATION_MILESTONES) {
+      if (oldPop < milestone && newPop >= milestone) {
+        events.push({
+          id: `pop-${newAgent.agentId}-${milestone}-${timestamp}`,
+          type: 'population_milestone',
+          message: `${newAgent.name} reached ${milestone.toLocaleString()} citizens!`,
+          emoji: '🎉',
+          agentId: newAgent.agentId,
+          cityName: newAgent.name,
+          timestamp,
+          turn: currentTurn,
+        });
+      }
+    }
+
+    // Check rank changes (big jumps)
+    const rankChange = oldAgent.rank - newAgent.rank;
+    if (rankChange >= 5) {
+      events.push({
+        id: `rank-${newAgent.agentId}-${timestamp}`,
+        type: 'rank_change',
+        message: `${newAgent.name} jumped ${rankChange} ranks to #${newAgent.rank}!`,
+        emoji: '📈',
+        agentId: newAgent.agentId,
+        cityName: newAgent.name,
+        timestamp,
+        turn: currentTurn,
+      });
+    }
+
+    // Check for new #1
+    if (oldAgent.rank !== 1 && newAgent.rank === 1) {
+      events.push({
+        id: `leader-${newAgent.agentId}-${timestamp}`,
+        type: 'new_leader',
+        message: `${newAgent.name} is the new #1 city!`,
+        emoji: '👑',
+        agentId: newAgent.agentId,
+        cityName: newAgent.name,
+        timestamp,
+        turn: currentTurn,
+      });
+    }
+  }
+
+  return events;
 }

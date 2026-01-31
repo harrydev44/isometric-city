@@ -15,12 +15,58 @@ export const CIVILIZATION_CONSTANTS = {
   GRID_SIZE: 30,
   TURN_DURATION_MS: 30000, // 30 seconds per turn
   TICKS_PER_TURN: 5, // Simulation ticks per turn (slow growth)
-  CAMERA_CYCLE_MS: 5000, // 5 seconds per city view
+  CAMERA_CYCLE_MS: 2500, // 2.5 seconds per city view (faster!)
   AGENTS_PER_BATCH: 20, // Process 20 agents at a time
   BATCH_DELAY_MS: 50, // Yield between batches
   STARTING_MONEY: 10000,
   TOP_LEADERBOARD_COUNT: 20,
+  // Speed multipliers for turn duration
+  SPEED_OPTIONS: [1, 2, 4] as const,
 } as const;
+
+// ============================================================================
+// EVENT SYSTEM
+// ============================================================================
+
+export type CivilizationEventType =
+  | 'population_milestone'
+  | 'rank_change'
+  | 'building_milestone'
+  | 'character_achievement'
+  | 'new_leader';
+
+export interface CivilizationEvent {
+  id: string;
+  type: CivilizationEventType;
+  message: string;
+  emoji: string;
+  agentId: number;
+  cityName: string;
+  timestamp: number;
+  turn: number;
+}
+
+// ============================================================================
+// CHARACTER AWARDS
+// ============================================================================
+
+export interface CharacterAward {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  winnerId: number | null;
+  winnerName: string;
+  value: number;
+}
+
+export type AwardCategory =
+  | 'greenest'      // Most parks (Environmentalist goal)
+  | 'industrial'    // Most industrial buildings (Industrialist goal)
+  | 'richest'       // Most money (Capitalist goal)
+  | 'largest'       // Most road tiles (Expansionist goal)
+  | 'balanced'      // Best happiness (Planner goal)
+  | 'populous';     // Highest population (Universal)
 
 // ============================================================================
 // AGENT CHARACTER TYPES

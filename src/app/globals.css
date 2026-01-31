@@ -597,3 +597,56 @@ html, body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 }
+
+/* ============================================================================
+   AI Civilization Mode Animations
+   ============================================================================ */
+
+/* Event feed slide in animation */
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s ease-out forwards;
+}
+
+/* Rank change pulse */
+@keyframes rank-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.animate-rank-pulse {
+  animation: rank-pulse 0.5s ease-in-out;
+}
+
+/* Scale on hover utility */
+.hover\:scale-102:hover {
+  transform: scale(1.02);
+}
+
+/* Glow effect for new leader */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(234, 179, 8, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(234, 179, 8, 0.8);
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
