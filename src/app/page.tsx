@@ -11,7 +11,9 @@ import { getSpritePack, getSpriteCoords, DEFAULT_SPRITE_PACK_ID } from '@/lib/re
 import { SavedCityMeta, GameState } from '@/types/game';
 import { decompressFromUTF16, compressToUTF16 } from 'lz-string';
 import { LanguageSelector } from '@/components/ui/LanguageSelector';
-import { Users, X } from 'lucide-react';
+import { Users, X, Bot } from 'lucide-react';
+import { AgentCivilizationProvider } from '@/context/AgentCivilizationContext';
+import { AgentCivilizationGame } from '@/components/civilization/AgentCivilizationGame';
 
 const STORAGE_KEY = 'isocity-game-state';
 const SAVED_CITIES_INDEX_KEY = 'isocity-saved-cities-index';
@@ -317,6 +319,7 @@ const SAVED_CITY_PREFIX = 'isocity-city-';
 
 export default function HomePage() {
   const [showGame, setShowGame] = useState(false);
+  const [gameMode, setGameMode] = useState<'normal' | 'civilization'>('normal');
   const [isChecking, setIsChecking] = useState(true);
   const [savedCities, setSavedCities] = useState<SavedCityMeta[]>([]);
   const [hasSaved, setHasSaved] = useState(false);
@@ -352,12 +355,19 @@ export default function HomePage() {
   // Handle exit from game - refresh saved cities list
   const handleExitGame = () => {
     setShowGame(false);
+    setGameMode('normal');
     setIsMultiplayer(false);
     setStartFreshGame(false);
     setSavedCities(loadSavedCities());
     setHasSaved(hasSavedGame());
     // Clear room code from URL
     window.history.replaceState({}, '', '/');
+  };
+
+  // Handle starting AI Civilization mode
+  const handleStartCivilization = () => {
+    setGameMode('civilization');
+    setShowGame(true);
   };
 
   // Load a saved city
@@ -451,6 +461,16 @@ export default function HomePage() {
   }
 
   if (showGame) {
+    // AI Civilization mode
+    if (gameMode === 'civilization') {
+      return (
+        <AgentCivilizationProvider>
+          <AgentCivilizationGame onExit={handleExitGame} />
+        </AgentCivilizationProvider>
+      );
+    }
+
+    // Normal game mode
     const gameContent = (
       <main className="h-screen w-screen overflow-hidden">
         <Game onExit={handleExitGame} />
@@ -494,15 +514,24 @@ export default function HomePage() {
               {hasSaved ? 'Continue' : 'New Game'}
             </Button>
             
-            <Button 
+            <Button
               onClick={() => setShowCoopModal(true)}
               variant="outline"
               className="w-full py-4 sm:py-6 text-lg sm:text-xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
             >
               Co-op
             </Button>
-            
-            <Button 
+
+            <Button
+              onClick={handleStartCivilization}
+              variant="outline"
+              className="w-full py-4 sm:py-6 text-lg sm:text-xl font-light tracking-wide bg-purple-500/10 hover:bg-purple-500/20 text-purple-300/80 hover:text-purple-200 border border-purple-500/30 rounded-none transition-all duration-300 flex items-center justify-center gap-2"
+            >
+              <Bot className="w-5 h-5" />
+              AI Civilization
+            </Button>
+
+            <Button
               onClick={async () => {
                 // Clear any room code from URL to prevent multiplayer conflicts
                 if (window.location.search.includes('room=')) {
@@ -602,14 +631,22 @@ export default function HomePage() {
               >
                 {hasSaved ? 'Continue' : 'New Game'}
               </Button>
-              <Button 
+              <Button
                 onClick={() => setShowCoopModal(true)}
                 variant="outline"
                 className="w-64 py-8 text-2xl font-light tracking-wide bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/15 rounded-none transition-all duration-300"
               >
                 Co-op
               </Button>
-              <Button 
+              <Button
+                onClick={handleStartCivilization}
+                variant="outline"
+                className="w-64 py-8 text-2xl font-light tracking-wide bg-purple-500/10 hover:bg-purple-500/20 text-purple-300/80 hover:text-purple-200 border border-purple-500/30 rounded-none transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <Bot className="w-6 h-6" />
+                AI Civilization
+              </Button>
+              <Button
                 onClick={async () => {
                   // Clear any room code from URL to prevent multiplayer conflicts
                   if (window.location.search.includes('room=')) {

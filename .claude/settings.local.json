@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git restore:*)",
+      "Bash(curl:*)",
+      "Bash(git pull:*)"
+    ]
+  }
+}

@@ -645,9 +645,9 @@ function deleteCityState(cityId: string): void {
   }
 }
 
-export function GameProvider({ children, startFresh = false }: { children: React.ReactNode; startFresh?: boolean }) {
-  // Start with a default state, we'll load from localStorage after mount (unless startFresh is true)
-  const [state, setState] = useState<GameState>(() => createInitialGameState(DEFAULT_GRID_SIZE, 'IsoCity'));
+export function GameProvider({ children, startFresh = false, initialState, readOnly = false }: { children: React.ReactNode; startFresh?: boolean; initialState?: GameState; readOnly?: boolean }) {
+  // Start with a default state, we'll load from localStorage after mount (unless startFresh is true or initialState provided)
+  const [state, setState] = useState<GameState>(() => initialState || createInitialGameState(DEFAULT_GRID_SIZE, 'IsoCity'));
   
   const [hasExistingGame, setHasExistingGame] = useState(false);
   const [isStateReady, setIsStateReady] = useState(false);
@@ -676,15 +676,22 @@ export function GameProvider({ children, startFresh = false }: { children: React
     const pack = getSpritePack(savedPackId);
     setCurrentSpritePack(pack);
     setActiveSpritePack(pack);
-    
+
     // Load day/night mode preference
     const savedDayNightMode = loadDayNightMode();
     setDayNightModeState(savedDayNightMode);
-    
+
     // Load saved cities index
     const cities = loadSavedCitiesIndex();
     setSavedCities(cities);
-    
+
+    // If initialState provided (e.g., for civilization mode), use that and skip localStorage
+    if (initialState) {
+      hasLoadedRef.current = true;
+      setIsStateReady(true);
+      return;
+    }
+
     // Load game state (unless startFresh is true - used for co-op to start with a new city)
     if (!startFresh) {
       const saved = loadGameState();
@@ -702,7 +709,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     hasLoadedRef.current = true;
     // Mark state as ready - consumers should wait for this before using state
     setIsStateReady(true);
-  }, [startFresh]);
+  }, [startFresh, initialState]);
   
   // Track the state that needs to be saved
   const lastSaveTimeRef = useRef<number>(0);
@@ -734,6 +741,11 @@ export function GameProvider({ children, startFresh = false }: { children: React
   
   // Separate effect that actually performs saves on an interval
   useEffect(() => {
+    // Skip saving entirely in read-only mode (e.g., civilization viewer)
+    if (readOnly) {
+      return;
+    }
+
     // Wait for initial load - just check once after a short delay
     const checkLoadedTimeout = setTimeout(() => {
       if (!hasLoadedRef.current) {
