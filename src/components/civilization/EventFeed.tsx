@@ -30,7 +30,7 @@ export function EventFeed({ events, onEventClick }: EventFeedProps) {
   }
 
   return (
-    <div className="absolute bottom-24 left-4 w-64 pointer-events-none">
+    <div className="w-64 pointer-events-none">
       <div className="space-y-1.5">
         {visibleEvents.map((event, index) => (
           <div
