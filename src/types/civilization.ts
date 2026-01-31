@@ -14,7 +14,7 @@ export const CIVILIZATION_CONSTANTS = {
   AGENT_COUNT: 200,
   GRID_SIZE: 30,
   TURN_DURATION_MS: 30000, // 30 seconds per turn
-  TICKS_PER_TURN: 50, // Simulation ticks per turn
+  TICKS_PER_TURN: 5, // Simulation ticks per turn (slow growth)
   CAMERA_CYCLE_MS: 5000, // 5 seconds per city view
   AGENTS_PER_BATCH: 20, // Process 20 agents at a time
   BATCH_DELAY_MS: 50, // Yield between batches

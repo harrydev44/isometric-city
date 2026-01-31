@@ -807,6 +807,12 @@ export function GameProvider({ children, startFresh = false, initialState, readO
   // Simulation loop - PERF: Runs simulation but throttles React updates aggressively
   // Grid updates go to ref (canvas reads from ref), React only gets UI updates
   useEffect(() => {
+    // Skip simulation loop in read-only mode (e.g., civilization viewer)
+    // Turn-based simulation is handled externally
+    if (readOnly) {
+      return;
+    }
+
     let timer: ReturnType<typeof setInterval> | null = null;
 
     if (state.speed > 0) {
