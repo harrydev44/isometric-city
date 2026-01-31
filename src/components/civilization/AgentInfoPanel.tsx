@@ -2,20 +2,23 @@
 
 /**
  * Agent Info Panel - Displays current agent's info as an overlay
+ * Shows character type, rank, stats, and the last decision made
  */
 
 import React from 'react';
-import { AgentCity } from '@/types/civilization';
+import { AgentCity, CHARACTER_INFO } from '@/types/civilization';
 
 interface AgentInfoPanelProps {
   agent: AgentCity;
 }
 
 export function AgentInfoPanel({ agent }: AgentInfoPanelProps) {
-  const { name, agentId, rank, performance, personality } = agent;
+  const { name, agentId, rank, performance, personality, lastDecision } = agent;
+  const characterInfo = CHARACTER_INFO[personality.character];
 
   return (
-    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm rounded-lg p-4 text-white min-w-[200px]">
+    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm rounded-lg p-4 text-white min-w-[240px]">
+      {/* City name and agent number */}
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-lg font-bold">{name}</h2>
         <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
@@ -23,6 +26,16 @@ export function AgentInfoPanel({ agent }: AgentInfoPanelProps) {
         </span>
       </div>
 
+      {/* Character type badge */}
+      <div className="flex items-center gap-2 mb-3 bg-white/10 rounded-lg px-3 py-2">
+        <span className="text-2xl">{characterInfo.emoji}</span>
+        <div>
+          <div className="font-medium text-sm">{characterInfo.name}</div>
+          <div className="text-xs text-white/50">{characterInfo.description}</div>
+        </div>
+      </div>
+
+      {/* Rank */}
       <div className="flex items-center gap-2 mb-3">
         <span
           className={`text-sm font-medium ${
@@ -38,6 +51,7 @@ export function AgentInfoPanel({ agent }: AgentInfoPanelProps) {
         <span className="text-xs text-white/50">of 200</span>
       </div>
 
+      {/* Stats grid */}
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div>
           <span className="text-white/50 text-xs">Population</span>
@@ -63,30 +77,17 @@ export function AgentInfoPanel({ agent }: AgentInfoPanelProps) {
         </div>
       </div>
 
+      {/* Last Decision */}
       <div className="mt-3 pt-3 border-t border-white/10">
-        <div className="text-xs text-white/50 mb-1">Personality</div>
-        <div className="flex flex-wrap gap-1">
-          {personality.aggressiveness > 0.6 && (
-            <span className="text-xs bg-red-500/30 px-1.5 py-0.5 rounded">
-              Aggressive
-            </span>
-          )}
-          {personality.industrialFocus > 0.6 && (
-            <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">
-              Industrial
-            </span>
-          )}
-          {personality.densityPreference > 0.6 && (
-            <span className="text-xs bg-purple-500/30 px-1.5 py-0.5 rounded">
-              Dense
-            </span>
-          )}
-          {personality.environmentFocus > 0.6 && (
-            <span className="text-xs bg-green-500/30 px-1.5 py-0.5 rounded">
-              Green
-            </span>
-          )}
-        </div>
+        <div className="text-xs text-white/50 mb-1">Last Turn Decision</div>
+        {lastDecision ? (
+          <div className="bg-white/5 rounded px-2 py-1.5">
+            <div className="text-sm font-medium">{lastDecision.action}</div>
+            <div className="text-xs text-white/50 italic">{lastDecision.reason}</div>
+          </div>
+        ) : (
+          <div className="text-xs text-white/30 italic">Waiting for first turn...</div>
+        )}
       </div>
     </div>
   );

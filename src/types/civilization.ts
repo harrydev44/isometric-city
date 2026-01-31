@@ -23,10 +23,28 @@ export const CIVILIZATION_CONSTANTS = {
 } as const;
 
 // ============================================================================
-// AGENT TYPES
+// AGENT CHARACTER TYPES
 // ============================================================================
 
+export type AgentCharacter =
+  | 'industrialist'   // Factories first, ignores pollution
+  | 'environmentalist' // Parks, green spaces, low density
+  | 'capitalist'      // Commercial focus, maximizes income
+  | 'expansionist'    // Always building roads outward
+  | 'planner'         // Balanced, waits for demand
+  | 'gambler';        // Random risky decisions
+
+export const CHARACTER_INFO: Record<AgentCharacter, { name: string; emoji: string; description: string }> = {
+  industrialist: { name: 'Industrialist', emoji: '🏭', description: 'Factories first, growth at any cost' },
+  environmentalist: { name: 'Environmentalist', emoji: '🌲', description: 'Parks and green spaces priority' },
+  capitalist: { name: 'Capitalist', emoji: '💰', description: 'Commercial focus, maximizes income' },
+  expansionist: { name: 'Expansionist', emoji: '🛣️', description: 'Always building roads outward' },
+  planner: { name: 'Planner', emoji: '📋', description: 'Balanced growth, follows demand' },
+  gambler: { name: 'Gambler', emoji: '🎲', description: 'Takes risks, unpredictable choices' },
+};
+
 export interface AgentPersonality {
+  character: AgentCharacter;
   aggressiveness: number; // 0-1: expansion speed
   industrialFocus: number; // 0-1: industry vs commercial preference
   densityPreference: number; // 0-1: dense vs sprawl
@@ -41,6 +59,12 @@ export interface AgentPerformance {
   buildingsPlaced: number;
 }
 
+export interface AgentDecision {
+  action: string;        // What was done: "Built road", "Zoned residential", etc.
+  reason: string;        // Why: "expanding city", "high demand", etc.
+  success: boolean;      // Did it work?
+}
+
 export interface AgentCity {
   id: string;
   agentId: number; // 0-199
@@ -49,6 +73,7 @@ export interface AgentCity {
   personality: AgentPersonality;
   performance: AgentPerformance;
   rank: number;
+  lastDecision: AgentDecision | null;
 }
 
 // ============================================================================
@@ -151,11 +176,63 @@ export function generatePersonality(index: number): AgentPersonality {
     return (n / 0x7fffffff);
   };
 
+  // Assign character type based on index distribution
+  const characters: AgentCharacter[] = [
+    'industrialist',
+    'environmentalist',
+    'capitalist',
+    'expansionist',
+    'planner',
+    'gambler',
+  ];
+  const characterIndex = Math.floor(rand(0) * characters.length);
+  const character = characters[characterIndex];
+
+  // Set personality values based on character type
+  let aggressiveness = 0.5;
+  let industrialFocus = 0.5;
+  let densityPreference = 0.5;
+  let environmentFocus = 0.5;
+
+  switch (character) {
+    case 'industrialist':
+      industrialFocus = 0.8 + rand(1) * 0.2;
+      aggressiveness = 0.6 + rand(2) * 0.3;
+      environmentFocus = 0.1 + rand(3) * 0.2;
+      break;
+    case 'environmentalist':
+      environmentFocus = 0.8 + rand(1) * 0.2;
+      industrialFocus = 0.1 + rand(2) * 0.2;
+      densityPreference = 0.2 + rand(3) * 0.3;
+      break;
+    case 'capitalist':
+      industrialFocus = 0.3 + rand(1) * 0.2; // Prefers commercial
+      aggressiveness = 0.5 + rand(2) * 0.3;
+      densityPreference = 0.6 + rand(3) * 0.3;
+      break;
+    case 'expansionist':
+      aggressiveness = 0.8 + rand(1) * 0.2;
+      densityPreference = 0.2 + rand(2) * 0.3;
+      break;
+    case 'planner':
+      aggressiveness = 0.3 + rand(1) * 0.3;
+      densityPreference = 0.4 + rand(2) * 0.3;
+      environmentFocus = 0.4 + rand(3) * 0.3;
+      break;
+    case 'gambler':
+      aggressiveness = rand(1);
+      industrialFocus = rand(2);
+      densityPreference = rand(3);
+      environmentFocus = rand(4);
+      break;
+  }
+
   return {
-    aggressiveness: 0.2 + rand(1) * 0.6, // 0.2-0.8
-    industrialFocus: 0.2 + rand(2) * 0.6, // 0.2-0.8
-    densityPreference: 0.3 + rand(3) * 0.5, // 0.3-0.8
-    environmentFocus: 0.2 + rand(4) * 0.6, // 0.2-0.8
+    character,
+    aggressiveness,
+    industrialFocus,
+    densityPreference,
+    environmentFocus,
   };
 }
 

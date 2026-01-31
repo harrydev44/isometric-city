@@ -2,10 +2,11 @@
 
 /**
  * Leaderboard - Shows top agents by population
+ * Shows character emoji next to each agent's city name
  */
 
 import React from 'react';
-import { AgentCity } from '@/types/civilization';
+import { AgentCity, CHARACTER_INFO } from '@/types/civilization';
 
 interface LeaderboardProps {
   agents: AgentCity[];
@@ -42,6 +43,9 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
             >
               <span className={`w-6 text-right font-bold ${rankColor}`}>
                 {agent.rank}
+              </span>
+              <span className="text-base" title={CHARACTER_INFO[agent.personality.character].name}>
+                {CHARACTER_INFO[agent.personality.character].emoji}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="truncate font-medium">{agent.name}</div>

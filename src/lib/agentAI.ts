@@ -1,78 +1,73 @@
 /**
- * Urban Planner AI for Agent Cities
+ * Agent AI for Civilization Mode
  *
- * Agents behave like urban planners, not random builders.
- * Key principles:
- * 1. ROAD-FIRST: Roads must exist before any development
- * 2. CONNECTIVITY: All zones must connect to the road network
- * 3. COHERENT ZONING: Zones are clustered, not scattered
- * 4. PHASED GROWTH: Core → Services → Expansion → Densification
+ * Each agent makes ONE decision per turn based on their character type.
+ * Characters have distinct behaviors and priorities.
  */
 
 import { GameState, Tile } from '@/games/isocity/types/game';
 import { BuildingType } from '@/games/isocity/types/buildings';
 import { ZoneType } from '@/games/isocity/types/zones';
-import { AgentPersonality, AIAction, AIDecisionResult } from '@/types/civilization';
+import { AgentPersonality, AgentDecision, AgentCharacter } from '@/types/civilization';
 import { getBuildingSize } from '@/lib/simulation';
 
 // ============================================================================
-// SPATIAL ANALYSIS - Understanding the city layout
+// TYPES
+// ============================================================================
+
+export interface AIAction {
+  type: 'place_building' | 'place_zone' | 'place_road' | 'nothing';
+  buildingType?: BuildingType;
+  zoneType?: ZoneType;
+  x: number;
+  y: number;
+  cost: number;
+  description: string;
+  reason: string;
+}
+
+// ============================================================================
+// CITY ANALYSIS
 // ============================================================================
 
 interface CityAnalysis {
-  // Road network
   roadTiles: { x: number; y: number }[];
   roadEndpoints: { x: number; y: number; direction: string }[];
-
-  // Zones
   zonedTiles: { x: number; y: number; zone: ZoneType }[];
-  emptyZonedTiles: { x: number; y: number; zone: ZoneType }[]; // Zoned but no building
-  builtZonedTiles: { x: number; y: number; zone: ZoneType }[];
-
-  // Expansion opportunities
-  tilesAdjacentToRoads: { x: number; y: number }[]; // Grass tiles next to roads
-  zoneClusters: Map<ZoneType, { x: number; y: number }[]>;
-
-  // Services
+  emptyZonedTiles: { x: number; y: number; zone: ZoneType }[];
+  tilesAdjacentToRoads: { x: number; y: number }[];
   hasPower: boolean;
   hasWater: boolean;
   hasFireStation: boolean;
   hasPoliceStation: boolean;
-
-  // Metrics
+  hasHospital: boolean;
+  parkCount: number;
   population: number;
-  jobs: number;
   money: number;
   happiness: number;
+  demand: { residential: number; commercial: number; industrial: number };
 }
 
-/**
- * Analyze the current city state
- */
 function analyzeCity(state: GameState): CityAnalysis {
+  const { grid, gridSize } = state;
   const analysis: CityAnalysis = {
     roadTiles: [],
     roadEndpoints: [],
     zonedTiles: [],
     emptyZonedTiles: [],
-    builtZonedTiles: [],
     tilesAdjacentToRoads: [],
-    zoneClusters: new Map([
-      ['residential', []],
-      ['commercial', []],
-      ['industrial', []],
-    ]),
     hasPower: false,
     hasWater: false,
     hasFireStation: false,
     hasPoliceStation: false,
+    hasHospital: false,
+    parkCount: 0,
     population: state.stats.population,
-    jobs: state.stats.jobs,
     money: state.stats.money,
     happiness: state.stats.happiness,
+    demand: state.stats.demand,
   };
 
-  const { grid, gridSize } = state;
   const directions = [
     { dx: 0, dy: -1, name: 'north' },
     { dx: 1, dy: 0, name: 'east' },
@@ -83,58 +78,50 @@ function analyzeCity(state: GameState): CityAnalysis {
   for (let y = 0; y < gridSize; y++) {
     for (let x = 0; x < gridSize; x++) {
       const tile = grid[y][x];
-      const buildingType = tile.building.type;
+      const type = tile.building.type;
 
       // Track roads
-      if (buildingType === 'road' || buildingType === 'bridge') {
+      if (type === 'road' || type === 'bridge') {
         analysis.roadTiles.push({ x, y });
 
-        // Check if this is a road endpoint (only 1 adjacent road)
+        // Find endpoints
         let adjacentRoads = 0;
-        let openDirection = '';
+        let openDir = '';
         for (const dir of directions) {
-          const nx = x + dir.dx;
-          const ny = y + dir.dy;
+          const nx = x + dir.dx, ny = y + dir.dy;
           if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
-            const neighborType = grid[ny][nx].building.type;
-            if (neighborType === 'road' || neighborType === 'bridge') {
-              adjacentRoads++;
-            } else if (neighborType === 'grass' || neighborType === 'tree') {
-              openDirection = dir.name;
-            }
+            const nt = grid[ny][nx].building.type;
+            if (nt === 'road' || nt === 'bridge') adjacentRoads++;
+            else if (nt === 'grass' || nt === 'tree') openDir = dir.name;
           }
         }
-        if (adjacentRoads <= 2 && openDirection) {
-          analysis.roadEndpoints.push({ x, y, direction: openDirection });
+        if (adjacentRoads <= 2 && openDir) {
+          analysis.roadEndpoints.push({ x, y, direction: openDir });
         }
       }
 
       // Track zones
       if (tile.zone !== 'none') {
         analysis.zonedTiles.push({ x, y, zone: tile.zone });
-        analysis.zoneClusters.get(tile.zone)?.push({ x, y });
-
-        if (buildingType === 'grass' || buildingType === 'tree') {
+        if (type === 'grass' || type === 'tree') {
           analysis.emptyZonedTiles.push({ x, y, zone: tile.zone });
-        } else {
-          analysis.builtZonedTiles.push({ x, y, zone: tile.zone });
         }
       }
 
       // Track services
-      if (buildingType === 'power_plant') analysis.hasPower = true;
-      if (buildingType === 'water_tower') analysis.hasWater = true;
-      if (buildingType === 'fire_station') analysis.hasFireStation = true;
-      if (buildingType === 'police_station') analysis.hasPoliceStation = true;
+      if (type === 'power_plant') analysis.hasPower = true;
+      if (type === 'water_tower') analysis.hasWater = true;
+      if (type === 'fire_station') analysis.hasFireStation = true;
+      if (type === 'police_station') analysis.hasPoliceStation = true;
+      if (type === 'hospital') analysis.hasHospital = true;
+      if (type === 'park') analysis.parkCount++;
 
-      // Track tiles adjacent to roads (expansion opportunities)
-      if (buildingType === 'grass' || buildingType === 'tree') {
+      // Track buildable tiles adjacent to roads
+      if (type === 'grass' || type === 'tree') {
         for (const dir of directions) {
-          const nx = x + dir.dx;
-          const ny = y + dir.dy;
+          const nx = x + dir.dx, ny = y + dir.dy;
           if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
-            const neighborType = grid[ny][nx].building.type;
-            if (neighborType === 'road' || neighborType === 'bridge') {
+            if (grid[ny][nx].building.type === 'road') {
               analysis.tilesAdjacentToRoads.push({ x, y });
               break;
             }
@@ -148,319 +135,236 @@ function analyzeCity(state: GameState): CityAnalysis {
 }
 
 // ============================================================================
-// GROWTH PHASE DETECTION
+// ACTION GENERATORS
 // ============================================================================
 
-type GrowthPhase = 'core' | 'services' | 'expansion' | 'densification';
-
-/**
- * Determine current growth phase based on city state
- */
-function determineGrowthPhase(analysis: CityAnalysis): GrowthPhase {
-  const { population, roadTiles, zonedTiles, hasPower, hasWater, hasFireStation, hasPoliceStation } = analysis;
-
-  // Phase 1: Core - Need basic roads and zones
-  if (roadTiles.length < 15 || zonedTiles.length < 10) {
-    return 'core';
-  }
-
-  // Phase 2: Services - Need infrastructure
-  if (!hasPower || !hasWater || (population > 50 && !hasFireStation)) {
-    return 'services';
-  }
-
-  // Phase 3: Expansion - Grow the city
-  if (population < 500 || roadTiles.length < 50) {
-    return 'expansion';
-  }
-
-  // Phase 4: Densification - Fill in gaps, upgrade
-  return 'densification';
-}
-
-// ============================================================================
-// PLANNING FUNCTIONS
-// ============================================================================
-
-/**
- * Plan road extension from an endpoint
- */
-function planRoadExtension(
-  state: GameState,
-  analysis: CityAnalysis,
-  personality: AgentPersonality
-): AIAction | null {
+function findRoadExtension(state: GameState, analysis: CityAnalysis): AIAction | null {
   const { grid, gridSize } = state;
-
-  // Get road endpoints that can be extended
-  const extendableEndpoints = analysis.roadEndpoints.filter(ep => {
-    const dirs: Record<string, { dx: number; dy: number }> = {
-      north: { dx: 0, dy: -1 },
-      east: { dx: 1, dy: 0 },
-      south: { dx: 0, dy: 1 },
-      west: { dx: -1, dy: 0 },
-    };
-    const dir = dirs[ep.direction];
-    if (!dir) return false;
-
-    const nx = ep.x + dir.dx;
-    const ny = ep.y + dir.dy;
-    if (nx < 1 || nx >= gridSize - 1 || ny < 1 || ny >= gridSize - 1) return false;
-
-    const tile = grid[ny][nx];
-    return tile.building.type === 'grass' || tile.building.type === 'tree';
-  });
-
-  if (extendableEndpoints.length === 0) return null;
-
-  // Choose endpoint - prefer extending toward city center for connectivity
-  const centerX = Math.floor(gridSize / 2);
-  const centerY = Math.floor(gridSize / 2);
-
-  // Sort by distance from center (closer is better for core phase)
-  extendableEndpoints.sort((a, b) => {
-    const distA = Math.abs(a.x - centerX) + Math.abs(a.y - centerY);
-    const distB = Math.abs(b.x - centerX) + Math.abs(b.y - centerY);
-    return distA - distB;
-  });
-
-  // Pick based on personality (aggressive = further expansion)
-  const pickIndex = Math.min(
-    Math.floor(personality.aggressiveness * extendableEndpoints.length),
-    extendableEndpoints.length - 1
-  );
-  const endpoint = extendableEndpoints[pickIndex];
-
   const dirs: Record<string, { dx: number; dy: number }> = {
     north: { dx: 0, dy: -1 },
     east: { dx: 1, dy: 0 },
     south: { dx: 0, dy: 1 },
     west: { dx: -1, dy: 0 },
   };
-  const dir = dirs[endpoint.direction];
-  const newX = endpoint.x + dir.dx;
-  const newY = endpoint.y + dir.dy;
 
-  return {
-    type: 'place_road',
-    x: newX,
-    y: newY,
-    priority: 100,
-    cost: 25,
-    reason: `Extend road network ${endpoint.direction}`,
-  };
-}
-
-/**
- * Plan a new road branch (perpendicular to existing road)
- */
-function planRoadBranch(
-  state: GameState,
-  analysis: CityAnalysis
-): AIAction | null {
-  const { grid, gridSize } = state;
-
-  // Find road tiles that could have a perpendicular branch
-  for (const road of analysis.roadTiles) {
-    const { x, y } = road;
-
-    // Check if this road has neighbors only in 2 opposite directions (straight road)
-    const hasNorth = y > 0 && (grid[y - 1][x].building.type === 'road');
-    const hasSouth = y < gridSize - 1 && (grid[y + 1][x].building.type === 'road');
-    const hasEast = x < gridSize - 1 && (grid[y][x + 1].building.type === 'road');
-    const hasWest = x > 0 && (grid[y][x - 1].building.type === 'road');
-
-    // Horizontal road - can branch north or south
-    if (hasEast && hasWest && !hasNorth && !hasSouth) {
-      if (y > 1 && grid[y - 1][x].building.type === 'grass') {
-        return {
-          type: 'place_road',
-          x,
-          y: y - 1,
-          priority: 90,
-          cost: 25,
-          reason: 'Create road branch north',
-        };
-      }
-      if (y < gridSize - 2 && grid[y + 1][x].building.type === 'grass') {
-        return {
-          type: 'place_road',
-          x,
-          y: y + 1,
-          priority: 90,
-          cost: 25,
-          reason: 'Create road branch south',
-        };
-      }
-    }
-
-    // Vertical road - can branch east or west
-    if (hasNorth && hasSouth && !hasEast && !hasWest) {
-      if (x < gridSize - 2 && grid[y][x + 1].building.type === 'grass') {
-        return {
-          type: 'place_road',
-          x: x + 1,
-          y,
-          priority: 90,
-          cost: 25,
-          reason: 'Create road branch east',
-        };
-      }
-      if (x > 1 && grid[y][x - 1].building.type === 'grass') {
-        return {
-          type: 'place_road',
-          x: x - 1,
-          y,
-          priority: 90,
-          cost: 25,
-          reason: 'Create road branch west',
-        };
-      }
+  for (const ep of analysis.roadEndpoints) {
+    const dir = dirs[ep.direction];
+    if (!dir) continue;
+    const nx = ep.x + dir.dx, ny = ep.y + dir.dy;
+    if (nx < 1 || nx >= gridSize - 1 || ny < 1 || ny >= gridSize - 1) continue;
+    const tile = grid[ny][nx];
+    if (tile.building.type === 'grass' || tile.building.type === 'tree') {
+      return {
+        type: 'place_road',
+        x: nx,
+        y: ny,
+        cost: 25,
+        description: `Build road ${ep.direction}`,
+        reason: 'expanding road network',
+      };
     }
   }
-
   return null;
 }
 
-/**
- * Plan zone placement adjacent to roads, extending existing clusters
- */
-function planZonePlacement(
-  state: GameState,
-  analysis: CityAnalysis,
-  personality: AgentPersonality
-): AIAction | null {
-  const { grid, gridSize } = state;
+type BuildableZone = 'residential' | 'commercial' | 'industrial';
 
-  // Determine which zone type to prioritize
-  const demand = state.stats.demand;
-  let zoneType: ZoneType;
-
-  // Weight by demand and personality
-  const residentialScore = demand.residential * (1 - personality.industrialFocus * 0.3);
-  const commercialScore = demand.commercial;
-  const industrialScore = demand.industrial * (0.7 + personality.industrialFocus * 0.3);
-
-  if (residentialScore >= commercialScore && residentialScore >= industrialScore) {
-    zoneType = 'residential';
-  } else if (commercialScore >= industrialScore) {
-    zoneType = 'commercial';
-  } else {
-    zoneType = 'industrial';
-  }
-
-  // Find tiles adjacent to roads that are near existing clusters of this zone type
-  const cluster = analysis.zoneClusters.get(zoneType) || [];
-  const candidates: { x: number; y: number; score: number }[] = [];
+function findZonePlacement(state: GameState, analysis: CityAnalysis, zoneType: BuildableZone): AIAction | null {
+  const { grid } = state;
 
   for (const tile of analysis.tilesAdjacentToRoads) {
-    // Skip if already zoned
-    if (grid[tile.y][tile.x].zone !== 'none') continue;
-
-    let score = 50;
-
-    // Bonus for being near existing cluster of same type
-    for (const clusterTile of cluster) {
-      const dist = Math.abs(tile.x - clusterTile.x) + Math.abs(tile.y - clusterTile.y);
-      if (dist <= 3) {
-        score += 30 - dist * 5;
-      }
+    if (grid[tile.y][tile.x].zone === 'none') {
+      return {
+        type: 'place_zone',
+        zoneType,
+        x: tile.x,
+        y: tile.y,
+        cost: 50,
+        description: `Zone ${zoneType}`,
+        reason: `demand: ${Math.round(analysis.demand[zoneType])}%`,
+      };
     }
-
-    // Industrial should be away from residential
-    if (zoneType === 'industrial') {
-      const residentialCluster = analysis.zoneClusters.get('residential') || [];
-      for (const resTile of residentialCluster) {
-        const dist = Math.abs(tile.x - resTile.x) + Math.abs(tile.y - resTile.y);
-        if (dist < 5) {
-          score -= 20;
-        }
-      }
-    }
-
-    // Commercial should be near residential
-    if (zoneType === 'commercial') {
-      const residentialCluster = analysis.zoneClusters.get('residential') || [];
-      for (const resTile of residentialCluster) {
-        const dist = Math.abs(tile.x - resTile.x) + Math.abs(tile.y - resTile.y);
-        if (dist <= 4) {
-          score += 15;
-        }
-      }
-    }
-
-    candidates.push({ ...tile, score });
   }
-
-  if (candidates.length === 0) return null;
-
-  // Sort by score and pick top candidate
-  candidates.sort((a, b) => b.score - a.score);
-  const best = candidates[0];
-
-  return {
-    type: 'place_zone',
-    zoneType,
-    x: best.x,
-    y: best.y,
-    priority: 70,
-    cost: 50,
-    reason: `Zone ${zoneType} (demand: ${Math.round(demand[zoneType])})`,
-  };
+  return null;
 }
 
-/**
- * Plan service building placement
- */
-function planServicePlacement(
-  state: GameState,
-  analysis: CityAnalysis,
-  serviceType: BuildingType
-): AIAction | null {
+function findServicePlacement(state: GameState, analysis: CityAnalysis, serviceType: BuildingType): AIAction | null {
   const { grid, gridSize } = state;
   const size = getBuildingSize(serviceType);
 
-  // Find location near zones but adjacent to roads
-  for (const roadTile of analysis.tilesAdjacentToRoads) {
-    const { x, y } = roadTile;
+  const costs: Record<string, number> = {
+    power_plant: 3000,
+    water_tower: 1000,
+    fire_station: 500,
+    police_station: 500,
+    hospital: 1500,
+    park: 150,
+  };
 
-    // Check if we can place the building here
+  for (const tile of analysis.tilesAdjacentToRoads) {
     let canPlace = true;
     for (let dy = 0; dy < size.height && canPlace; dy++) {
       for (let dx = 0; dx < size.width && canPlace; dx++) {
-        const tx = x + dx;
-        const ty = y + dy;
-        if (tx >= gridSize || ty >= gridSize) {
-          canPlace = false;
-        } else if (grid[ty][tx].building.type !== 'grass' && grid[ty][tx].building.type !== 'tree') {
+        const tx = tile.x + dx, ty = tile.y + dy;
+        if (tx >= gridSize || ty >= gridSize) canPlace = false;
+        else if (grid[ty][tx].building.type !== 'grass' && grid[ty][tx].building.type !== 'tree') {
           canPlace = false;
         }
       }
     }
-
     if (canPlace) {
-      const costs: Record<string, number> = {
-        power_plant: 3000,
-        water_tower: 1000,
-        fire_station: 500,
-        police_station: 500,
-        hospital: 1000,
-        school: 400,
-        park: 150,
-      };
-
       return {
         type: 'place_building',
         buildingType: serviceType,
-        x,
-        y,
-        priority: 95,
+        x: tile.x,
+        y: tile.y,
         cost: costs[serviceType] || 500,
-        reason: `Build ${serviceType}`,
+        description: `Build ${serviceType.replace('_', ' ')}`,
+        reason: getServiceReason(serviceType, analysis),
       };
     }
   }
+  return null;
+}
 
+function getServiceReason(serviceType: BuildingType, analysis: CityAnalysis): string {
+  switch (serviceType) {
+    case 'power_plant': return 'city needs power';
+    case 'water_tower': return 'city needs water';
+    case 'fire_station': return 'fire protection needed';
+    case 'police_station': return 'crime prevention';
+    case 'hospital': return 'healthcare for citizens';
+    case 'park': return `happiness at ${Math.round(analysis.happiness)}%`;
+    default: return 'city improvement';
+  }
+}
+
+// ============================================================================
+// CHARACTER-BASED DECISION MAKING
+// ============================================================================
+
+function decideAsIndustrialist(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Priority: Industrial zones > Power > Roads > Any zone
+  if (!analysis.hasPower && analysis.money >= 3000) {
+    return findServicePlacement(state, analysis, 'power_plant');
+  }
+  if (analysis.demand.industrial > 30) {
+    const action = findZonePlacement(state, analysis, 'industrial');
+    if (action) return action;
+  }
+  if (analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  // Fall back to any high-demand zone
+  const highestDemand = Math.max(analysis.demand.residential, analysis.demand.commercial, analysis.demand.industrial);
+  if (highestDemand > 20) {
+    const zoneType = analysis.demand.industrial >= highestDemand ? 'industrial' :
+      analysis.demand.commercial >= analysis.demand.residential ? 'commercial' : 'residential';
+    return findZonePlacement(state, analysis, zoneType);
+  }
+  return null;
+}
+
+function decideAsEnvironmentalist(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Priority: Parks > Water > Residential (low density) > Roads
+  if (analysis.happiness < 70 && analysis.money >= 150 && analysis.parkCount < 5) {
+    const action = findServicePlacement(state, analysis, 'park');
+    if (action) return action;
+  }
+  if (!analysis.hasWater && analysis.money >= 1000) {
+    return findServicePlacement(state, analysis, 'water_tower');
+  }
+  if (analysis.demand.residential > 40) {
+    return findZonePlacement(state, analysis, 'residential');
+  }
+  if (analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  return null;
+}
+
+function decideAsCapitalist(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Priority: Commercial zones > Services for growth > Residential for workers
+  if (!analysis.hasPower && analysis.money >= 3000) {
+    return findServicePlacement(state, analysis, 'power_plant');
+  }
+  if (analysis.demand.commercial > 30) {
+    const action = findZonePlacement(state, analysis, 'commercial');
+    if (action) return action;
+  }
+  if (analysis.demand.residential > 50) {
+    return findZonePlacement(state, analysis, 'residential');
+  }
+  if (analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  return null;
+}
+
+function decideAsExpansionist(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Priority: Roads > Zones > Basic services
+  if (analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  if (!analysis.hasPower && analysis.money >= 3000) {
+    return findServicePlacement(state, analysis, 'power_plant');
+  }
+  // Zone based on demand
+  const highestDemand = Math.max(analysis.demand.residential, analysis.demand.commercial, analysis.demand.industrial);
+  if (highestDemand > 20) {
+    const zoneType = analysis.demand.residential >= highestDemand ? 'residential' :
+      analysis.demand.commercial >= analysis.demand.industrial ? 'commercial' : 'industrial';
+    return findZonePlacement(state, analysis, zoneType);
+  }
+  return null;
+}
+
+function decideAsPlanner(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Balanced approach: Follow demand, ensure services
+  if (!analysis.hasPower && analysis.money >= 3000) {
+    return findServicePlacement(state, analysis, 'power_plant');
+  }
+  if (!analysis.hasWater && analysis.money >= 1000) {
+    return findServicePlacement(state, analysis, 'water_tower');
+  }
+  if (analysis.population > 100 && !analysis.hasFireStation && analysis.money >= 500) {
+    return findServicePlacement(state, analysis, 'fire_station');
+  }
+  // Zone based on highest demand
+  const { residential, commercial, industrial } = analysis.demand;
+  if (residential > 50 || commercial > 50 || industrial > 50) {
+    const zoneType = residential >= commercial && residential >= industrial ? 'residential' :
+      commercial >= industrial ? 'commercial' : 'industrial';
+    return findZonePlacement(state, analysis, zoneType);
+  }
+  // Expand roads if nothing else to do
+  if (analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  return null;
+}
+
+function decideAsGambler(state: GameState, analysis: CityAnalysis): AIAction | null {
+  // Random decisions!
+  const roll = Math.random();
+
+  if (roll < 0.3 && analysis.roadEndpoints.length > 0 && analysis.money >= 25) {
+    return findRoadExtension(state, analysis);
+  }
+  if (roll < 0.5 && analysis.money >= 50) {
+    const zones: BuildableZone[] = ['residential', 'commercial', 'industrial'];
+    const randomZone = zones[Math.floor(Math.random() * zones.length)];
+    return findZonePlacement(state, analysis, randomZone);
+  }
+  if (roll < 0.7 && analysis.money >= 500) {
+    const services: BuildingType[] = ['fire_station', 'police_station', 'park'];
+    const randomService = services[Math.floor(Math.random() * services.length)];
+    return findServicePlacement(state, analysis, randomService);
+  }
+  if (roll < 0.9 && !analysis.hasPower && analysis.money >= 3000) {
+    return findServicePlacement(state, analysis, 'power_plant');
+  }
+  // 10% chance to do nothing and save money
   return null;
 }
 
@@ -468,126 +372,57 @@ function planServicePlacement(
 // MAIN DECISION FUNCTION
 // ============================================================================
 
-/**
- * Main AI decision function
- * Returns actions based on urban planning principles
- */
-export function decide(
-  state: GameState,
-  personality: AgentPersonality
-): AIDecisionResult {
-  const actions: AIAction[] = [];
+export function decide(state: GameState, personality: AgentPersonality): { action: AIAction | null; decision: AgentDecision } {
   const analysis = analyzeCity(state);
-  const phase = determineGrowthPhase(analysis);
-  const budget = state.stats.money;
 
-  // Minimum reserve
-  const minReserve = 500;
-  let availableBudget = budget - minReserve;
+  // Choose decision function based on character
+  let action: AIAction | null = null;
 
-  // === PHASE-BASED PLANNING ===
-
-  if (phase === 'core' || phase === 'expansion') {
-    // Priority 1: Extend road network
-    const roadExtension = planRoadExtension(state, analysis, personality);
-    if (roadExtension && availableBudget >= roadExtension.cost) {
-      actions.push(roadExtension);
-      availableBudget -= roadExtension.cost;
-    }
-
-    // Maybe add a branch road for grid structure
-    if (analysis.roadTiles.length > 10 && Math.random() < 0.3) {
-      const roadBranch = planRoadBranch(state, analysis);
-      if (roadBranch && availableBudget >= roadBranch.cost) {
-        actions.push(roadBranch);
-        availableBudget -= roadBranch.cost;
-      }
-    }
+  switch (personality.character) {
+    case 'industrialist':
+      action = decideAsIndustrialist(state, analysis);
+      break;
+    case 'environmentalist':
+      action = decideAsEnvironmentalist(state, analysis);
+      break;
+    case 'capitalist':
+      action = decideAsCapitalist(state, analysis);
+      break;
+    case 'expansionist':
+      action = decideAsExpansionist(state, analysis);
+      break;
+    case 'planner':
+      action = decideAsPlanner(state, analysis);
+      break;
+    case 'gambler':
+      action = decideAsGambler(state, analysis);
+      break;
   }
 
-  if (phase === 'services') {
-    // Add missing infrastructure
-    if (!analysis.hasPower && availableBudget >= 3000) {
-      const powerAction = planServicePlacement(state, analysis, 'power_plant');
-      if (powerAction) {
-        actions.push(powerAction);
-        availableBudget -= powerAction.cost;
+  // Create decision record
+  const decision: AgentDecision = action
+    ? {
+        action: action.description,
+        reason: action.reason,
+        success: true,
       }
-    }
+    : {
+        action: 'Saved money',
+        reason: 'waiting for opportunity',
+        success: true,
+      };
 
-    if (!analysis.hasWater && availableBudget >= 1000) {
-      const waterAction = planServicePlacement(state, analysis, 'water_tower');
-      if (waterAction) {
-        actions.push(waterAction);
-        availableBudget -= waterAction.cost;
-      }
-    }
-
-    if (!analysis.hasFireStation && analysis.population > 50 && availableBudget >= 500) {
-      const fireAction = planServicePlacement(state, analysis, 'fire_station');
-      if (fireAction) {
-        actions.push(fireAction);
-        availableBudget -= fireAction.cost;
-      }
-    }
-
-    if (!analysis.hasPoliceStation && analysis.population > 100 && availableBudget >= 500) {
-      const policeAction = planServicePlacement(state, analysis, 'police_station');
-      if (policeAction) {
-        actions.push(policeAction);
-        availableBudget -= policeAction.cost;
-      }
-    }
-  }
-
-  // Zone placement (all phases except pure services)
-  if (phase !== 'services') {
-    // Number of zones to place depends on personality and phase
-    const zonesToPlace = phase === 'core' ? 2 : (phase === 'expansion' ? 3 : 1);
-
-    for (let i = 0; i < zonesToPlace && availableBudget >= 50; i++) {
-      const zoneAction = planZonePlacement(state, analysis, personality);
-      if (zoneAction) {
-        actions.push(zoneAction);
-        availableBudget -= zoneAction.cost;
-      }
-    }
-  }
-
-  // Parks for happiness (expansion and densification phases)
-  if ((phase === 'expansion' || phase === 'densification') &&
-      analysis.happiness < 60 &&
-      availableBudget >= 150 &&
-      personality.environmentFocus > 0.4) {
-    const parkAction = planServicePlacement(state, analysis, 'park');
-    if (parkAction) {
-      actions.push(parkAction);
-      availableBudget -= parkAction.cost;
-    }
-  }
-
-  // Sort by priority
-  actions.sort((a, b) => b.priority - a.priority);
-
-  // Calculate totals
-  const totalCost = actions.reduce((sum, a) => sum + a.cost, 0);
-
-  return {
-    actions,
-    totalCost,
-    remainingBudget: budget - totalCost,
-  };
+  return { action, decision };
 }
 
-/**
- * Execute a single AI action on the game state
- */
-export function executeAction(
-  state: GameState,
-  action: AIAction
-): GameState {
-  const { placeBuilding } = require('@/lib/simulation');
+// ============================================================================
+// EXECUTE ACTION
+// ============================================================================
 
+export function executeAction(state: GameState, action: AIAction): GameState {
+  if (action.type === 'nothing') return state;
+
+  const { placeBuilding } = require('@/lib/simulation');
   let newState = state;
 
   switch (action.type) {
@@ -596,19 +431,17 @@ export function executeAction(
         newState = placeBuilding(state, action.x, action.y, action.buildingType, null);
       }
       break;
-
     case 'place_zone':
       if (action.zoneType) {
         newState = placeBuilding(state, action.x, action.y, null, action.zoneType);
       }
       break;
-
     case 'place_road':
       newState = placeBuilding(state, action.x, action.y, 'road', null);
       break;
   }
 
-  // Deduct cost if action was successful
+  // Deduct cost
   if (newState !== state) {
     return {
       ...newState,

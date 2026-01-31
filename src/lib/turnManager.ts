@@ -49,6 +49,7 @@ export function initializeAgents(): AgentCity[] {
       personality,
       performance: generateInitialPerformance(),
       rank: i + 1, // Initial rank is just the index
+      lastDecision: null,
     });
   }
 
@@ -66,24 +67,22 @@ export interface TurnProgressCallback {
 
 /**
  * Process a single agent's turn
+ * Each agent makes ONE decision per turn based on their character type
  */
 function processAgentTurn(agent: AgentCity): AgentCity {
   let state = agent.state;
   const personality = agent.personality;
 
-  // 1. AI makes decisions
-  const decision = decide(state, personality);
+  // 1. AI makes ONE decision based on character
+  const { action, decision } = decide(state, personality);
 
-  // 2. Execute all actions
+  // 2. Execute the action if there is one and we can afford it
   let actionsExecuted = 0;
-  for (const action of decision.actions) {
-    // Check if we can afford the action
-    if (state.stats.money >= action.cost + 500) {
-      const newState = executeAction(state, action);
-      if (newState !== state) {
-        state = newState;
-        actionsExecuted++;
-      }
+  if (action && state.stats.money >= action.cost + 500) {
+    const newState = executeAction(state, action);
+    if (newState !== state) {
+      state = newState;
+      actionsExecuted = 1;
     }
   }
 
@@ -105,6 +104,7 @@ function processAgentTurn(agent: AgentCity): AgentCity {
     ...agent,
     state,
     performance,
+    lastDecision: decision,
   };
 }
 
