@@ -16,6 +16,9 @@ interface GameTopBarProps {
   autoAdvance: boolean;
   speedMultiplier: number;
   stats: CivilizationStats;
+  isLeader: boolean;
+  isConnected: boolean;
+  viewerCount: number;
   onToggleAutoAdvance: () => void;
   onAdvanceTurn: () => void;
   onSpeedChange: (speed: number) => void;
@@ -30,6 +33,9 @@ export function GameTopBar({
   autoAdvance,
   speedMultiplier,
   stats,
+  isLeader,
+  isConnected,
+  viewerCount,
   onToggleAutoAdvance,
   onAdvanceTurn,
   onSpeedChange,
@@ -65,36 +71,41 @@ export function GameTopBar({
           )}
         </div>
 
-        {/* Speed controls */}
-        <div className="flex items-center bg-slate-700/80 border border-slate-500 rounded overflow-hidden">
-          {CIVILIZATION_CONSTANTS.SPEED_OPTIONS.map((speed) => (
-            <button
-              key={speed}
-              onClick={() => onSpeedChange(speed)}
-              className={`px-2 py-1 text-xs font-bold transition-colors ${
-                speedMultiplier === speed
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-600'
-              }`}
-            >
-              {speed}x
-            </button>
-          ))}
-        </div>
+        {/* Speed controls - only for leaders */}
+        {isLeader && (
+          <div className="flex items-center bg-slate-700/80 border border-slate-500 rounded overflow-hidden">
+            {CIVILIZATION_CONSTANTS.SPEED_OPTIONS.map((speed) => (
+              <button
+                key={speed}
+                onClick={() => onSpeedChange(speed)}
+                className={`px-2 py-1 text-xs font-bold transition-colors ${
+                  speedMultiplier === speed
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-600'
+                }`}
+              >
+                {speed}x
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Play/Pause button */}
-        <button
-          onClick={onToggleAutoAdvance}
-          className={`px-3 py-1 rounded font-bold text-sm transition-colors border ${
-            autoAdvance
-              ? 'bg-green-700/50 border-green-500 text-green-300 hover:bg-green-700'
-              : 'bg-slate-700/50 border-slate-500 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          {autoAdvance ? '▶ AUTO' : '⏸ PAUSED'}
-        </button>
+        {/* Play/Pause button - only for leaders */}
+        {isLeader && (
+          <button
+            onClick={onToggleAutoAdvance}
+            className={`px-3 py-1 rounded font-bold text-sm transition-colors border ${
+              autoAdvance
+                ? 'bg-green-700/50 border-green-500 text-green-300 hover:bg-green-700'
+                : 'bg-slate-700/50 border-slate-500 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            {autoAdvance ? '▶ AUTO' : '⏸ PAUSED'}
+          </button>
+        )}
 
-        {!autoAdvance && turnPhase === 'idle' && (
+        {/* Manual advance button - only for leaders when paused */}
+        {isLeader && !autoAdvance && turnPhase === 'idle' && (
           <button
             onClick={onAdvanceTurn}
             className="px-3 py-1 bg-amber-600 hover:bg-amber-500 border border-amber-400 rounded font-bold text-sm text-white transition-colors"
@@ -117,6 +128,22 @@ export function GameTopBar({
         <div className="flex items-center gap-1 bg-slate-700/60 border border-slate-500 rounded px-3 py-1">
           <span className="text-slate-400 text-xs">BUILDINGS</span>
           <span className="text-amber-400 font-bold ml-2">{stats.totalBuildingsPlaced.toLocaleString()}</span>
+        </div>
+
+        {/* Connection status and viewer count */}
+        <div className="flex items-center gap-2 bg-slate-700/60 border border-slate-500 rounded px-3 py-1">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isConnected ? 'bg-green-500' : 'bg-red-500'
+            }`}
+            title={isConnected ? 'Connected' : 'Disconnected'}
+          />
+          <span className="text-slate-300 text-xs">
+            {viewerCount} watching
+          </span>
+          {isLeader && (
+            <span className="text-amber-400 text-xs font-bold">(Host)</span>
+          )}
         </div>
       </div>
 

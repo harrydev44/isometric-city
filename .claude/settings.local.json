@@ -10,7 +10,18 @@
       "Bash(npx tsc:*)",
       "Bash(git restore:*)",
       "Bash(curl:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(for i in 1 2 3 4 5 6)",
+      "Bash(do)",
+      "Bash(echo:*)",
+      "Bash(break)",
+      "Bash(done)",
+      "Bash(for:*)",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(lsof:*)"
     ]
   }
 }

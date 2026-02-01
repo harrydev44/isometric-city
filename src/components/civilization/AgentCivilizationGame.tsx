@@ -34,6 +34,9 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
     timeRemaining,
     processingProgress,
     speedMultiplier,
+    isLeader,
+    isConnected,
+    viewerCount,
     events,
     awards,
     characterStats,
@@ -59,7 +62,9 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
   // Initialize on mount
   useEffect(() => {
     if (agents.length === 0) {
-      initialize();
+      initialize().catch((err) => {
+        console.error('[CivilizationGame] Initialize failed:', err);
+      });
     }
   }, [agents.length, initialize]);
 
@@ -90,6 +95,9 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
         autoAdvance={autoAdvance}
         speedMultiplier={speedMultiplier}
         stats={stats}
+        isLeader={isLeader}
+        isConnected={isConnected}
+        viewerCount={viewerCount}
         onToggleAutoAdvance={() => setAutoAdvance(!autoAdvance)}
         onAdvanceTurn={advanceTurn}
         onSpeedChange={setSpeedMultiplier}
