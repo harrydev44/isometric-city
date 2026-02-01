@@ -15,6 +15,7 @@ interface GameSidebarProps {
   characterStats: CharacterStats[];
   currentViewIndex: number;
   onSelectAgent: (agentId: number) => void;
+  className?: string;
 }
 
 export function GameSidebar({
@@ -23,9 +24,10 @@ export function GameSidebar({
   characterStats,
   currentViewIndex,
   onSelectAgent,
+  className = '',
 }: GameSidebarProps) {
   return (
-    <div className="w-64 bg-[#0d1f35]/95 border-l-2 border-cyan-700/50 flex flex-col h-full overflow-hidden">
+    <div className={`w-64 bg-[#0d1f35]/95 border-l-2 border-cyan-700/50 flex flex-col h-full overflow-hidden ${className}`}>
       {/* Top Rankings */}
       <div className="p-2 border-b border-cyan-900/50">
         <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-2">

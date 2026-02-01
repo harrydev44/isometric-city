@@ -12,20 +12,16 @@ interface CityInfoBarProps {
   currentAgent: AgentCity | null;
   currentIndex: number;
   totalCities: number;
-  autoCycle: boolean;
   onPrev: () => void;
   onNext: () => void;
-  onToggleAutoCycle: () => void;
 }
 
 export function CityInfoBar({
   currentAgent,
   currentIndex,
   totalCities,
-  autoCycle,
   onPrev,
   onNext,
-  onToggleAutoCycle,
 }: CityInfoBarProps) {
   if (!currentAgent) return null;
 
@@ -64,21 +60,8 @@ export function CityInfoBar({
         </div>
 
         {/* City counter */}
-        <div className="flex items-center gap-3">
-          <div className="text-cyan-600 text-sm">
-            City <span className="text-white font-bold">{currentIndex + 1}</span> of {totalCities}
-          </div>
-
-          <button
-            onClick={onToggleAutoCycle}
-            className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${
-              autoCycle
-                ? 'bg-cyan-700/50 border-cyan-500 text-cyan-300'
-                : 'bg-[#0a1628] border-cyan-700/50 text-cyan-600'
-            }`}
-          >
-            {autoCycle ? '⟳ AUTO-CYCLE' : '⟳ CYCLE OFF'}
-          </button>
+        <div className="text-cyan-600 text-sm">
+          City <span className="text-white font-bold">{currentIndex + 1}</span> of {totalCities}
         </div>
       </div>
 

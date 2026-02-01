@@ -14,14 +14,11 @@ interface GameTopBarProps {
   turnPhase: TurnPhase;
   timeRemaining: number;
   processingProgress: number;
-  autoAdvance: boolean;
   speedMultiplier: number;
   stats: CivilizationStats;
   isLeader: boolean;
   isConnected: boolean;
   viewerCount: number;
-  onToggleAutoAdvance: () => void;
-  onAdvanceTurn: () => void;
   onSpeedChange: (speed: number) => void;
   onExit: () => void;
 }
@@ -31,14 +28,11 @@ export function GameTopBar({
   turnPhase,
   timeRemaining,
   processingProgress,
-  autoAdvance,
   speedMultiplier,
   stats,
   isLeader,
   isConnected,
   viewerCount,
-  onToggleAutoAdvance,
-  onAdvanceTurn,
   onSpeedChange,
   onExit,
 }: GameTopBarProps) {
@@ -63,12 +57,10 @@ export function GameTopBar({
                 Processing {processingProgress}%
               </span>
             </div>
-          ) : autoAdvance ? (
+          ) : (
             <span className="text-cyan-300/70 text-sm">
               Next: <span className="text-white font-bold">{secondsRemaining}s</span>
             </span>
-          ) : (
-            <span className="text-cyan-600 text-sm">Paused</span>
           )}
         </div>
 
@@ -91,29 +83,6 @@ export function GameTopBar({
           </div>
         )}
 
-        {/* Play/Pause button - only for leaders */}
-        {isLeader && (
-          <button
-            onClick={onToggleAutoAdvance}
-            className={`px-3 py-1 rounded font-bold text-sm transition-colors border ${
-              autoAdvance
-                ? 'bg-cyan-700/50 border-cyan-500 text-cyan-300 hover:bg-cyan-700'
-                : 'bg-[#0d1f35] border-cyan-600/50 text-cyan-500/70 hover:bg-cyan-800/30'
-            }`}
-          >
-            {autoAdvance ? '▶ AUTO' : '⏸ PAUSED'}
-          </button>
-        )}
-
-        {/* Manual advance button - only for leaders when paused */}
-        {isLeader && !autoAdvance && turnPhase === 'idle' && (
-          <button
-            onClick={onAdvanceTurn}
-            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 border border-cyan-400 rounded font-bold text-sm text-white transition-colors"
-          >
-            NEXT →
-          </button>
-        )}
       </div>
 
       {/* Center section - Global stats */}

@@ -46,6 +46,11 @@ import {
   createCivilizationSyncProvider,
 } from '@/lib/civilization/civilizationSyncProvider';
 import { CivilizationSessionState } from '@/lib/civilization/civilizationDatabase';
+import {
+  GameEvent,
+  generateGameEvents,
+  applyEventEffects,
+} from '@/lib/civilization/gameEvents';
 
 const { TURN_DURATION_MS, CAMERA_CYCLE_MS, TOP_LEADERBOARD_COUNT, SPEED_OPTIONS } = CIVILIZATION_CONSTANTS;
 
@@ -72,6 +77,7 @@ interface AgentCivilizationContextValue {
 
   // Events & Awards
   events: CivilizationEvent[];
+  gameEvents: GameEvent[];
   awards: CharacterAward[];
   characterStats: CharacterStats[];
 
@@ -127,6 +133,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
 
   // Events & Awards
   const [events, setEvents] = useState<CivilizationEvent[]>([]);
+  const [gameEvents, setGameEvents] = useState<GameEvent[]>([]);
   const [awards, setAwards] = useState<CharacterAward[]>([]);
   const [characterStats, setCharacterStats] = useState<CharacterStats[]>([]);
 
@@ -145,6 +152,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
   const agentsRef = useRef<AgentCity[]>([]);
   const currentTurnRef = useRef(0);
   const eventsRef = useRef<CivilizationEvent[]>([]);
+  const gameEventsRef = useRef<GameEvent[]>([]);
   const awardsRef = useRef<CharacterAward[]>([]);
   const characterStatsRef = useRef<CharacterStats[]>([]);
 
@@ -156,6 +164,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
   useEffect(() => { currentViewIndexRef.current = currentViewIndex; }, [currentViewIndex]);
   useEffect(() => { eventsRef.current = events; }, [events]);
+  useEffect(() => { gameEventsRef.current = gameEvents; }, [gameEvents]);
   useEffect(() => { awardsRef.current = awards; }, [awards]);
   useEffect(() => { characterStatsRef.current = characterStats; }, [characterStats]);
 
@@ -232,6 +241,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       setCurrentViewIndex(state.currentViewIndex);
     }
     setEvents(state.events || []);
+    setGameEvents([]); // Reset game events - they're generated per turn
     setAwards(state.awards || []);
     setCharacterStats(state.characterStats || []);
     setTimeRemaining(TURN_DURATION_MS);
@@ -327,8 +337,12 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       }
       setViewerCount(provider.viewerCount || 1);
 
-      if (initialState) {
-        // Load state from database
+      // Check if initialState is valid (has agents)
+      const hasValidInitialState = initialState && initialState.agents && initialState.agents.length > 0;
+
+      if (hasValidInitialState) {
+        // Load valid state from database
+        console.log('[Civilization] Loading valid initial state from database, agents:', initialState.agents.length);
         applyFullState(initialState);
       } else {
         // No existing session in database
@@ -372,8 +386,8 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
           console.log('[Civilization] We are follower, waiting for state from leader...');
           const { loadCivilizationSession, claimLeadership, saveCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
 
-          // Try loading from database a few times, then take over if no leader exists
-          const INITIAL_ATTEMPTS = 5; // 5 attempts * 2s = 10s initial wait
+          // Try loading from database a few times - faster iterations
+          const INITIAL_ATTEMPTS = 3; // 3 attempts * 1s = 3s initial wait
           let foundState = false;
 
           for (let attempt = 1; attempt <= INITIAL_ATTEMPTS; attempt++) {
@@ -393,87 +407,34 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
               foundState = true;
               break;
             } else {
-              console.log('[Civilization] No valid state in database yet, retrying in 2s...');
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log('[Civilization] No valid state in database yet, retrying in 1s...');
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
 
-          // If still no state after initial attempts, try to become leader
+          // If still no state after initial attempts, use fallback immediately
+          // This prevents the second viewer from getting stuck
           if (!foundState && agentsRef.current.length === 0) {
-            console.log('[Civilization] No state found after waiting, attempting to claim leadership...');
+            console.log('[Civilization] No state found, initializing fresh as fallback (will sync on next turn)');
 
-            // Try to claim leadership (will succeed if no active leader)
-            const claimed = await claimLeadership(provider.viewerId, 15000);
+            // Initialize fresh state for display
+            // This viewer will sync with leader on next turn update
+            const freshAgents = initializeAgents();
+            const rankedAgents = updateRankings(freshAgents);
+            setAgents(rankedAgents);
+            setCurrentTurn(0);
+            setCurrentViewIndex(0);
+            setTurnPhase('idle');
+            setTimeRemaining(TURN_DURATION_MS);
+            setProcessingProgress(0);
+            setEvents([]);
+            setGameEvents([]);
+            setAwards([]);
+            setCharacterStats([]);
 
-            if (claimed) {
-              console.log('[Civilization] Claimed leadership, initializing fresh state');
-              setIsLeader(true);
-              isLeaderRef.current = true;
-
-              const freshAgents = initializeAgents();
-              const rankedAgents = updateRankings(freshAgents);
-              setAgents(rankedAgents);
-              setCurrentTurn(0);
-              setCurrentViewIndex(0);
-              setTurnPhase('idle');
-              setTimeRemaining(TURN_DURATION_MS);
-              setProcessingProgress(0);
-              setEvents([]);
-              setAwards([]);
-              setCharacterStats([]);
-
-              // Save initial state to database
-              const initialSessionState: CivilizationSessionState = {
-                agents: rankedAgents,
-                currentTurn: 0,
-                turnPhase: 'idle',
-                currentViewIndex: 0,
-                events: [],
-                awards: [],
-                characterStats: [],
-                stats: calculateStats(rankedAgents),
-              };
-              await saveCivilizationSession(initialSessionState, provider.viewerId);
-              console.log('[Civilization] Saved initial state as new leader');
-
-              // Notify the sync provider that we're now leader
-              if (syncProviderRef.current) {
-                (syncProviderRef.current as unknown as { isLeader: boolean }).isLeader = true;
-              }
-            } else {
-              console.log('[Civilization] Could not claim leadership, another leader exists. Keep waiting...');
-              // Another leader exists but hasn't saved state yet, keep waiting
-              for (let attempt = 1; attempt <= 10; attempt++) {
-                if (agentsRef.current.length > 0) break;
-
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                const dbState = await loadCivilizationSession();
-                if (dbState?.state && dbState.state.agents && dbState.state.agents.length > 0) {
-                  console.log('[Civilization] Finally loaded state from database');
-                  applyFullState(dbState.state);
-                  break;
-                }
-              }
-
-              // FINAL FALLBACK: If still no state after all waiting, initialize fresh
-              // This prevents infinite loading. The next turn update will sync us.
-              if (agentsRef.current.length === 0) {
-                console.log('[Civilization] FALLBACK: All loading attempts failed, initializing fresh to show UI');
-                const freshAgents = initializeAgents();
-                const rankedAgents = updateRankings(freshAgents);
-                setAgents(rankedAgents);
-                setCurrentTurn(0);
-                setCurrentViewIndex(0);
-                setTurnPhase('idle');
-                setTimeRemaining(TURN_DURATION_MS);
-                setProcessingProgress(0);
-                setEvents([]);
-                setAwards([]);
-                setCharacterStats([]);
-                // Note: Don't save to DB - we're not the leader
-                // The next turn update from leader will trigger a DB reload and sync us
-              }
-            }
+            // Don't save to DB - we're not the leader
+            // The next turn update from leader will trigger a DB reload and sync us
+            console.log('[Civilization] Fallback initialization complete - will sync on next turn');
           }
         }
       }
@@ -521,11 +482,17 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
         },
       });
 
-      // Update rankings
-      const rankedAgents = updateRankings(updatedAgents);
-
-      // Generate events by comparing old and new state
+      // Generate random game events (disasters, booms, etc.)
       const newTurn = currentTurn + 1;
+      const newGameEvents = generateGameEvents(updatedAgents, newTurn);
+
+      // Apply game event effects to agents
+      const agentsAfterEvents = applyEventEffects(updatedAgents, newGameEvents);
+
+      // Update rankings
+      const rankedAgents = updateRankings(agentsAfterEvents);
+
+      // Generate civilization events by comparing old and new state
       const newEvents = generateEvents(previousAgentsRef.current, rankedAgents, newTurn);
 
       // Calculate awards and character stats
@@ -546,6 +513,12 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       if (newEvents.length > 0) {
         setEvents(mergedEvents);
       }
+
+      // Update game events (keep last 10)
+      if (newGameEvents.length > 0) {
+        setGameEvents(prev => [...newGameEvents, ...prev].slice(0, 10));
+      }
+
       setAwards(newAwards);
       setCharacterStats(newCharacterStats);
 
@@ -724,6 +697,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     isConnected,
     viewerCount,
     events,
+    gameEvents,
     awards,
     characterStats,
     currentAgent,

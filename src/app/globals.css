@@ -153,6 +153,18 @@
   animation: slideInRight 0.5s ease-out;
 }
 
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
 .animate-blueShimmer {
   background: linear-gradient(90deg, 
     hsl(210 60% 60%) 0%, 

@@ -8,9 +8,10 @@
  * - Main map view in center
  * - Leader panels at bottom (top 2 cities)
  * - Sidebar with rankings
+ * - New: Human chat, commentator, live graphs, mini map, eras
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useAgentCivilization } from '@/context/AgentCivilizationContext';
 import { CityViewer } from './CityViewer';
 import { EventFeed } from './EventFeed';
@@ -19,6 +20,12 @@ import { LeaderPanel } from './LeaderPanel';
 import { CityInfoBar } from './CityInfoBar';
 import { GameSidebar } from './GameSidebar';
 import { TurnChat } from './TurnChat';
+import { HumanChat } from './HumanChat';
+import { Commentator } from './Commentator';
+import { LiveGraph } from './LiveGraph';
+import { MiniWorldMap } from './MiniWorldMap';
+import { EraIndicator } from './EraIndicator';
+import { GameEventsDisplay } from './GameEventsDisplay';
 
 interface AgentCivilizationGameProps {
   onExit: () => void;
@@ -30,8 +37,6 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
     currentTurn,
     currentViewIndex,
     turnPhase,
-    autoAdvance,
-    autoCycleCamera,
     timeRemaining,
     processingProgress,
     speedMultiplier,
@@ -39,16 +44,13 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
     isConnected,
     viewerCount,
     events,
+    gameEvents,
     awards,
     characterStats,
     currentAgent,
     topAgents,
     stats,
     initialize,
-    advanceTurn,
-    setViewIndex,
-    setAutoAdvance,
-    setAutoCycleCamera,
     setSpeedMultiplier,
     nextCity,
     prevCity,
@@ -93,20 +95,44 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
         turnPhase={turnPhase}
         timeRemaining={timeRemaining}
         processingProgress={processingProgress}
-        autoAdvance={autoAdvance}
         speedMultiplier={speedMultiplier}
         stats={stats}
         isLeader={isLeader}
         isConnected={isConnected}
         viewerCount={viewerCount}
-        onToggleAutoAdvance={() => setAutoAdvance(!autoAdvance)}
-        onAdvanceTurn={advanceTurn}
         onSpeedChange={setSpeedMultiplier}
         onExit={onExit}
       />
 
       {/* Main content area */}
       <div className="flex-1 flex min-h-0">
+        {/* Left sidebar - Mini map, Era, Graph */}
+        <div className="w-56 p-2 flex flex-col gap-2 overflow-y-auto">
+          {/* Mini World Map */}
+          <MiniWorldMap
+            agents={agents}
+            currentViewIndex={currentViewIndex}
+            topAgentId={topLeader?.agentId || null}
+            onCityClick={goToCity}
+          />
+
+          {/* Era Indicator */}
+          <EraIndicator currentTurn={currentTurn} />
+
+          {/* Live Population Graph */}
+          <LiveGraph
+            agents={agents}
+            topAgents={topAgents}
+            currentTurn={currentTurn}
+          />
+
+          {/* Game Events (disasters, booms, etc.) */}
+          <GameEventsDisplay
+            events={gameEvents}
+            onEventClick={goToCity}
+          />
+        </div>
+
         {/* City view with overlays */}
         <div className="flex-1 relative overflow-hidden">
           {/* Grid renderer */}
@@ -127,8 +153,19 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
             <EventFeed events={events} onEventClick={goToCity} />
           </div>
 
-          {/* Turn Chat - right side overlay */}
-          <div className="absolute top-4 right-72 mr-4">
+          {/* Commentator - top center */}
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 max-w-lg">
+            <Commentator
+              agents={agents}
+              topAgents={topAgents}
+              events={events}
+              gameEvents={gameEvents}
+              currentTurn={currentTurn}
+            />
+          </div>
+
+          {/* Turn Chat - right side overlay (moved left to make room for human chat) */}
+          <div className="absolute top-4 right-80 mr-4">
             <TurnChat
               agents={agents}
               currentTurn={currentTurn}
@@ -156,10 +193,8 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
                   currentAgent={currentAgent}
                   currentIndex={currentViewIndex}
                   totalCities={agents.length}
-                  autoCycle={autoCycleCamera}
                   onPrev={prevCity}
                   onNext={nextCity}
-                  onToggleAutoCycle={() => setAutoCycleCamera(!autoCycleCamera)}
                 />
               </div>
 
@@ -190,14 +225,23 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
           </div>
         </div>
 
-        {/* Right Sidebar */}
-        <GameSidebar
-          topAgents={topAgents}
-          awards={awards}
-          characterStats={characterStats}
-          currentViewIndex={currentViewIndex}
-          onSelectAgent={goToCity}
-        />
+        {/* Right Sidebar - Rankings + Human Chat */}
+        <div className="w-72 flex flex-col">
+          {/* Game Sidebar (Top Cities, Awards, Character Types) */}
+          <GameSidebar
+            topAgents={topAgents}
+            awards={awards}
+            characterStats={characterStats}
+            currentViewIndex={currentViewIndex}
+            onSelectAgent={goToCity}
+            className="flex-1"
+          />
+
+          {/* Human Chat - bottom of right sidebar */}
+          <div className="p-2 border-t border-cyan-900/50">
+            <HumanChat className="h-64" />
+          </div>
+        </div>
       </div>
     </div>
   );
