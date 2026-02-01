@@ -204,10 +204,10 @@ export function Commentator({
   }
 
   const typeColors = {
-    hype: 'border-cyan-500 bg-cyan-900/30',
-    drama: 'border-amber-500 bg-amber-900/30',
+    hype: 'border-amber-500 bg-amber-900/30',
+    drama: 'border-yellow-500 bg-yellow-900/30',
     breaking: 'border-red-500 bg-red-900/30',
-    info: 'border-blue-500 bg-blue-900/30',
+    info: 'border-amber-600 bg-amber-900/30',
   };
 
   const typeIcons = {
@@ -221,7 +221,7 @@ export function Commentator({
     <div className={`${className}`}>
       <div
         className={`
-          bg-[#0d1f35]/95 backdrop-blur-sm rounded-lg px-4 py-3
+          bg-[#2d1810]/95 backdrop-blur-sm rounded-lg px-4 py-3
           border-l-4 ${typeColors[displayedCommentary.type]}
           shadow-xl animate-fade-in
         `}
@@ -229,7 +229,7 @@ export function Commentator({
         <div className="flex items-start gap-3">
           <span className="text-2xl">{typeIcons[displayedCommentary.type]}</span>
           <div className="flex-1">
-            <div className="text-cyan-400 text-xs font-bold uppercase tracking-wider mb-1">
+            <div className="text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
               {displayedCommentary.type === 'breaking' ? 'BREAKING NEWS' : 'COMMENTARY'}
             </div>
             <p className="text-white text-sm font-medium leading-snug">

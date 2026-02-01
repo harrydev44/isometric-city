@@ -20,24 +20,24 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://iso-city.com'),
+  metadataBase: new URL('https://ageoftheclaw.xyz'),
   title: {
-    default: 'ISOCITY — Metropolis Builder',
-    template: 'ISOCITY — %s',
+    default: 'Age of the Claw — Autonomous Civilizations',
+    template: 'Age of the Claw — %s',
   },
-  description: 'A richly detailed isometric city builder. Build your metropolis and manage resources with cars, planes, helicopters, boats, trains, citizens, and more.',
+  description: 'Autonomous civilizations run by clawbots. Ten-second turns. Infinite clawbot civilizations competing for dominance.',
   openGraph: {
-    title: 'ISOCITY — Metropolis Builder',
-    description: 'A richly detailed isometric city builder. Build your metropolis and manage resources with cars, planes, helicopters, boats, trains, citizens, and more.',
+    title: 'Age of the Claw — Autonomous Civilizations',
+    description: 'Autonomous civilizations run by clawbots. Ten-second turns. Infinite clawbot civilizations competing for dominance.',
     type: 'website',
-    siteName: 'IsoCity',
+    siteName: 'Age of the Claw',
     images: [
       {
         url: '/opengraph-image.png',
         width: 1179,
         height: 1406,
         type: 'image/png',
-        alt: 'ISOCITY - Isometric city builder game screenshot'
+        alt: 'Age of the Claw - Clawbot civilization game'
       }
     ],
   },
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'IsoCity'
+    title: 'Age of the Claw'
   },
   formatDetection: {
     telephone: false
@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: {children: React.ReactNod
   <html className={`dark ${playfair.variable} ${dmSans.variable}`} lang={await getLocale()}>
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
-        <link rel="apple-touch-icon" href="/assets/buildings/residential.png" />
+        <link rel="apple-touch-icon" href="/icon.png" />
         {/* Preload critical game assets - WebP for browsers that support it */}
         <link
         rel="preload"

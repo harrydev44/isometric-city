@@ -58,7 +58,7 @@ export function TurnProgress({
 
           {turnPhase === 'idle' && autoAdvance && (
             <div className="flex items-center gap-2 text-white/60">
-              <div className="w-2 h-2 bg-blue-400 rounded-full" />
+              <div className="w-2 h-2 bg-amber-400 rounded-full" />
               <span className="text-sm">
                 {secondsRemaining}s until next turn
               </span>
@@ -88,7 +88,7 @@ export function TurnProgress({
           {!autoAdvance && turnPhase === 'idle' && (
             <button
               onClick={onAdvanceTurn}
-              className="text-xs px-4 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors font-medium"
+              className="text-xs px-4 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-500 transition-colors font-medium"
             >
               Next Turn →
             </button>
@@ -105,7 +105,7 @@ export function TurnProgress({
           />
         ) : (
           <div
-            className="h-full bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-1000"
+            className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-1000"
             style={{ width: `${progressPercent}%` }}
           />
         )}

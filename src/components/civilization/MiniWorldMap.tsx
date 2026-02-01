@@ -65,16 +65,16 @@ export function MiniWorldMap({
   const currentAgent = agents[currentViewIndex];
 
   return (
-    <div className={`bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg overflow-hidden ${className}`}>
+    <div className={`bg-[#2d1810]/95 backdrop-blur-sm border-2 border-amber-500/70 rounded-lg overflow-hidden ${className}`}>
       {/* Header */}
-      <div className="bg-cyan-900/60 border-b border-cyan-500/50 px-2 py-1.5 flex items-center gap-2">
-        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
-        <span className="text-cyan-300 font-bold text-[10px] tracking-wide">WORLD MAP</span>
-        <span className="text-cyan-600 text-[10px] ml-auto">{agents.length} cities</span>
+      <div className="bg-amber-900/60 border-b border-amber-500/50 px-2 py-1.5 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-amber-400 rounded-sm" />
+        <span className="text-amber-300 font-bold text-[10px] tracking-wide">WORLD MAP</span>
+        <span className="text-amber-600 text-[10px] ml-auto">{agents.length} cities</span>
       </div>
 
       {/* Map */}
-      <div className="relative w-full aspect-[2/1] bg-[#0a1628]">
+      <div className="relative w-full aspect-[2/1] bg-[#1a0f0a]">
         <svg
           className="w-full h-full"
           viewBox="0 0 100 50"
@@ -112,7 +112,7 @@ export function MiniWorldMap({
                     cy={pos.y}
                     r={sizeBase + 1.5}
                     fill="none"
-                    stroke={isCurrentCity ? '#00CED1' : '#eab308'}
+                    stroke={isCurrentCity ? '#D4AF37' : '#eab308'}
                     strokeWidth="0.5"
                     opacity="0.8"
                     className={isCurrentCity ? 'animate-pulse' : ''}
@@ -136,22 +136,22 @@ export function MiniWorldMap({
 
         {/* Current city label */}
         {currentAgent && (
-          <div className="absolute bottom-1 left-1 bg-[#0a1628]/90 border border-cyan-700/50 rounded px-1.5 py-0.5">
+          <div className="absolute bottom-1 left-1 bg-[#1a0f0a]/90 border border-amber-700/50 rounded px-1.5 py-0.5">
             <div className="text-[9px] text-white font-medium flex items-center gap-1">
               <span>{CHARACTER_INFO[currentAgent.personality.character].emoji}</span>
               <span className="truncate max-w-[60px]">{currentAgent.name}</span>
-              <span className="text-cyan-500">#{currentAgent.rank}</span>
+              <span className="text-amber-500">#{currentAgent.rank}</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Legend */}
-      <div className="px-2 py-1.5 border-t border-cyan-900/50 flex flex-wrap gap-x-2 gap-y-0.5">
+      <div className="px-2 py-1.5 border-t border-amber-900/50 flex flex-wrap gap-x-2 gap-y-0.5">
         {Object.entries(CHARACTER_COLORS).map(([character, color]) => (
           <div key={character} className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-[8px] text-cyan-600 capitalize">{character.slice(0, 3)}</span>
+            <span className="text-[8px] text-amber-600 capitalize">{character.slice(0, 3)}</span>
           </div>
         ))}
       </div>

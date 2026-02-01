@@ -13,9 +13,9 @@ import { ZoneType } from '@/games/isocity/types/zones';
 export const CIVILIZATION_CONSTANTS = {
   AGENT_COUNT: 200,
   GRID_SIZE: 30,
-  TURN_DURATION_MS: 20000, // 20 seconds per turn
+  TURN_DURATION_MS: 10000, // 10 seconds per turn - fast paced!
   TICKS_PER_TURN: 5, // Simulation ticks per turn (slow growth)
-  CAMERA_CYCLE_MS: 2500, // 2.5 seconds per city view (faster!)
+  CAMERA_CYCLE_MS: 2000, // 2 seconds per city view
   AGENTS_PER_BATCH: 20, // Process 20 agents at a time
   BATCH_DELAY_MS: 50, // Yield between batches
   STARTING_MONEY: 10000,

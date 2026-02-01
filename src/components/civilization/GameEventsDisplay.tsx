@@ -15,7 +15,7 @@ interface GameEventsDisplayProps {
 }
 
 const SEVERITY_COLORS = {
-  minor: 'border-blue-500 bg-blue-900/20',
+  minor: 'border-amber-400 bg-amber-900/20',
   moderate: 'border-amber-500 bg-amber-900/20',
   major: 'border-orange-500 bg-orange-900/20',
   catastrophic: 'border-red-500 bg-red-900/20',
@@ -45,9 +45,9 @@ export function GameEventsDisplay({ events, onEventClick, className = '' }: Game
           key={event.id}
           onClick={() => event.affectedCityIds[0] !== undefined && onEventClick?.(event.affectedCityIds[0])}
           className={`
-            bg-[#0d1f35]/90 backdrop-blur-sm rounded px-3 py-2
+            bg-[#2d1810]/90 backdrop-blur-sm rounded px-3 py-2
             border-l-4 ${SEVERITY_COLORS[event.severity]}
-            cursor-pointer hover:bg-cyan-900/30 transition-colors
+            cursor-pointer hover:bg-amber-900/30 transition-colors
             animate-slide-in-right
           `}
         >
@@ -55,9 +55,9 @@ export function GameEventsDisplay({ events, onEventClick, className = '' }: Game
             <span className="text-lg">{event.emoji || TYPE_ICONS[event.type]}</span>
             <div className="flex-1 min-w-0">
               <div className="text-white text-xs font-bold">{event.name}</div>
-              <div className="text-cyan-400/70 text-[10px] truncate">{event.description}</div>
+              <div className="text-amber-400/70 text-[10px] truncate">{event.description}</div>
             </div>
-            <span className="text-cyan-600 text-[9px]">T{event.turn}</span>
+            <span className="text-amber-600 text-[9px]">T{event.turn}</span>
           </div>
         </div>
       ))}

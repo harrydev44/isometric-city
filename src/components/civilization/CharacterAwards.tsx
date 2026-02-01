@@ -2,7 +2,7 @@
 
 /**
  * Character Awards - Shows category leaders
- * Grid layout with cyan headers
+ * Grid layout with amber/gold headers
  */
 
 import React from 'react';
@@ -19,9 +19,9 @@ export function CharacterAwards({ awards, onAwardClick }: CharacterAwardsProps) 
   }
 
   return (
-    <div className="bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 text-white shadow-2xl">
-      <h3 className="text-sm font-bold mb-2 text-cyan-400 flex items-center gap-2">
-        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+    <div className="bg-[#2d1810]/95 backdrop-blur-sm border-2 border-amber-500/70 rounded-lg p-3 text-white shadow-2xl">
+      <h3 className="text-sm font-bold mb-2 text-amber-400 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-amber-400 rounded-sm" />
         Awards
       </h3>
 
@@ -30,8 +30,8 @@ export function CharacterAwards({ awards, onAwardClick }: CharacterAwardsProps) 
           <button
             key={award.id}
             onClick={() => award.winnerId !== null && onAwardClick?.(award.winnerId)}
-            className="bg-[#0a1628] border border-cyan-900/50 p-2 rounded text-left
-                       hover:bg-cyan-900/30 hover:border-cyan-600/50 transition-colors"
+            className="bg-[#1a0f0a] border border-amber-900/50 p-2 rounded text-left
+                       hover:bg-amber-900/30 hover:border-amber-600/50 transition-colors"
           >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{award.emoji}</span>
@@ -39,7 +39,7 @@ export function CharacterAwards({ awards, onAwardClick }: CharacterAwardsProps) 
                 {award.name}
               </span>
             </div>
-            <div className="text-[10px] text-cyan-500/70 truncate">
+            <div className="text-[10px] text-amber-500/70 truncate">
               {award.winnerName} ({award.value.toLocaleString()})
             </div>
           </button>

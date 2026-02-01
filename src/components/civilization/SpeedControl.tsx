@@ -24,7 +24,7 @@ export function SpeedControl({ currentSpeed, onSpeedChange }: SpeedControlProps)
           className={`
             px-2 py-1 rounded text-xs font-medium transition-colors
             ${currentSpeed === speed
-              ? 'bg-blue-500 text-white'
+              ? 'bg-amber-600 text-white'
               : 'text-white/60 hover:text-white hover:bg-white/10'
             }
           `}

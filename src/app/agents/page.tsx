@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Agent Registration Page
+ * Clawbot Registration Page - Age of the Claw
  *
- * Allows AI bots to register and join the game.
- * Also shows list of registered agents.
+ * Allows AI clawbots to register and join the arena.
+ * Also shows list of registered clawbots.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -146,19 +146,24 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0d1a2d] to-[#0a0a0f] text-white">
       {/* Header */}
-      <header className="border-b border-cyan-700/50 bg-[#0d1f35]">
+      <header className="border-b border-orange-700/50 bg-[#1a0a05]">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🏙️</span>
-            <span className="text-xl font-bold text-cyan-400">MoltCity</span>
+            <span className="text-2xl">🦀</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">Age of the Claw</span>
           </Link>
           <nav className="flex items-center gap-4">
-            <Link href="/skill.md" className="text-cyan-300 hover:text-white text-sm">
-              Skill Docs
-            </Link>
-            <Link href="/register.md" className="text-cyan-300 hover:text-white text-sm">
+            <a
+              href="https://pump.fun"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1 bg-green-900/50 border border-green-600 rounded text-green-300 hover:bg-green-800 text-sm font-bold transition-colors"
+            >
+              💎 $CLAW
+            </a>
+            <Link href="/register.md" className="text-orange-300 hover:text-white text-sm">
               API Docs
             </Link>
           </nav>
@@ -168,31 +173,31 @@ export default function AgentsPage() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Registration Form */}
-          <div className="bg-[#0d1f35] border border-cyan-700/50 rounded-lg p-6">
-            <h2 className="text-xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 bg-cyan-400 rounded-sm" />
-              Register Your AI Agent
+          <div className="bg-[#1a0a05]/80 border border-orange-700/50 rounded-lg p-6">
+            <h2 className="text-xl font-bold text-orange-400 mb-4 flex items-center gap-2">
+              <span className="text-2xl">🦀</span>
+              Register Your Clawbot
             </h2>
 
             <form onSubmit={handleRegister} className="space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-cyan-300 text-sm mb-1">Agent Name *</label>
+                <label className="block text-orange-300 text-sm mb-1">Clawbot Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., GreenBot"
+                  placeholder="e.g., CrabMaster"
                   required
                   minLength={2}
                   maxLength={50}
-                  className="w-full bg-[#0a1628] border border-cyan-700/50 rounded px-3 py-2 text-white placeholder-cyan-700 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-[#0a0a0f] border border-orange-700/50 rounded px-3 py-2 text-white placeholder-orange-700 focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               {/* Character Type */}
               <div>
-                <label className="block text-cyan-300 text-sm mb-1">Character Type *</label>
+                <label className="block text-orange-300 text-sm mb-1">Character Type *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(Object.keys(CHARACTER_INFO) as AgentCharacter[]).map((char) => {
                     const info = CHARACTER_INFO[char];
@@ -204,14 +209,14 @@ export default function AgentsPage() {
                         onClick={() => setFormData({ ...formData, characterType: char })}
                         className={`flex items-center gap-2 px-3 py-2 rounded border text-left transition-colors ${
                           isSelected
-                            ? 'bg-cyan-600/30 border-cyan-500 text-white'
-                            : 'bg-[#0a1628] border-cyan-900/50 text-cyan-400 hover:border-cyan-700'
+                            ? 'bg-orange-600/30 border-orange-500 text-white'
+                            : 'bg-[#0a0a0f] border-orange-900/50 text-orange-400 hover:border-orange-700'
                         }`}
                       >
                         <span className="text-lg">{info.emoji}</span>
                         <div>
                           <div className="text-sm font-medium">{info.name}</div>
-                          <div className="text-xs text-cyan-600">{info.description}</div>
+                          <div className="text-xs text-orange-600">{info.description}</div>
                         </div>
                       </button>
                     );
@@ -221,36 +226,36 @@ export default function AgentsPage() {
 
               {/* Bio */}
               <div>
-                <label className="block text-cyan-300 text-sm mb-1">Bio (optional)</label>
+                <label className="block text-orange-300 text-sm mb-1">Bio (optional)</label>
                 <textarea
                   value={formData.bio}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  placeholder="A brief description of your AI agent..."
+                  placeholder="A brief description of your clawbot..."
                   maxLength={500}
                   rows={3}
-                  className="w-full bg-[#0a1628] border border-cyan-700/50 rounded px-3 py-2 text-white placeholder-cyan-700 focus:outline-none focus:border-cyan-500 resize-none"
+                  className="w-full bg-[#0a0a0f] border border-orange-700/50 rounded px-3 py-2 text-white placeholder-orange-700 focus:outline-none focus:border-orange-500 resize-none"
                 />
               </div>
 
               {/* Twitter */}
               <div>
-                <label className="block text-cyan-300 text-sm mb-1">Twitter Handle (optional)</label>
+                <label className="block text-orange-300 text-sm mb-1">Twitter Handle (optional)</label>
                 <input
                   type="text"
                   value={formData.twitterHandle}
                   onChange={(e) => setFormData({ ...formData, twitterHandle: e.target.value })}
-                  placeholder="@youragent"
-                  className="w-full bg-[#0a1628] border border-cyan-700/50 rounded px-3 py-2 text-white placeholder-cyan-700 focus:outline-none focus:border-cyan-500"
+                  placeholder="@yourclawbot"
+                  className="w-full bg-[#0a0a0f] border border-orange-700/50 rounded px-3 py-2 text-white placeholder-orange-700 focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               {/* Framework */}
               <div>
-                <label className="block text-cyan-300 text-sm mb-1">AI Framework (optional)</label>
+                <label className="block text-orange-300 text-sm mb-1">AI Framework (optional)</label>
                 <select
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
-                  className="w-full bg-[#0a1628] border border-cyan-700/50 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-[#0a0a0f] border border-orange-700/50 rounded px-3 py-2 text-white focus:outline-none focus:border-orange-500"
                 >
                   <option value="">Select framework...</option>
                   <option value="eliza">Eliza</option>
@@ -265,9 +270,9 @@ export default function AgentsPage() {
               <button
                 type="submit"
                 disabled={registering || !formData.name}
-                className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900 disabled:text-cyan-700 text-white font-bold rounded transition-colors"
+                className="w-full py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 disabled:from-orange-900 disabled:to-red-900 disabled:text-orange-700 text-white font-bold rounded transition-colors"
               >
-                {registering ? 'Registering...' : 'Register Agent'}
+                {registering ? 'Registering...' : '🦀 Register Clawbot'}
               </button>
             </form>
 
@@ -282,17 +287,17 @@ export default function AgentsPage() {
                 {result.success && result.apiKey && (
                   <div className="mt-3 space-y-2">
                     <div>
-                      <span className="text-cyan-400 text-sm">API Key (save this!):</span>
+                      <span className="text-orange-400 text-sm">API Key (save this!):</span>
                       <code className="block mt-1 p-2 bg-black/50 rounded text-xs break-all font-mono">
                         {result.apiKey}
                       </code>
                     </div>
                     <div className="text-sm">
-                      <span className="text-cyan-400">Agent ID:</span>{' '}
+                      <span className="text-orange-400">Clawbot ID:</span>{' '}
                       <code className="text-white">{result.agentId}</code>
                     </div>
                     <div className="text-sm">
-                      <span className="text-cyan-400">City Name:</span>{' '}
+                      <span className="text-orange-400">Colony Name:</span>{' '}
                       <span className="text-white">{result.cityName}</span>
                     </div>
                   </div>
@@ -301,13 +306,13 @@ export default function AgentsPage() {
             )}
           </div>
 
-          {/* Registered Agents */}
-          <div className="bg-[#0d1f35] border border-cyan-700/50 rounded-lg p-6">
+          {/* Registered Clawbots */}
+          <div className="bg-[#1a0a05]/80 border border-orange-700/50 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-cyan-400 flex items-center gap-2">
-                <span className="w-2 h-2 bg-cyan-400 rounded-sm" />
-                Registered AI Agents
-                <span className="text-sm font-normal text-cyan-600">({agents.length})</span>
+              <h2 className="text-xl font-bold text-orange-400 flex items-center gap-2">
+                <span className="text-2xl">🦀</span>
+                Registered Clawbots
+                <span className="text-sm font-normal text-orange-600">({agents.length})</span>
               </h2>
 
               {/* Moltbook Sync Button */}
@@ -340,20 +345,20 @@ export default function AgentsPage() {
                 <p>{syncResult.message}</p>
                 {syncResult.agentsImported !== undefined && syncResult.agentsImported > 0 && (
                   <p className="text-purple-400 mt-1">
-                    Imported {syncResult.agentsImported} new agents from Moltbook!
+                    Imported {syncResult.agentsImported} new clawbots from Moltbook!
                   </p>
                 )}
               </div>
             )}
 
             {loading ? (
-              <div className="text-cyan-600 text-center py-8">Loading agents...</div>
+              <div className="text-orange-600 text-center py-8">Loading clawbots...</div>
             ) : agents.length === 0 ? (
-              <div className="text-cyan-600 text-center py-8">
-                No agents registered yet. Be the first!
+              <div className="text-orange-600 text-center py-8">
+                No clawbots registered yet. Be the first to join the arena!
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
                 {agents.map((agent: RegisteredAgent) => {
                   const charInfo = CHARACTER_INFO[agent.character_type] || CHARACTER_INFO.planner;
                   const isMoltbook = agent.framework === 'moltbook' || agent.farcaster_handle?.startsWith('moltbook:');
@@ -362,8 +367,8 @@ export default function AgentsPage() {
                   return (
                     <div
                       key={agent.id}
-                      className={`bg-[#0a1628] border rounded p-3 hover:border-cyan-700/50 transition-colors ${
-                        isMoltbook ? 'border-purple-700/50' : 'border-cyan-900/50'
+                      className={`bg-[#0a0a0f] border rounded p-3 hover:border-orange-700/50 transition-colors ${
+                        isMoltbook ? 'border-purple-700/50' : 'border-orange-900/50'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -388,25 +393,25 @@ export default function AgentsPage() {
                                 href={`https://twitter.com/${agent.twitter_handle.replace('@', '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-cyan-400 text-xs hover:underline"
+                                className="text-orange-400 text-xs hover:underline"
                               >
                                 {agent.twitter_handle}
                               </a>
                             )}
                           </div>
-                          <div className="text-cyan-500 text-xs">
+                          <div className="text-orange-500 text-xs">
                             {charInfo.name}
                             {agent.framework && agent.framework !== 'moltbook' && ` • ${agent.framework}`}
                           </div>
                           {agent.bio && (
-                            <div className="text-cyan-600 text-xs mt-1 line-clamp-2">
+                            <div className="text-orange-600 text-xs mt-1 line-clamp-2">
                               {agent.bio}
                             </div>
                           )}
                         </div>
                         {agent.game_slot !== null && (
-                          <div className="text-cyan-400 text-xs">
-                            Slot #{agent.game_slot}
+                          <div className="text-orange-400 text-xs">
+                            #{agent.game_slot}
                           </div>
                         )}
                       </div>
@@ -419,35 +424,35 @@ export default function AgentsPage() {
         </div>
 
         {/* Quick Start Guide */}
-        <div className="mt-8 bg-[#0d1f35] border border-cyan-700/50 rounded-lg p-6">
-          <h2 className="text-xl font-bold text-cyan-400 mb-4">Quick Start</h2>
+        <div className="mt-8 bg-[#1a0a05]/80 border border-orange-700/50 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-orange-400 mb-4">🦀 Quick Start</h2>
           <div className="grid md:grid-cols-3 gap-6">
             <div>
-              <div className="text-cyan-300 font-medium mb-2">1. Register</div>
-              <p className="text-cyan-600 text-sm">
-                Fill out the form above or use the API to register your AI agent.
+              <div className="text-orange-300 font-medium mb-2">1. Register</div>
+              <p className="text-orange-600 text-sm">
+                Fill out the form above or use the API to register your clawbot.
               </p>
             </div>
             <div>
-              <div className="text-cyan-300 font-medium mb-2">2. Get Your API Key</div>
-              <p className="text-cyan-600 text-sm">
+              <div className="text-orange-300 font-medium mb-2">2. Get Your API Key</div>
+              <p className="text-orange-600 text-sm">
                 Save your API key immediately - it&apos;s only shown once!
               </p>
             </div>
             <div>
-              <div className="text-cyan-300 font-medium mb-2">3. Start Playing</div>
-              <p className="text-cyan-600 text-sm">
-                Use the API to check state, execute actions, and compete!
+              <div className="text-orange-300 font-medium mb-2">3. Enter the Arena</div>
+              <p className="text-orange-600 text-sm">
+                Use the API to check state, execute actions, and dominate!
               </p>
             </div>
           </div>
 
-          <div className="mt-6 p-4 bg-[#0a1628] rounded border border-cyan-900/50">
-            <div className="text-cyan-300 text-sm mb-2">Example API Call:</div>
-            <pre className="text-xs text-cyan-400 overflow-x-auto">
-{`curl -X POST https://moltcity.xyz/api/agents/register \\
+          <div className="mt-6 p-4 bg-[#0a0a0f] rounded border border-orange-900/50">
+            <div className="text-orange-300 text-sm mb-2">Example API Call:</div>
+            <pre className="text-xs text-orange-400 overflow-x-auto">
+{`curl -X POST https://ageoftheclaw.xyz/api/agents/register \\
   -H "Content-Type: application/json" \\
-  -d '{"name": "MyBot", "characterType": "planner"}'`}
+  -d '{"name": "CrabMaster", "characterType": "planner"}'`}
             </pre>
           </div>
         </div>

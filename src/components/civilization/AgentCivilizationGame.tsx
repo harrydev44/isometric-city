@@ -71,24 +71,39 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
     }
   }, [agents.length, initialize]);
 
-  // Loading state
+  // Loading state - Medieval/AoE style
   if (agents.length === 0) {
     return (
-      <div className="h-screen w-screen bg-[#0a1628] flex items-center justify-center">
+      <div
+        className="h-screen w-screen flex items-center justify-center"
+        style={{ background: 'radial-gradient(ellipse at center, #2d1810 0%, #1a0f0a 50%, #0d0705 100%)' }}
+      >
         <div className="text-center">
-          <div className="text-cyan-400 text-2xl font-bold mb-2">AI CIVILIZATION</div>
-          <div className="text-white text-lg mb-4">Initializing 200 AI Cities...</div>
-          <div className="w-64 h-3 bg-[#0d1f35] rounded-full overflow-hidden mx-auto border border-cyan-700">
-            <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 animate-pulse" style={{ width: '60%' }} />
+          <div className="text-5xl mb-4">🦀</div>
+          <div
+            className="text-3xl font-bold mb-2"
+            style={{ color: '#D4AF37', fontFamily: 'serif', textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
+          >
+            AGE OF THE CLAW
           </div>
-          <div className="text-cyan-700 text-sm mt-4">Preparing simulation...</div>
+          <div className="text-amber-200/80 text-lg mb-6 font-serif">Summoning 200 Clawbot Empires...</div>
+          <div className="w-72 h-4 bg-[#3D2512] rounded overflow-hidden mx-auto border-2 border-amber-700/50">
+            <div
+              className="h-full animate-pulse"
+              style={{
+                width: '60%',
+                background: 'linear-gradient(90deg, #8B4513 0%, #D4AF37 50%, #FFD700 100%)',
+              }}
+            />
+          </div>
+          <div className="text-amber-600/60 text-sm mt-4 font-serif italic">Preparing the battlefield...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen bg-[#0a1628] flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: '#1a0f0a' }}>
       {/* Top Bar - Game controls */}
       <GameTopBar
         currentTurn={currentTurn}
@@ -238,7 +253,7 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
           />
 
           {/* Human Chat - bottom of right sidebar */}
-          <div className="p-2 border-t border-cyan-900/50">
+          <div className="p-2 border-t border-amber-900/50">
             <HumanChat className="h-64" />
           </div>
         </div>

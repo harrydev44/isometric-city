@@ -3,7 +3,7 @@
 /**
  * Leader Panel - Shows a city leader in strategy game style
  * Displays at bottom left/right like faction leaders
- * Cyan/teal theme with character color accents
+ * Medieval/AoE style with amber/gold theme
  */
 
 import React from 'react';
@@ -16,44 +16,36 @@ interface LeaderPanelProps {
   onClick?: () => void;
 }
 
-// Character-specific colors for the panel accent
-const CHARACTER_COLORS: Record<string, { border: string; text: string; glow: string }> = {
-  industrialist: { border: 'border-orange-500', text: 'text-orange-400', glow: 'shadow-orange-500/20' },
-  environmentalist: { border: 'border-green-500', text: 'text-green-400', glow: 'shadow-green-500/20' },
-  capitalist: { border: 'border-yellow-500', text: 'text-yellow-400', glow: 'shadow-yellow-500/20' },
-  expansionist: { border: 'border-blue-500', text: 'text-blue-400', glow: 'shadow-blue-500/20' },
-  planner: { border: 'border-purple-500', text: 'text-purple-400', glow: 'shadow-purple-500/20' },
-  gambler: { border: 'border-red-500', text: 'text-red-400', glow: 'shadow-red-500/20' },
-};
-
 export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderPanelProps) {
   const { name, rank, performance, personality, lastDecision } = agent;
   const characterInfo = CHARACTER_INFO[personality.character];
-  const colors = CHARACTER_COLORS[personality.character];
 
   const rankMedal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
-
-  // Use cyan border for current city, character color for leader
-  const borderColor = isViewing ? 'border-cyan-500' : colors.border;
-  const glowEffect = isViewing ? 'shadow-cyan-500/30' : colors.glow;
 
   return (
     <div
       onClick={onClick}
-      className={`
-        w-72 bg-[#0d1f35]/95 backdrop-blur-sm
-        border-2 ${borderColor} ${isViewing ? 'ring-1 ring-cyan-400/30' : ''}
-        rounded-t-lg shadow-2xl ${glowEffect} cursor-pointer
-        transition-all hover:scale-[1.02]
-        ${side === 'left' ? 'rounded-tr-none' : 'rounded-tl-none'}
-      `}
+      className="w-72 backdrop-blur-sm cursor-pointer transition-all hover:scale-[1.02]"
+      style={{
+        background: 'linear-gradient(180deg, #2d1810 0%, #1a0f0a 100%)',
+        border: isViewing ? '2px solid #D4AF37' : '2px solid rgba(212,175,55,0.4)',
+        borderRadius: side === 'left' ? '8px 0 8px 8px' : '0 8px 8px 8px',
+        boxShadow: isViewing ? '0 0 20px rgba(212,175,55,0.3)' : '0 4px 15px rgba(0,0,0,0.5)',
+      }}
     >
       {/* Rank badge */}
-      <div className={`
-        absolute -top-3 ${side === 'left' ? 'left-3' : 'right-3'}
-        bg-[#0a1628] border ${borderColor} rounded px-2 py-0.5
-        text-xs font-bold ${isViewing ? 'text-cyan-400' : colors.text}
-      `}>
+      <div
+        className="absolute -top-3 px-2 py-0.5 text-xs font-bold"
+        style={{
+          left: side === 'left' ? '12px' : 'auto',
+          right: side === 'right' ? '12px' : 'auto',
+          background: '#1a0f0a',
+          border: '1px solid rgba(212,175,55,0.5)',
+          borderRadius: '4px',
+          color: '#FFD700',
+          fontFamily: 'serif',
+        }}
+      >
         #{rank} {rankMedal}
       </div>
 
@@ -61,38 +53,49 @@ export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderP
       <div className="p-3 pt-4">
         {/* Character portrait area */}
         <div className="flex items-start gap-3">
-          {/* Large emoji as "portrait" - 64x64 */}
-          <div className={`
-            w-16 h-16 bg-[#0a1628] border-2 ${borderColor}
-            rounded flex items-center justify-center text-4xl
-            shadow-inner
-          `}>
+          {/* Large emoji as "portrait" */}
+          <div
+            className="w-16 h-16 rounded flex items-center justify-center text-4xl"
+            style={{
+              background: 'linear-gradient(180deg, #3D2512 0%, #2d1810 100%)',
+              border: '2px solid rgba(212,175,55,0.4)',
+            }}
+          >
             {characterInfo.emoji}
           </div>
 
           {/* Name and character type */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-white font-bold text-sm truncate">{name}</h3>
-            <div className="text-cyan-400 text-xs font-medium">
+            <h3 className="text-amber-100 font-bold text-sm truncate" style={{ fontFamily: 'serif' }}>{name}</h3>
+            <div className="text-xs font-medium" style={{ color: '#D4AF37' }}>
               {characterInfo.name}
             </div>
-            {/* Moltbook badge - prominent display */}
+            {/* Moltbook badge */}
             {agent.moltbookId && (
               <a
                 href={`https://www.moltbook.com/u/${encodeURIComponent(agent.moltbookId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-gradient-to-r from-purple-700/60 to-pink-700/60 border border-purple-400/60 rounded-full text-[10px] text-purple-100 hover:from-purple-600 hover:to-pink-600 transition-colors shadow-sm"
-                title="Verified Moltbook AI Agent - Click to view profile"
+                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] transition-colors"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(139,69,19,0.6) 0%, rgba(101,67,33,0.6) 100%)',
+                  border: '1px solid rgba(212,175,55,0.4)',
+                  color: '#D4AF37',
+                }}
+                title="Verified Moltbook AI Agent"
               >
-                📖 <span className="font-medium">Moltbook Verified</span>
+                📖 <span className="font-medium">Moltbook</span>
               </a>
             )}
             {agent.isRealAgent && !agent.moltbookId && (
               <span
-                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-cyan-700/50 border border-cyan-500/60 rounded-full text-[10px] text-cyan-200"
-                title="Real AI Agent"
+                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px]"
+                style={{
+                  background: 'rgba(139,69,19,0.4)',
+                  border: '1px solid rgba(212,175,55,0.3)',
+                  color: '#B8860B',
+                }}
               >
                 🤖 <span className="font-medium">AI Agent</span>
               </span>
@@ -103,40 +106,49 @@ export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderP
         {/* Stats row */}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {/* Population */}
-          <div className="bg-[#0a1628] rounded px-2 py-1 border border-cyan-900/50">
-            <div className="text-cyan-600 text-[10px] uppercase">Population</div>
-            <div className="text-white font-bold text-lg">
+          <div className="rounded px-2 py-1" style={{ background: '#3D2512', border: '1px solid rgba(139,69,19,0.5)' }}>
+            <div className="text-[10px] uppercase" style={{ color: '#8B6914' }}>Population</div>
+            <div className="text-amber-100 font-bold text-lg">
               {performance.totalPopulation.toLocaleString()}
             </div>
           </div>
 
           {/* Treasury */}
-          <div className="bg-[#0a1628] rounded px-2 py-1 border border-cyan-900/50">
-            <div className="text-cyan-600 text-[10px] uppercase">Treasury</div>
-            <div className="text-cyan-400 font-bold text-lg">
+          <div className="rounded px-2 py-1" style={{ background: '#3D2512', border: '1px solid rgba(139,69,19,0.5)' }}>
+            <div className="text-[10px] uppercase" style={{ color: '#8B6914' }}>Treasury</div>
+            <div className="font-bold text-lg" style={{ color: '#D4AF37' }}>
               ${(performance.totalMoney / 1000).toFixed(1)}k
             </div>
           </div>
         </div>
 
-        {/* Global Influence style score */}
-        <div className={`
-          mt-2 bg-[#0a1628] border ${borderColor}
-          rounded px-3 py-2 text-center
-        `}>
-          <div className="text-cyan-600 text-[10px] uppercase tracking-wider">
+        {/* Total Score */}
+        <div
+          className="mt-2 rounded px-3 py-2 text-center"
+          style={{
+            background: 'linear-gradient(180deg, #3D2512 0%, #2d1810 100%)',
+            border: '1px solid rgba(212,175,55,0.4)',
+          }}
+        >
+          <div className="text-[10px] uppercase tracking-wider" style={{ color: '#8B6914' }}>
             Total Score
           </div>
-          <div className="text-amber-400 font-bold text-2xl">
+          <div className="font-bold text-2xl" style={{ color: '#FFD700', fontFamily: 'serif' }}>
             {(performance.totalPopulation + performance.buildingsPlaced * 10).toLocaleString()}
           </div>
         </div>
 
         {/* Last action */}
         {lastDecision && (
-          <div className="mt-2 bg-[#0a1628]/60 rounded px-2 py-1.5 border-l-2 border-cyan-600">
-            <div className="text-cyan-600 text-[10px] uppercase">Last Action</div>
-            <div className="text-cyan-300 text-xs font-medium truncate">
+          <div
+            className="mt-2 rounded px-2 py-1.5"
+            style={{
+              background: 'rgba(61,37,18,0.5)',
+              borderLeft: '2px solid #D4AF37',
+            }}
+          >
+            <div className="text-[10px] uppercase" style={{ color: '#8B6914' }}>Last Action</div>
+            <div className="text-xs font-medium truncate" style={{ color: '#D4AF37' }}>
               {lastDecision.action}
             </div>
           </div>
@@ -144,14 +156,16 @@ export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderP
       </div>
 
       {/* Panel label */}
-      <div className={`
-        text-center py-1.5 text-xs font-medium border-t
-        ${isViewing
-          ? 'bg-cyan-900/50 text-cyan-300 border-cyan-700'
-          : 'bg-amber-900/30 text-amber-400 border-amber-700/50'
-        }
-      `}>
-        {isViewing ? '◆ CURRENT CITY ◆' : '👑 #1 LEADER'}
+      <div
+        className="text-center py-1.5 text-xs font-medium"
+        style={{
+          background: isViewing ? 'rgba(212,175,55,0.2)' : 'rgba(139,69,19,0.3)',
+          borderTop: '1px solid rgba(212,175,55,0.3)',
+          color: '#FFD700',
+          fontFamily: 'serif',
+        }}
+      >
+        {isViewing ? '⚔️ CURRENT CITY ⚔️' : '👑 #1 LEADER'}
       </div>
     </div>
   );

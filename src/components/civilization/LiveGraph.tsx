@@ -28,7 +28,7 @@ interface CityHistory {
 }
 
 // Colors for top 5 cities
-const CITY_COLORS = ['#00CED1', '#f97316', '#22c55e', '#eab308', '#a855f7'];
+const CITY_COLORS = ['#D4AF37', '#f97316', '#22c55e', '#eab308', '#a855f7'];
 
 export function LiveGraph({ agents, topAgents, currentTurn, className = '' }: LiveGraphProps) {
   const [cityHistories, setCityHistories] = useState<Map<number, CityHistory>>(new Map());
@@ -101,12 +101,12 @@ export function LiveGraph({ agents, topAgents, currentTurn, className = '' }: Li
 
   if (displayHistories.length === 0) {
     return (
-      <div className={`bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 ${className}`}>
-        <div className="text-cyan-400 text-xs font-bold mb-2 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+      <div className={`bg-[#2d1810]/95 backdrop-blur-sm border-2 border-amber-500/70 rounded-lg p-3 ${className}`}>
+        <div className="text-amber-400 text-xs font-bold mb-2 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 bg-amber-400 rounded-sm" />
           POPULATION TRENDS
         </div>
-        <div className="text-cyan-600 text-xs text-center py-4">
+        <div className="text-amber-600 text-xs text-center py-4">
           Collecting data...
         </div>
       </div>
@@ -114,10 +114,10 @@ export function LiveGraph({ agents, topAgents, currentTurn, className = '' }: Li
   }
 
   return (
-    <div className={`bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 ${className}`}>
+    <div className={`bg-[#2d1810]/95 backdrop-blur-sm border-2 border-amber-500/70 rounded-lg p-3 ${className}`}>
       {/* Header */}
-      <div className="text-cyan-400 text-xs font-bold mb-3 flex items-center gap-2">
-        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+      <div className="text-amber-400 text-xs font-bold mb-3 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-amber-400 rounded-sm" />
         POPULATION TRENDS
       </div>
 
@@ -164,7 +164,7 @@ export function LiveGraph({ agents, topAgents, currentTurn, className = '' }: Li
                 style={{ backgroundColor: CITY_COLORS[index] }}
               />
               <span className="text-white/80 flex-1 truncate">{history.name}</span>
-              <span className="text-cyan-400 font-medium tabular-nums">
+              <span className="text-amber-400 font-medium tabular-nums">
                 {latestPop.toLocaleString()}
               </span>
               <span className={`font-medium tabular-nums w-12 text-right ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>

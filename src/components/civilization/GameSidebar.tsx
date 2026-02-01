@@ -2,7 +2,7 @@
 
 /**
  * Game Sidebar - Compact right panel with rankings and awards
- * Strategy game style with cyan/teal theme
+ * Medieval/Age of Empires style with amber/gold theme
  */
 
 import React from 'react';
@@ -27,11 +27,11 @@ export function GameSidebar({
   className = '',
 }: GameSidebarProps) {
   return (
-    <div className={`w-64 bg-[#0d1f35]/95 border-l-2 border-cyan-700/50 flex flex-col h-full overflow-hidden ${className}`}>
+    <div className={`w-64 flex flex-col h-full overflow-hidden ${className}`} style={{ background: 'linear-gradient(180deg, #2d1810 0%, #1a0f0a 100%)', borderLeft: '2px solid rgba(212,175,55,0.3)' }}>
       {/* Top Rankings */}
-      <div className="p-2 border-b border-cyan-900/50">
-        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+      <div className="p-2" style={{ borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2" style={{ color: '#D4AF37', fontFamily: 'serif' }}>
+          <span className="w-1.5 h-1.5 rounded-sm" style={{ background: '#D4AF37' }} />
           Top Cities
         </h3>
         <div className="space-y-1">
@@ -39,30 +39,27 @@ export function GameSidebar({
             const isViewing = agent.agentId === currentViewIndex;
             const characterInfo = CHARACTER_INFO[agent.personality.character];
             const rankColor =
-              agent.rank === 1 ? 'text-yellow-400' :
-              agent.rank === 2 ? 'text-slate-300' :
-              agent.rank === 3 ? 'text-amber-600' :
-              'text-cyan-600';
+              agent.rank === 1 ? '#FFD700' :
+              agent.rank === 2 ? '#C0C0C0' :
+              agent.rank === 3 ? '#CD7F32' :
+              '#B8860B';
 
             return (
               <button
                 key={agent.id}
                 onClick={() => onSelectAgent(agent.agentId)}
-                className={`
-                  w-full flex items-center gap-2 px-2 py-1 rounded text-left text-xs
-                  transition-colors
-                  ${isViewing
-                    ? 'bg-cyan-600/30 border border-cyan-500/50'
-                    : 'hover:bg-cyan-900/30 border border-transparent'
-                  }
-                `}
+                className="w-full flex items-center gap-2 px-2 py-1 rounded text-left text-xs transition-colors"
+                style={{
+                  background: isViewing ? 'rgba(212,175,55,0.2)' : 'transparent',
+                  border: isViewing ? '1px solid rgba(212,175,55,0.4)' : '1px solid transparent',
+                }}
               >
-                <span className={`w-4 text-right font-bold ${rankColor}`}>
+                <span className="w-4 text-right font-bold" style={{ color: rankColor }}>
                   {agent.rank}
                 </span>
                 <span>{characterInfo.emoji}</span>
-                <span className="flex-1 truncate text-white/90">{agent.name}</span>
-                <span className="text-cyan-400 font-medium">
+                <span className="flex-1 truncate text-amber-100/90">{agent.name}</span>
+                <span className="font-medium" style={{ color: '#D4AF37' }}>
                   {agent.performance.totalPopulation.toLocaleString()}
                 </span>
               </button>
@@ -72,9 +69,9 @@ export function GameSidebar({
       </div>
 
       {/* Awards */}
-      <div className="p-2 border-b border-cyan-900/50">
-        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+      <div className="p-2" style={{ borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2" style={{ color: '#D4AF37', fontFamily: 'serif' }}>
+          <span className="w-1.5 h-1.5 rounded-sm" style={{ background: '#D4AF37' }} />
           Awards
         </h3>
         <div className="grid grid-cols-2 gap-1">
@@ -82,13 +79,14 @@ export function GameSidebar({
             <button
               key={award.id}
               onClick={() => award.winnerId !== null && onSelectAgent(award.winnerId)}
-              className="bg-[#0a1628] hover:bg-cyan-900/30 border border-cyan-900/50 rounded p-1.5 text-left transition-colors"
+              className="rounded p-1.5 text-left transition-colors hover:opacity-80"
+              style={{ background: 'rgba(139,69,19,0.3)', border: '1px solid rgba(212,175,55,0.2)' }}
             >
               <div className="flex items-center gap-1">
                 <span className="text-sm">{award.emoji}</span>
-                <span className="text-[10px] text-white/80 truncate">{award.name}</span>
+                <span className="text-[10px] text-amber-100/80 truncate">{award.name}</span>
               </div>
-              <div className="text-[10px] text-cyan-500/70 truncate mt-0.5">
+              <div className="text-[10px] truncate mt-0.5" style={{ color: '#B8860B' }}>
                 {award.winnerName}
               </div>
             </button>
@@ -98,8 +96,8 @@ export function GameSidebar({
 
       {/* Character Rankings */}
       <div className="p-2 flex-1 overflow-y-auto">
-        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2" style={{ color: '#D4AF37', fontFamily: 'serif' }}>
+          <span className="w-1.5 h-1.5 rounded-sm" style={{ background: '#D4AF37' }} />
           Character Types
         </h3>
         <div className="space-y-2">
@@ -111,17 +109,17 @@ export function GameSidebar({
             return (
               <div key={stat.character}>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-cyan-600 w-3">{index + 1}</span>
+                  <span className="w-3" style={{ color: '#8B6914' }}>{index + 1}</span>
                   <span>{info.emoji}</span>
-                  <span className="text-white/80 flex-1">{info.name}</span>
-                  <span className="text-cyan-400 font-medium">
+                  <span className="text-amber-100/80 flex-1">{info.name}</span>
+                  <span className="font-medium" style={{ color: '#D4AF37' }}>
                     {stat.avgPopulation}
                   </span>
                 </div>
-                <div className="ml-5 h-1.5 bg-[#0a1628] rounded-full overflow-hidden mt-1 border border-cyan-900/30">
+                <div className="ml-5 h-1.5 rounded-full overflow-hidden mt-1" style={{ background: '#3D2512', border: '1px solid rgba(139,69,19,0.5)' }}>
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full"
-                    style={{ width: `${barWidth}%` }}
+                    className="h-full rounded-full"
+                    style={{ width: `${barWidth}%`, background: 'linear-gradient(90deg, #8B4513 0%, #D4AF37 100%)' }}
                   />
                 </div>
               </div>

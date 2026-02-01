@@ -41,20 +41,20 @@ export function TurnChat({ agents, currentTurn, onCityClick }: TurnChatProps) {
   const currentCity = agents.find(a => a.lastDecision);
 
   return (
-    <div className="w-72 bg-[#0d1f35]/95 border-2 border-cyan-500/70 rounded-lg shadow-2xl backdrop-blur-sm overflow-hidden">
+    <div className="w-72 bg-[#2d1810]/95 border-2 border-amber-500/70 rounded-lg shadow-2xl backdrop-blur-sm overflow-hidden">
       {/* Header */}
-      <div className="bg-cyan-900/60 border-b border-cyan-500/50 px-3 py-2">
+      <div className="bg-amber-900/60 border-b border-amber-500/50 px-3 py-2">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-cyan-400 rounded-sm" />
-          <span className="text-cyan-300 font-bold text-sm tracking-wide">TURN CHAT</span>
+          <div className="w-2 h-2 bg-amber-400 rounded-sm" />
+          <span className="text-amber-300 font-bold text-sm tracking-wide">TURN CHAT</span>
         </div>
       </div>
 
       {/* Current city highlight */}
       {currentCity && (
-        <div className="px-3 py-2 bg-[#0a1628] border-b border-cyan-900/50">
+        <div className="px-3 py-2 bg-[#1a0f0a] border-b border-amber-900/50">
           <div className="text-white font-bold text-sm">{currentCity.name}</div>
-          <div className="text-cyan-400 text-xs">
+          <div className="text-amber-400 text-xs">
             {CHARACTER_INFO[currentCity.personality.character].name}
           </div>
         </div>
@@ -63,16 +63,16 @@ export function TurnChat({ agents, currentTurn, onCityClick }: TurnChatProps) {
       {/* Scrollable decisions list */}
       <div className="max-h-64 overflow-y-auto">
         {recentDecisions.length === 0 ? (
-          <div className="px-3 py-4 text-center text-cyan-600 text-xs">
+          <div className="px-3 py-4 text-center text-amber-600 text-xs">
             Awaiting first decisions...
           </div>
         ) : (
-          <div className="divide-y divide-cyan-900/30">
+          <div className="divide-y divide-amber-900/30">
             {recentDecisions.map((decision, index) => (
               <button
                 key={`${decision.agentId}-${index}`}
                 onClick={() => onCityClick?.(decision.agentId)}
-                className="w-full px-3 py-2 text-left hover:bg-cyan-900/20 transition-colors"
+                className="w-full px-3 py-2 text-left hover:bg-amber-900/20 transition-colors"
               >
                 <div className="flex items-start gap-2">
                   {/* Avatar */}
@@ -83,7 +83,7 @@ export function TurnChat({ agents, currentTurn, onCityClick }: TurnChatProps) {
                     <div className="text-white/90 text-xs font-medium truncate">
                       "{decision.action}"
                     </div>
-                    <div className="text-cyan-500/70 text-[10px] mt-0.5">
+                    <div className="text-amber-500/70 text-[10px] mt-0.5">
                       {decision.cityName} • {CHARACTER_INFO[decision.character as keyof typeof CHARACTER_INFO].name}
                     </div>
                   </div>
@@ -95,8 +95,8 @@ export function TurnChat({ agents, currentTurn, onCityClick }: TurnChatProps) {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 bg-[#0a1628] border-t border-cyan-900/50">
-        <div className="text-cyan-600 text-[10px] text-center">
+      <div className="px-3 py-1.5 bg-[#1a0f0a] border-t border-amber-900/50">
+        <div className="text-amber-600 text-[10px] text-center">
           Turn {currentTurn} • {recentDecisions.length} recent actions
         </div>
       </div>

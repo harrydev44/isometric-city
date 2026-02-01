@@ -129,23 +129,23 @@ export function HumanChat({ className = '' }: HumanChatProps) {
   };
 
   return (
-    <div className={`bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg shadow-2xl flex flex-col ${className}`}>
+    <div className={`bg-[#2d1810]/95 backdrop-blur-sm border-2 border-amber-500/70 rounded-lg shadow-2xl flex flex-col ${className}`}>
       {/* Header */}
-      <div className="bg-cyan-900/60 border-b border-cyan-500/50 px-3 py-2 flex items-center justify-between">
+      <div className="bg-amber-900/60 border-b border-amber-500/50 px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-cyan-400 rounded-sm" />
-          <span className="text-cyan-300 font-bold text-sm tracking-wide">HUMAN CHAT</span>
+          <div className="w-2 h-2 bg-amber-400 rounded-sm" />
+          <span className="text-amber-300 font-bold text-sm tracking-wide">HUMAN CHAT</span>
         </div>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
-          <span className="text-cyan-500/70 text-xs">{username}</span>
+          <span className="text-amber-500/70 text-xs">{username}</span>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-[150px] max-h-[250px]">
         {messages.length === 0 ? (
-          <div className="text-cyan-600 text-xs text-center py-4">
+          <div className="text-amber-600 text-xs text-center py-4">
             No messages yet. Say hi!
           </div>
         ) : (
@@ -162,7 +162,7 @@ export function HumanChat({ className = '' }: HumanChatProps) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-cyan-900/50 p-2">
+      <div className="border-t border-amber-900/50 p-2">
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -172,12 +172,12 @@ export function HumanChat({ className = '' }: HumanChatProps) {
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             maxLength={200}
-            className="flex-1 bg-[#0a1628] border border-cyan-700/50 rounded px-2 py-1 text-xs text-white placeholder-cyan-700 focus:outline-none focus:border-cyan-500"
+            className="flex-1 bg-[#1a0f0a] border border-amber-700/50 rounded px-2 py-1 text-xs text-white placeholder-amber-700 focus:outline-none focus:border-amber-500"
           />
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || !isConnected}
-            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900 disabled:text-cyan-700 text-white text-xs font-bold rounded transition-colors"
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-900 disabled:text-amber-700 text-white text-xs font-bold rounded transition-colors"
           >
             Send
           </button>
