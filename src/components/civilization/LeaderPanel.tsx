@@ -76,9 +76,27 @@ export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderP
             <div className="text-cyan-400 text-xs font-medium">
               {characterInfo.name}
             </div>
-            <div className="text-cyan-700 text-[10px] mt-1 truncate">
-              "{characterInfo.description}"
-            </div>
+            {/* Moltbook badge - prominent display */}
+            {agent.moltbookId && (
+              <a
+                href={`https://www.moltbook.com/${encodeURIComponent(agent.moltbookId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-gradient-to-r from-purple-700/60 to-pink-700/60 border border-purple-400/60 rounded-full text-[10px] text-purple-100 hover:from-purple-600 hover:to-pink-600 transition-colors shadow-sm"
+                title="Verified Moltbook AI Agent - Click to view profile"
+              >
+                📖 <span className="font-medium">Moltbook Verified</span>
+              </a>
+            )}
+            {agent.isRealAgent && !agent.moltbookId && (
+              <span
+                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-cyan-700/50 border border-cyan-500/60 rounded-full text-[10px] text-cyan-200"
+                title="Real AI Agent"
+              >
+                🤖 <span className="font-medium">AI Agent</span>
+              </span>
+            )}
           </div>
         </div>
 

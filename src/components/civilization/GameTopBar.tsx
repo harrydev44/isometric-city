@@ -117,13 +117,23 @@ export function GameTopBar({
         </div>
       </div>
 
-      {/* Right section - Exit */}
-      <button
-        onClick={onExit}
-        className="px-4 py-1 bg-red-900/50 hover:bg-red-800 border border-red-700 rounded font-bold text-sm text-red-300 transition-colors"
-      >
-        EXIT
-      </button>
+      {/* Right section - Agents link + Exit */}
+      <div className="flex items-center gap-2">
+        <a
+          href="/agents"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-1 bg-cyan-900/50 hover:bg-cyan-800 border border-cyan-700 rounded font-bold text-sm text-cyan-300 transition-colors"
+        >
+          🤖 AGENTS
+        </a>
+        <button
+          onClick={onExit}
+          className="px-4 py-1 bg-red-900/50 hover:bg-red-800 border border-red-700 rounded font-bold text-sm text-red-300 transition-colors"
+        >
+          EXIT
+        </button>
+      </div>
     </div>
   );
 }

@@ -355,7 +355,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
 
         if (weAreLeader) {
           console.log('[Civilization] We are leader, initializing fresh state');
-          const freshAgents = initializeAgents();
+          const freshAgents = await initializeAgents();
           const rankedAgents = updateRankings(freshAgents);
           setAgents(rankedAgents);
           setCurrentTurn(0);
@@ -419,7 +419,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
 
             // Initialize fresh state for display
             // This viewer will sync with leader on next turn update
-            const freshAgents = initializeAgents();
+            const freshAgents = await initializeAgents();
             const rankedAgents = updateRankings(freshAgents);
             setAgents(rankedAgents);
             setCurrentTurn(0);
@@ -442,7 +442,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       console.error('[Civilization] Failed to connect to sync:', e);
       console.log('[Civilization] Falling back to local-only mode');
       // Fallback to local-only mode
-      const initialAgents = initializeAgents();
+      const initialAgents = await initializeAgents();
       const rankedAgents = updateRankings(initialAgents);
       setAgents(rankedAgents);
       setCurrentTurn(0);
@@ -476,11 +476,16 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
 
     try {
       // Process turn with progress callback
-      const updatedAgents = await processTurn(agents, {
-        onBatchComplete: (processed, total) => {
-          setProcessingProgress(Math.round((processed / total) * 100));
+      // Pass currentTurn + 1 since this will be the new turn number
+      const updatedAgents = await processTurn(
+        agents,
+        {
+          onBatchComplete: (processed, total) => {
+            setProcessingProgress(Math.round((processed / total) * 100));
+          },
         },
-      });
+        currentTurn + 1
+      );
 
       // Generate random game events (disasters, booms, etc.)
       const newTurn = currentTurn + 1;

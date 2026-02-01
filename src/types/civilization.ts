@@ -120,6 +120,12 @@ export interface AgentCity {
   performance: AgentPerformance;
   rank: number;
   lastDecision: AgentDecision | null;
+
+  // Real agent info (if this is a registered bot, not simulated)
+  isRealAgent?: boolean;
+  moltbookId?: string;      // Moltbook user ID for verification link
+  twitterHandle?: string;
+  framework?: string;        // 'moltbook', 'eliza', 'custom', etc.
 }
 
 // ============================================================================

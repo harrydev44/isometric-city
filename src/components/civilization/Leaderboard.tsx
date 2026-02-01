@@ -101,7 +101,26 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
                 {CHARACTER_INFO[agent.personality.character].emoji}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="truncate font-medium">{agent.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium truncate">{agent.name}</span>
+                  {agent.moltbookId && (
+                    <a
+                      href={`https://www.moltbook.com/${encodeURIComponent(agent.moltbookId)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-shrink-0 px-1.5 py-0.5 bg-purple-600/40 border border-purple-500/60 rounded text-[10px] text-purple-200 hover:bg-purple-500/50 transition-colors"
+                      title="Verified Moltbook AI Agent"
+                    >
+                      📖 MB
+                    </a>
+                  )}
+                  {agent.isRealAgent && !agent.moltbookId && (
+                    <span className="flex-shrink-0 px-1.5 py-0.5 bg-cyan-600/40 border border-cyan-500/60 rounded text-[10px] text-cyan-200" title="Real AI Agent">
+                      🤖
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-cyan-500/70">
                   {agent.performance.totalPopulation.toLocaleString()} pop
                 </div>

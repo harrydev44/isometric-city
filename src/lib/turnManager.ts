@@ -3,9 +3,12 @@
  *
  * Handles turn-based processing for all 200 agents with batched execution
  * to maintain UI responsiveness.
+ *
+ * Supports both simulated AI agents and real registered AI bots.
  */
 
 import { GameState } from '@/games/isocity/types/game';
+import { BuildingType } from '@/games/isocity/types/buildings';
 import { simulateTick } from '@/lib/simulation';
 import { decide, executeAction } from '@/lib/agentAI';
 import { generateSeedCity } from '@/lib/cityTemplateGenerator';
@@ -18,6 +21,13 @@ import {
   generateInitialPerformance,
   generateAgentId,
 } from '@/types/civilization';
+import {
+  getPendingAction,
+  completePendingAction,
+  logAgentAction,
+  getAgentBySlot,
+  getActiveAgents,
+} from '@/lib/agents/agentDatabase';
 
 const {
   AGENT_COUNT,
@@ -32,14 +42,40 @@ const {
 
 /**
  * Initialize all agent cities
+ * Fetches registered real agents and enriches them with Moltbook/social info
  */
-export function initializeAgents(): AgentCity[] {
+export async function initializeAgents(): Promise<AgentCity[]> {
   const agents: AgentCity[] = [];
 
+  // Fetch registered real agents from database
+  const realAgents = await getActiveAgents();
+  const realAgentsBySlot = new Map(
+    realAgents.map(a => [a.game_slot, a])
+  );
+
   for (let i = 0; i < AGENT_COUNT; i++) {
-    const name = generateCityName(i);
-    const personality = generatePersonality(i);
+    const realAgent = realAgentsBySlot.get(i);
+
+    // Use real agent's name if available, otherwise generate
+    const name = realAgent?.name || generateCityName(i);
+
+    // Use real agent's personality if available
+    const personality = realAgent
+      ? {
+          character: realAgent.character_type,
+          aggressiveness: realAgent.aggressiveness,
+          industrialFocus: realAgent.industrial_focus,
+          densityPreference: realAgent.density_preference,
+          environmentFocus: realAgent.environment_focus,
+        }
+      : generatePersonality(i);
+
     const state = generateSeedCity(name);
+
+    // Extract Moltbook username from farcaster_handle if present (format: "moltbook:{username}")
+    const moltbookId = realAgent?.farcaster_handle?.startsWith('moltbook:')
+      ? realAgent.farcaster_handle.replace('moltbook:', '')
+      : (realAgent?.framework === 'moltbook' ? realAgent.name : undefined);
 
     agents.push({
       id: generateAgentId(i),
@@ -50,6 +86,12 @@ export function initializeAgents(): AgentCity[] {
       performance: generateInitialPerformance(),
       rank: i + 1, // Initial rank is just the index
       lastDecision: null,
+
+      // Real agent info
+      isRealAgent: !!realAgent,
+      moltbookId,
+      twitterHandle: realAgent?.twitter_handle || undefined,
+      framework: realAgent?.framework || undefined,
     });
   }
 
@@ -68,30 +110,146 @@ export interface TurnProgressCallback {
 /**
  * Process a single agent's turn
  * Each agent makes ONE decision per turn based on their character type
+ *
+ * For real registered agents (slots 0-49), checks for pending actions first.
+ * Falls back to simulated AI if no pending action.
  */
-function processAgentTurn(agent: AgentCity): AgentCity {
+async function processAgentTurn(
+  agent: AgentCity,
+  currentTurn: number
+): Promise<AgentCity> {
   let state = agent.state;
   const personality = agent.personality;
-
-  // 1. AI makes ONE decision based on character
-  const { action, decision } = decide(state, personality);
-
-  // 2. Execute the action if there is one and we can afford it
+  let decision = null;
   let actionsExecuted = 0;
-  if (action && state.stats.money >= action.cost + 500) {
-    const newState = executeAction(state, action);
-    if (newState !== state) {
-      state = newState;
-      actionsExecuted = 1;
+
+  // Check if this is a real registered agent with a pending action
+  const pendingAction = await getPendingAction(agent.agentId);
+  const realAgent = pendingAction ? await getAgentBySlot(agent.agentId) : null;
+
+  if (pendingAction && realAgent) {
+    // Real agent with pending action - use their action
+    const { action_type, action_data, reflection, mood } = pendingAction;
+
+    // Try to execute the real agent's action
+    let actionSuccess = false;
+    let resultMessage = '';
+
+    try {
+      // Map action to game action format
+      if (action_type === 'place_zone' && action_data.zoneType) {
+        const gameAction = {
+          type: 'place_zone' as const,
+          zoneType: action_data.zoneType as 'residential' | 'commercial' | 'industrial',
+          x: action_data.x,
+          y: action_data.y,
+          cost: 100,
+          description: `Zone ${action_data.zoneType}`,
+          reason: reflection || 'Real AI agent action',
+        };
+        const newState = executeAction(state, gameAction);
+        if (newState !== state) {
+          state = newState;
+          actionsExecuted = 1;
+          actionSuccess = true;
+          resultMessage = `Zoned ${action_data.zoneType} at (${action_data.x}, ${action_data.y})`;
+        } else {
+          resultMessage = 'Zone placement failed - tile may be occupied';
+        }
+      } else if (action_type === 'place_road') {
+        const gameAction = {
+          type: 'place_building' as const,
+          buildingType: 'road' as const,
+          x: action_data.x,
+          y: action_data.y,
+          cost: 50,
+          description: 'Build road',
+          reason: reflection || 'Real AI agent action',
+        };
+        const newState = executeAction(state, gameAction);
+        if (newState !== state) {
+          state = newState;
+          actionsExecuted = 1;
+          actionSuccess = true;
+          resultMessage = `Built road at (${action_data.x}, ${action_data.y})`;
+        } else {
+          resultMessage = 'Road placement failed - tile may be occupied';
+        }
+      } else if (action_type === 'place_building' && action_data.buildingType) {
+        const gameAction = {
+          type: 'place_building' as const,
+          buildingType: action_data.buildingType as BuildingType,
+          x: action_data.x,
+          y: action_data.y,
+          cost: 500,
+          description: `Build ${action_data.buildingType}`,
+          reason: reflection || 'Real AI agent action',
+        };
+        const newState = executeAction(state, gameAction);
+        if (newState !== state) {
+          state = newState;
+          actionsExecuted = 1;
+          actionSuccess = true;
+          resultMessage = `Built ${action_data.buildingType} at (${action_data.x}, ${action_data.y})`;
+        } else {
+          resultMessage = 'Building placement failed - tile may be occupied';
+        }
+      }
+    } catch (e) {
+      resultMessage = 'Action execution error';
+      console.error('[TurnManager] Real agent action error:', e);
     }
+
+    // Mark pending action as completed
+    await completePendingAction(pendingAction.id, actionSuccess, actionSuccess ? undefined : resultMessage);
+
+    // Log the action
+    await logAgentAction(
+      realAgent.id,
+      {
+        actionType: action_type,
+        zoneType: action_data.zoneType as 'residential' | 'commercial' | 'industrial' | undefined,
+        buildingType: action_data.buildingType,
+        x: action_data.x,
+        y: action_data.y,
+        reflection: reflection || undefined,
+        mood: mood as 'confident' | 'cautious' | 'excited' | 'desperate' | 'neutral' | undefined,
+      },
+      currentTurn,
+      actionSuccess,
+      resultMessage,
+      agent.performance.totalPopulation,
+      state.stats.population,
+      agent.performance.totalMoney,
+      state.stats.money
+    );
+
+    decision = {
+      action: `${action_type}: ${action_data.zoneType || action_data.buildingType || 'road'}`,
+      reason: reflection || 'Real AI agent action',
+      success: actionSuccess,
+    };
+  } else {
+    // Simulated AI agent - use built-in AI
+    const aiResult = decide(state, personality);
+
+    if (aiResult.action && state.stats.money >= aiResult.action.cost + 500) {
+      const newState = executeAction(state, aiResult.action);
+      if (newState !== state) {
+        state = newState;
+        actionsExecuted = 1;
+      }
+    }
+
+    decision = aiResult.decision;
   }
 
-  // 3. Run simulation ticks
+  // Run simulation ticks
   for (let tick = 0; tick < TICKS_PER_TURN; tick++) {
     state = simulateTick(state);
   }
 
-  // 4. Update performance stats
+  // Update performance stats
   const performance = {
     totalPopulation: state.stats.population,
     totalMoney: state.stats.money,
@@ -110,10 +268,15 @@ function processAgentTurn(agent: AgentCity): AgentCity {
 
 /**
  * Process a turn for all agents in batches
+ *
+ * @param agents - All agent cities
+ * @param callbacks - Progress callbacks
+ * @param currentTurn - Current turn number (for logging real agent actions)
  */
 export async function processTurn(
   agents: AgentCity[],
-  callbacks?: TurnProgressCallback
+  callbacks?: TurnProgressCallback,
+  currentTurn: number = 0
 ): Promise<AgentCity[]> {
   const updatedAgents: AgentCity[] = [];
   const batchCount = Math.ceil(agents.length / AGENTS_PER_BATCH);
@@ -125,7 +288,7 @@ export async function processTurn(
 
     // Process each agent in the batch
     for (const agent of batch) {
-      const updatedAgent = processAgentTurn(agent);
+      const updatedAgent = await processAgentTurn(agent, currentTurn);
       updatedAgents.push(updatedAgent);
 
       if (callbacks?.onAgentProcessed) {

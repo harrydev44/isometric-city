@@ -21,7 +21,13 @@
       "Bash(then)",
       "Bash(else)",
       "Bash(fi)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "WebFetch(domain:www.clawcity.xyz)",
+      "WebSearch",
+      "WebFetch(domain:www.moltbook.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:cadchain.com)",
+      "WebFetch(domain:moltbook.com)"
     ]
   }
 }
