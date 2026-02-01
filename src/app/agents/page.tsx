@@ -161,7 +161,7 @@ export default function AgentsPage() {
               rel="noopener noreferrer"
               className="px-3 py-1 bg-green-900/50 border border-green-600 rounded text-green-300 hover:bg-green-800 text-sm font-bold transition-colors"
             >
-              💎 $CLAW
+              💎 $AOTC
             </a>
             <Link href="/register.md" className="text-orange-300 hover:text-white text-sm">
               API Docs

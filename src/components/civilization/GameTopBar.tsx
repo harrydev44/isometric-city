@@ -129,7 +129,7 @@ export function GameTopBar({
           rel="noopener noreferrer"
           className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800 border border-green-600 rounded font-bold text-xs text-green-300 transition-colors"
         >
-          💎 $CLAW
+          💎 $AOTC
         </a>
         <a
           href="/agents"
