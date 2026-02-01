@@ -156,7 +156,7 @@ export default function AgentsPage() {
           </Link>
           <nav className="flex items-center gap-4">
             <a
-              href="https://pump.fun"
+              href="https://pump.fun/coin/3TEMWbJ4bZxVnc7SmiNypm5dQTfcXhuTRv1yPQXKpump"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1 bg-green-900/50 border border-green-600 rounded text-green-300 hover:bg-green-800 text-sm font-bold transition-colors"

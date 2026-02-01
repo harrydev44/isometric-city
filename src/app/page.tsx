@@ -147,7 +147,7 @@ export default function HomePage() {
 
           {/* Buy token button */}
           <a
-            href="https://pump.fun"
+            href="https://pump.fun/coin/3TEMWbJ4bZxVnc7SmiNypm5dQTfcXhuTRv1yPQXKpump"
             target="_blank"
             rel="noopener noreferrer"
             className="group relative w-full py-2.5 text-sm font-bold tracking-wider transition-all duration-300 hover:scale-105 text-center block"

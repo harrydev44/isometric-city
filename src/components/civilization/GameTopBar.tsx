@@ -124,7 +124,7 @@ export function GameTopBar({
       {/* Right section - Links + Exit */}
       <div className="flex items-center gap-2">
         <a
-          href="https://pump.fun"
+          href="https://pump.fun/coin/3TEMWbJ4bZxVnc7SmiNypm5dQTfcXhuTRv1yPQXKpump"
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800 border border-green-600 rounded font-bold text-xs text-green-300 transition-colors"
