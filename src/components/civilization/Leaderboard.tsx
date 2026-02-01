@@ -3,7 +3,7 @@
 /**
  * Leaderboard - Shows top agents by population
  * Shows character emoji next to each agent's city name
- * Animated rank changes
+ * Animated rank changes - Cyan/teal theme
  */
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -53,9 +53,9 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
   }, [agents]);
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white w-full">
-      <h3 className="text-sm font-bold mb-2 text-white/80 flex items-center gap-2">
-        <span>🏆</span>
+    <div className="bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 text-white w-full shadow-2xl">
+      <h3 className="text-sm font-bold mb-2 text-cyan-400 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
         Leaderboard
       </h3>
 
@@ -70,7 +70,7 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
               ? 'text-gray-300'
               : agent.rank === 3
               ? 'text-amber-600'
-              : 'text-white/60';
+              : 'text-cyan-600';
 
           return (
             <button
@@ -78,10 +78,10 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
               onClick={() => onSelectAgent(agent.agentId)}
               className={`
                 w-full flex items-center gap-2 p-2 rounded text-left text-sm
-                transition-all duration-300
+                transition-all duration-300 border
                 ${isCurrentView
-                  ? 'bg-blue-500/30 border border-blue-400/50'
-                  : 'hover:bg-white/10'
+                  ? 'bg-cyan-600/30 border-cyan-500/50'
+                  : 'hover:bg-cyan-900/30 border-transparent'
                 }
                 ${rankChange?.direction === 'up' ? 'animate-pulse bg-green-500/20' : ''}
                 ${rankChange?.direction === 'down' ? 'animate-pulse bg-red-500/20' : ''}
@@ -102,7 +102,7 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
               </span>
               <div className="flex-1 min-w-0">
                 <div className="truncate font-medium">{agent.name}</div>
-                <div className="text-xs text-white/50">
+                <div className="text-xs text-cyan-500/70">
                   {agent.performance.totalPopulation.toLocaleString()} pop
                 </div>
               </div>

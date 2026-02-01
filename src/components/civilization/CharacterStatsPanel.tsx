@@ -2,6 +2,7 @@
 
 /**
  * Character Stats Panel - Shows character type vs character type comparison
+ * Cyan/teal theme with gradient progress bars
  */
 
 import React from 'react';
@@ -20,8 +21,9 @@ export function CharacterStatsPanel({ stats }: CharacterStatsPanelProps) {
   const maxAvgPop = Math.max(...stats.map(s => s.avgPopulation));
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
-      <h3 className="text-sm font-bold mb-2 text-white/80">
+    <div className="bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 text-white shadow-2xl">
+      <h3 className="text-sm font-bold mb-2 text-cyan-400 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
         Character Rankings
       </h3>
 
@@ -33,27 +35,27 @@ export function CharacterStatsPanel({ stats }: CharacterStatsPanelProps) {
           return (
             <div key={stat.character} className="relative">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-bold text-white/50 w-4">
+                <span className="text-xs font-bold text-cyan-600 w-4">
                   {index + 1}
                 </span>
                 <span className="text-sm">{info.emoji}</span>
                 <span className="text-xs text-white/80 flex-1">
                   {info.name}
                 </span>
-                <span className="text-xs font-medium">
+                <span className="text-xs font-medium text-cyan-400">
                   {stat.avgPopulation.toLocaleString()}
                 </span>
               </div>
 
               {/* Progress bar */}
-              <div className="ml-6 h-1 bg-white/10 rounded-full overflow-hidden">
+              <div className="ml-6 h-1.5 bg-[#0a1628] border border-cyan-900/30 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-500"
                   style={{ width: `${barWidth}%` }}
                 />
               </div>
 
-              <div className="ml-6 text-[10px] text-white/40 mt-0.5">
+              <div className="ml-6 text-[10px] text-cyan-700 mt-0.5">
                 {stat.count} cities | ${stat.avgMoney.toLocaleString()} avg
               </div>
             </div>

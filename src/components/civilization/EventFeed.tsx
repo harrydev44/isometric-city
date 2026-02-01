@@ -3,6 +3,7 @@
 /**
  * Event Feed - Shows live events and milestones
  * Compact design showing only the most important recent events
+ * Cyan/teal theme
  */
 
 import React, { useEffect, useState } from 'react';
@@ -36,13 +37,13 @@ export function EventFeed({ events, onEventClick }: EventFeedProps) {
           <div
             key={event.id}
             className={`
-              bg-black/80 backdrop-blur-sm rounded px-3 py-2
+              bg-[#0d1f35]/90 backdrop-blur-sm rounded px-3 py-2
               pointer-events-auto cursor-pointer
               transform transition-all duration-300 ease-out
-              hover:bg-black/90 hover:translate-x-1
+              hover:bg-cyan-900/40 hover:translate-x-1
               animate-slide-in-left
               border-l-2
-              ${event.type === 'new_leader' ? 'border-yellow-500' : 'border-blue-500'}
+              ${event.type === 'new_leader' ? 'border-amber-500' : 'border-cyan-500'}
             `}
             style={{
               animationDelay: `${index * 50}ms`,

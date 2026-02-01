@@ -2,6 +2,7 @@
 
 /**
  * Character Awards - Shows category leaders
+ * Grid layout with cyan headers
  */
 
 import React from 'react';
@@ -18,28 +19,28 @@ export function CharacterAwards({ awards, onAwardClick }: CharacterAwardsProps) 
   }
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
-      <h3 className="text-sm font-bold mb-2 text-white/80 flex items-center gap-2">
-        <span>🏆</span>
+    <div className="bg-[#0d1f35]/95 backdrop-blur-sm border-2 border-cyan-500/70 rounded-lg p-3 text-white shadow-2xl">
+      <h3 className="text-sm font-bold mb-2 text-cyan-400 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm" />
         Awards
       </h3>
 
-      <div className="space-y-1.5">
+      <div className="grid grid-cols-2 gap-2">
         {awards.map((award) => (
           <button
             key={award.id}
             onClick={() => award.winnerId !== null && onAwardClick?.(award.winnerId)}
-            className="w-full flex items-center gap-2 p-1.5 rounded text-left text-xs
-                       hover:bg-white/10 transition-colors"
+            className="bg-[#0a1628] border border-cyan-900/50 p-2 rounded text-left
+                       hover:bg-cyan-900/30 hover:border-cyan-600/50 transition-colors"
           >
-            <span className="text-base">{award.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-white/90 font-medium truncate">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">{award.emoji}</span>
+              <span className="text-xs text-white/90 font-medium truncate">
                 {award.name}
-              </div>
-              <div className="text-white/50 truncate">
-                {award.winnerName} ({award.value.toLocaleString()})
-              </div>
+              </span>
+            </div>
+            <div className="text-[10px] text-cyan-500/70 truncate">
+              {award.winnerName} ({award.value.toLocaleString()})
             </div>
           </button>
         ))}

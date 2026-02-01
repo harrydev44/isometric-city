@@ -18,6 +18,7 @@ import { GameTopBar } from './GameTopBar';
 import { LeaderPanel } from './LeaderPanel';
 import { CityInfoBar } from './CityInfoBar';
 import { GameSidebar } from './GameSidebar';
+import { TurnChat } from './TurnChat';
 
 interface AgentCivilizationGameProps {
   onExit: () => void;
@@ -71,21 +72,21 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
   // Loading state
   if (agents.length === 0) {
     return (
-      <div className="h-screen w-screen bg-slate-950 flex items-center justify-center">
+      <div className="h-screen w-screen bg-[#0a1628] flex items-center justify-center">
         <div className="text-center">
-          <div className="text-amber-400 text-2xl font-bold mb-2">AI CIVILIZATION</div>
+          <div className="text-cyan-400 text-2xl font-bold mb-2">AI CIVILIZATION</div>
           <div className="text-white text-lg mb-4">Initializing 200 AI Cities...</div>
-          <div className="w-64 h-3 bg-slate-800 rounded-full overflow-hidden mx-auto border border-slate-600">
-            <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 animate-pulse" style={{ width: '60%' }} />
+          <div className="w-64 h-3 bg-[#0d1f35] rounded-full overflow-hidden mx-auto border border-cyan-700">
+            <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 animate-pulse" style={{ width: '60%' }} />
           </div>
-          <div className="text-slate-500 text-sm mt-4">Preparing simulation...</div>
+          <div className="text-cyan-700 text-sm mt-4">Preparing simulation...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-[#0a1628] flex flex-col overflow-hidden">
       {/* Top Bar - Game controls */}
       <GameTopBar
         currentTurn={currentTurn}
@@ -124,6 +125,15 @@ export function AgentCivilizationGame({ onExit }: AgentCivilizationGameProps) {
           {/* Event Feed - top left */}
           <div className="absolute top-4 left-4">
             <EventFeed events={events} onEventClick={goToCity} />
+          </div>
+
+          {/* Turn Chat - right side overlay */}
+          <div className="absolute top-4 right-72 mr-4">
+            <TurnChat
+              agents={agents}
+              currentTurn={currentTurn}
+              onCityClick={goToCity}
+            />
           </div>
 
           {/* Bottom section with city panel */}

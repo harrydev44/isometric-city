@@ -16,8 +16,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import {
   AgentCity,
-  AgentPerformance,
-  AgentDecision,
   TurnPhase,
   CivilizationEvent,
   CharacterAward,
@@ -46,21 +44,14 @@ const STATE_SAVE_INTERVAL = 10000; // 10s - save to database
 // TYPES
 // ============================================================================
 
+// Lightweight turn notification (full state is too large for Realtime broadcast)
 export interface CivilizationTurnUpdate {
   turn: number;
   timestamp: number;
   turnPhase: TurnPhase;
   currentViewIndex: number; // Synced camera position
-  agentUpdates: Array<{
-    agentId: number;
-    rank: number;
-    performance: AgentPerformance;
-    lastDecision: AgentDecision | null;
-  }>;
-  stats: CivilizationStats;
-  events: CivilizationEvent[];
-  awards: CharacterAward[];
-  characterStats: CharacterStats[];
+  // Signal to reload from database
+  reloadFromDb: boolean;
 }
 
 export interface PresenceState {

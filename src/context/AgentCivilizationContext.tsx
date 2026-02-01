@@ -139,6 +139,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
   // Sync provider ref
   const syncProviderRef = useRef<CivilizationSyncProvider | null>(null);
   const isLeaderRef = useRef(false); // Sync ref for use in callbacks
+  const hasSyncedFromLeaderRef = useRef(false); // Track if we've ever synced from leader/DB
 
   // Refs for current state (used in callbacks)
   const agentsRef = useRef<AgentCity[]>([]);
@@ -167,48 +168,54 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
   // APPLY TURN UPDATE FROM LEADER (for followers)
   // ============================================================================
 
-  const applyTurnUpdate = useCallback((update: CivilizationTurnUpdate) => {
+  const applyTurnUpdate = useCallback(async (update: CivilizationTurnUpdate) => {
     // Only followers apply updates
     if (isLeaderRef.current) return;
 
-    setAgents((prevAgents) => {
-      if (prevAgents.length === 0) return prevAgents;
+    console.log('[Civilization] Received turn update:', update.turn, 'local turn:', currentTurnRef.current, 'reloadFromDb:', update.reloadFromDb);
 
-      // Create a map for quick lookups
-      const updateMap = new Map(
-        update.agentUpdates.map((u) => [u.agentId, u])
-      );
-
-      // Apply delta updates to each agent
-      return prevAgents.map((agent) => {
-        const agentUpdate = updateMap.get(agent.agentId);
-        if (!agentUpdate) return agent;
-
-        return {
-          ...agent,
-          rank: agentUpdate.rank,
-          performance: agentUpdate.performance,
-          lastDecision: agentUpdate.lastDecision,
-        };
-      });
-    });
-
-    setCurrentTurn(update.turn);
-    setTurnPhase(update.turnPhase);
-    setTimeRemaining(TURN_DURATION_MS);
-
-    // Sync camera view from leader
+    // Sync camera view from leader immediately
     if (update.currentViewIndex !== undefined) {
       setCurrentViewIndex(update.currentViewIndex);
     }
 
-    // Update events (keep last 20)
-    if (update.events.length > 0) {
-      setEvents((prev) => [...update.events, ...prev].slice(0, 20));
+    // Always reload from database if:
+    // 1. reloadFromDb flag is set, OR
+    // 2. We're behind the leader's turn (desync recovery), OR
+    // 3. We don't have agents yet, OR
+    // 4. We've never successfully synced from leader (fallback init recovery)
+    const needsReload = update.reloadFromDb ||
+                        update.turn > currentTurnRef.current ||
+                        agentsRef.current.length === 0 ||
+                        !hasSyncedFromLeaderRef.current;
+
+    if (needsReload) {
+      const { loadCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
+
+      // Retry loading a few times in case of timing issues
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const dbState = await loadCivilizationSession();
+        if (dbState?.state && dbState.state.agents && dbState.state.agents.length > 0) {
+          console.log('[Civilization] Reloaded state from database, turn:', dbState.state.currentTurn, 'attempt:', attempt);
+          setAgents(dbState.state.agents);
+          setCurrentTurn(dbState.state.currentTurn);
+          setTurnPhase(dbState.state.turnPhase);
+          if (dbState.state.currentViewIndex !== undefined) {
+            setCurrentViewIndex(dbState.state.currentViewIndex);
+          }
+          setEvents(dbState.state.events || []);
+          setAwards(dbState.state.awards || []);
+          setCharacterStats(dbState.state.characterStats || []);
+          hasSyncedFromLeaderRef.current = true; // Mark as synced
+          break;
+        } else if (attempt < 3) {
+          console.log('[Civilization] DB load attempt', attempt, 'failed, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
     }
 
-    setAwards(update.awards);
-    setCharacterStats(update.characterStats);
+    setTimeRemaining(TURN_DURATION_MS);
   }, []);
 
   // ============================================================================
@@ -229,6 +236,7 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
     setCharacterStats(state.characterStats || []);
     setTimeRemaining(TURN_DURATION_MS);
     setProcessingProgress(0);
+    hasSyncedFromLeaderRef.current = true; // Mark as synced from leader/DB
   }, []);
 
   // ============================================================================
@@ -264,10 +272,22 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
           // Received turn update from leader
           applyTurnUpdate(update);
         },
-        onCameraChange: (viewIndex) => {
+        onCameraChange: async (viewIndex) => {
           // Received camera change from leader
           if (!isLeaderRef.current) {
             setCurrentViewIndex(viewIndex);
+
+            // If we haven't synced yet or have no agents, try to load from database
+            // This helps recover desynced followers on camera broadcasts
+            if (agentsRef.current.length === 0 || !hasSyncedFromLeaderRef.current) {
+              console.log('[Civilization] Unsynced during camera change, trying DB reload...');
+              const { loadCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
+              const dbState = await loadCivilizationSession();
+              if (dbState?.state && dbState.state.agents && dbState.state.agents.length > 0) {
+                console.log('[Civilization] Loaded state from DB on camera change');
+                applyFullState(dbState.state);
+              }
+            }
           }
         },
         onRequestState: (targetViewerId) => {
@@ -334,36 +354,62 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
           setCharacterStats([]);
 
           // Save initial state to database immediately so followers can load it
-          if (syncProviderRef.current) {
-            const initialSessionState: CivilizationSessionState = {
-              agents: rankedAgents,
-              currentTurn: 0,
-              turnPhase: 'idle',
-              currentViewIndex: 0,
-              events: [],
-              awards: [],
-              characterStats: [],
-              stats: calculateStats(rankedAgents),
-            };
-            syncProviderRef.current.saveStateToDatabase(initialSessionState);
-            console.log('[Civilization] Saved initial state to database');
-          }
+          // Use direct save (not throttled) to ensure it's saved right away
+          const { saveCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
+          const initialSessionState: CivilizationSessionState = {
+            agents: rankedAgents,
+            currentTurn: 0,
+            turnPhase: 'idle',
+            currentViewIndex: 0,
+            events: [],
+            awards: [],
+            characterStats: [],
+            stats: calculateStats(rankedAgents),
+          };
+          const saved = await saveCivilizationSession(initialSessionState, syncProviderRef.current?.viewerId || null);
+          console.log('[Civilization] Saved initial state to database:', saved);
         } else {
           console.log('[Civilization] We are follower, waiting for state from leader...');
-          // Wait for state from leader or database
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          const { loadCivilizationSession, claimLeadership, saveCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
 
-          // If still no agents, try loading from database again
-          if (agentsRef.current.length === 0) {
-            console.log('[Civilization] Trying to load state from database...');
-            const { loadCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
+          // Try loading from database a few times, then take over if no leader exists
+          const INITIAL_ATTEMPTS = 5; // 5 attempts * 2s = 10s initial wait
+          let foundState = false;
+
+          for (let attempt = 1; attempt <= INITIAL_ATTEMPTS; attempt++) {
+            // Check if we received state via broadcast while waiting
+            if (agentsRef.current.length > 0) {
+              console.log('[Civilization] Received state from broadcast, done waiting');
+              foundState = true;
+              break;
+            }
+
+            console.log('[Civilization] Attempt', attempt, '/', INITIAL_ATTEMPTS, '- trying to load state from database...');
             const dbState = await loadCivilizationSession();
-            if (dbState?.state) {
-              console.log('[Civilization] Loaded state from database, turn:', dbState.state.currentTurn);
+
+            if (dbState?.state && dbState.state.agents && dbState.state.agents.length > 0) {
+              console.log('[Civilization] Loaded state from database, turn:', dbState.state.currentTurn, 'agents:', dbState.state.agents.length);
               applyFullState(dbState.state);
+              foundState = true;
+              break;
             } else {
-              // Last resort: initialize fresh
-              console.log('[Civilization] No state available, initializing fresh');
+              console.log('[Civilization] No valid state in database yet, retrying in 2s...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+
+          // If still no state after initial attempts, try to become leader
+          if (!foundState && agentsRef.current.length === 0) {
+            console.log('[Civilization] No state found after waiting, attempting to claim leadership...');
+
+            // Try to claim leadership (will succeed if no active leader)
+            const claimed = await claimLeadership(provider.viewerId, 15000);
+
+            if (claimed) {
+              console.log('[Civilization] Claimed leadership, initializing fresh state');
+              setIsLeader(true);
+              isLeaderRef.current = true;
+
               const freshAgents = initializeAgents();
               const rankedAgents = updateRankings(freshAgents);
               setAgents(rankedAgents);
@@ -375,6 +421,58 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
               setEvents([]);
               setAwards([]);
               setCharacterStats([]);
+
+              // Save initial state to database
+              const initialSessionState: CivilizationSessionState = {
+                agents: rankedAgents,
+                currentTurn: 0,
+                turnPhase: 'idle',
+                currentViewIndex: 0,
+                events: [],
+                awards: [],
+                characterStats: [],
+                stats: calculateStats(rankedAgents),
+              };
+              await saveCivilizationSession(initialSessionState, provider.viewerId);
+              console.log('[Civilization] Saved initial state as new leader');
+
+              // Notify the sync provider that we're now leader
+              if (syncProviderRef.current) {
+                (syncProviderRef.current as unknown as { isLeader: boolean }).isLeader = true;
+              }
+            } else {
+              console.log('[Civilization] Could not claim leadership, another leader exists. Keep waiting...');
+              // Another leader exists but hasn't saved state yet, keep waiting
+              for (let attempt = 1; attempt <= 10; attempt++) {
+                if (agentsRef.current.length > 0) break;
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const dbState = await loadCivilizationSession();
+                if (dbState?.state && dbState.state.agents && dbState.state.agents.length > 0) {
+                  console.log('[Civilization] Finally loaded state from database');
+                  applyFullState(dbState.state);
+                  break;
+                }
+              }
+
+              // FINAL FALLBACK: If still no state after all waiting, initialize fresh
+              // This prevents infinite loading. The next turn update will sync us.
+              if (agentsRef.current.length === 0) {
+                console.log('[Civilization] FALLBACK: All loading attempts failed, initializing fresh to show UI');
+                const freshAgents = initializeAgents();
+                const rankedAgents = updateRankings(freshAgents);
+                setAgents(rankedAgents);
+                setCurrentTurn(0);
+                setCurrentViewIndex(0);
+                setTurnPhase('idle');
+                setTimeRemaining(TURN_DURATION_MS);
+                setProcessingProgress(0);
+                setEvents([]);
+                setAwards([]);
+                setCharacterStats([]);
+                // Note: Don't save to DB - we're not the leader
+                // The next turn update from leader will trigger a DB reload and sync us
+              }
             }
           }
         }
@@ -451,27 +549,8 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
       setAwards(newAwards);
       setCharacterStats(newCharacterStats);
 
-      // Broadcast turn update to followers
+      // Sync with followers: Save state to database FIRST, then notify
       if (syncProviderRef.current) {
-        const turnUpdate: CivilizationTurnUpdate = {
-          turn: newTurn,
-          timestamp: Date.now(),
-          turnPhase: 'idle',
-          currentViewIndex: currentViewIndexRef.current,
-          agentUpdates: rankedAgents.map((agent) => ({
-            agentId: agent.agentId,
-            rank: agent.rank,
-            performance: agent.performance,
-            lastDecision: agent.lastDecision,
-          })),
-          stats: newStats,
-          events: newEvents,
-          awards: newAwards,
-          characterStats: newCharacterStats,
-        };
-        syncProviderRef.current.broadcastTurnUpdate(turnUpdate);
-
-        // Save state to database (throttled)
         const sessionState: CivilizationSessionState = {
           agents: rankedAgents,
           currentTurn: newTurn,
@@ -482,7 +561,20 @@ export function AgentCivilizationProvider({ children }: { children: React.ReactN
           characterStats: newCharacterStats,
           stats: newStats,
         };
-        syncProviderRef.current.saveStateToDatabase(sessionState);
+
+        // Save to database immediately (not throttled) so followers can reload
+        const { saveCivilizationSession } = await import('@/lib/civilization/civilizationDatabase');
+        await saveCivilizationSession(sessionState, syncProviderRef.current.viewerId);
+
+        // Broadcast lightweight notification telling followers to reload from database
+        const turnUpdate: CivilizationTurnUpdate = {
+          turn: newTurn,
+          timestamp: Date.now(),
+          turnPhase: 'idle',
+          currentViewIndex: currentViewIndexRef.current,
+          reloadFromDb: true, // Signal followers to reload full state from database
+        };
+        syncProviderRef.current.broadcastTurnUpdate(turnUpdate);
       }
     } catch (error) {
       console.error('Turn processing error:', error);
