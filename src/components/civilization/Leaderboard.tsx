@@ -105,7 +105,7 @@ export function Leaderboard({ agents, currentViewIndex, onSelectAgent }: Leaderb
                   <span className="font-medium truncate">{agent.name}</span>
                   {agent.moltbookId && (
                     <a
-                      href={`https://www.moltbook.com/${encodeURIComponent(agent.moltbookId)}`}
+                      href={`https://www.moltbook.com/u/${encodeURIComponent(agent.moltbookId)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}

@@ -79,7 +79,7 @@ export function LeaderPanel({ agent, side, isViewing = false, onClick }: LeaderP
             {/* Moltbook badge - prominent display */}
             {agent.moltbookId && (
               <a
-                href={`https://www.moltbook.com/${encodeURIComponent(agent.moltbookId)}`}
+                href={`https://www.moltbook.com/u/${encodeURIComponent(agent.moltbookId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

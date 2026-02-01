@@ -373,7 +373,7 @@ export default function AgentsPage() {
                             <span className="font-bold text-white">{agent.name}</span>
                             {isMoltbook && (
                               <a
-                                href={`https://www.moltbook.com/${encodeURIComponent(moltbookUsername)}`}
+                                href={`https://www.moltbook.com/u/${encodeURIComponent(moltbookUsername)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-purple-900/70 to-pink-900/70 border border-purple-500/70 rounded-full text-xs text-purple-200 hover:from-purple-800 hover:to-pink-800 transition-all shadow-lg shadow-purple-900/30"
